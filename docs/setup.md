@@ -58,6 +58,24 @@
 
 بعد حجز النطاق يصير الرابط `https://mcp.zimam.app/mcp`: غيّر `MCP_ORIGIN` في `mcp/wrangler.jsonc`، وأضف النطاق الجديد في Services ID.
 
+### ٦. الموقع وتطبيق الويب
+
+1. **Workers Builds:** مشروع ثالث من نفس المستودع:
+
+| الحقل | القيمة |
+| --- | --- |
+| Project name | `zimam-web` |
+| Production branch | `main` |
+| Root directory | `web` |
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` |
+
+2. **Sign in with Apple للويب:** في Services ID `app.zimam.web` أضف:
+   - Domain: `zimam-web.fahad2ao.workers.dev`
+   - Return URL: `https://zimam-web.fahad2ao.workers.dev/app`
+
+التفاصيل في `web/README.md`.
+
 ## أبل وXcode
 
 ### ١. حساب المطوّر
