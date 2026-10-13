@@ -14,6 +14,7 @@ struct RootView: View {
                 MainView()
                     .task {
                         await notifications.prepare()
+                        PushRegistration.shared.register()
                         await session.loadUser()
                         await session.sharePlace(latitude: location.coordinate?.latitude,
                                                  longitude: location.coordinate?.longitude)

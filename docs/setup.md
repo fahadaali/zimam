@@ -101,6 +101,27 @@
 - الساعة لا تحتاج App Group ولا مجموعة Keychain: تأخذ الجلسة من الآيفون عبر WatchConnectivity وتحفظها في Keychain الخاص بها.
 - بعد الترقية يبدأ المخزن المحلي فارغاً في مجموعة التطبيقات، وتعيد أول مزامنة كل البيانات من الخادم.
 
+### إشعارات الخادم (APNs)
+
+التطبيق يجدول إشعارات الأيام الأربعة عشر القادمة على الجهاز، وما بعدها يرسله الخادم عبر APNs (التفاصيل في `api/DEVELOPMENT.md`). يحتاج ذلك مفتاحاً واحداً من حساب المطوّر:
+
+1. **Identifiers ← App IDs ← `app.zimam.Zimam`**: فعّل **Push Notifications** واحفظ. لا حاجة لشهادات الإشعارات، فالخادم يستعمل المفتاح. يحدّث Xcode ملفات التوقيع في البناء التالي، والتطبيق يطلب الإمكانية بـ `aps-environment` في `apple/project.yml`.
+2. **Keys ← +**: اسم مثل `Zimam APNs`، وفعّل **Apple Push Notification service (APNs)**، ومن **Configure** اختر البيئتين (Sandbox & Production) ونطاق الفريق، ثم **Continue ← Register**.
+3. نزّل ملف `AuthKey_XXXXXXXXXX.p8` (يُنزَّل مرة واحدة فقط) وانسخ **Key ID** من صفحة المفتاح. احفظ الملف في مدير كلمات المرور، ولا تضعه في المستودع ولا ترسله في المحادثة.
+4. من داخل `api/` أضف السرّين:
+
+```sh
+npx wrangler secret put APNS_KEY_ID                              # الصق Key ID
+npx wrangler secret put APNS_PRIVATE_KEY < ~/Downloads/AuthKey_XXXXXXXXXX.p8
+npx wrangler d1 migrations apply zimam --remote
+```
+
+أو شغّل `npx wrangler secret put APNS_PRIVATE_KEY` والصق محتوى الملف كاملاً مع سطري `BEGIN` و`END`. ثم احذف الملف من التنزيلات.
+
+- معرّف الفريق `72V86SZ2XC` ليس سراً، وهو في `api/wrangler.jsonc` (`APNS_TEAM_ID`).
+- بناء Xcode للتطوير يسجّل الجهاز في بيئة sandbox، وTestFlight وApp Store في production، والتطبيق يرسل البيئة مع الرمز.
+- قبل إضافة السرّين يعمل الخادم عادياً ويتخطى الإرسال مع تحذير في السجل.
+
 ### ٢. الماك
 
 ```sh

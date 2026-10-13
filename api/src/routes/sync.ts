@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { pullChanges } from "../data/pull";
 import { fail, readJson } from "../http";
+import { markDevicesSeen } from "../push/devices";
 import type { AppEnv } from "../types";
 
 const MAX_PUSH = 200;
@@ -17,6 +18,8 @@ sync.get("/", async (c) => {
     })
     .safeParse(c.req.query());
   if (!query.success) return fail(c, 400, "invalid", "cursor and limit must be non-negative integers");
+  // Before reading: the device then reschedules its local notifications from this pull.
+  await markDevicesSeen(c.env.DB, c.var.token);
   return c.json(await pullChanges(c.env.DB, c.var.access, query.data.cursor, query.data.limit));
 });
 

@@ -24,6 +24,11 @@
     // (and DEEPSEEK_API_KEY, AI_GATEWAY_TOKEN when used). Never put them here.
     "AI_PROVIDER": "anthropic",
     "AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/302d00b357e2c90ed474d13642708b30/zimam",
-    "AI_MONTHLY_LIMIT": "300"
-  }
+    "AI_MONTHLY_LIMIT": "300",
+    // Reminder pushes over APNs. The key is a secret: `npx wrangler secret put APNS_KEY_ID`
+    // and `npx wrangler secret put APNS_PRIVATE_KEY`. Never put them here.
+    "APNS_TEAM_ID": "72V86SZ2XC"
+  },
+  // Pushes the reminders beyond the app's local notification window (src/push/reminders.ts).
+  "triggers": { "crons": ["*/5 * * * *"] }
 }

@@ -98,6 +98,9 @@ targets:
       path: Zimam/Resources/Zimam.entitlements
       properties:
         com.apple.developer.applesignin: [Default]
+        # Reminder pushes beyond the local window (api/src/push). Xcode signs archives for
+        # TestFlight and the App Store with "production".
+        aps-environment: development
         # The local store and the settings the widgets read (see Shared/Model/ZimamStore.swift).
         com.apple.security.application-groups: [group.app.zimam]
 

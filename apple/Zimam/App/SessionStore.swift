@@ -124,6 +124,7 @@ final class SessionStore {
 
     /// Ends the session here and on the server; local data is wiped by the caller.
     func signOut() async {
+        await PushRegistration.shared.unregister()
         try? await api.signOut()
         endSession()
     }

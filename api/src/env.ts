@@ -26,6 +26,12 @@ declare global {
       DEEPSEEK_API_KEY?: string;
       /** Secret for an authenticated gateway, sent as `cf-aig-authorization`. */
       AI_GATEWAY_TOKEN?: string;
+      /** Apple Developer team id, for the APNs provider token. */
+      APNS_TEAM_ID: string;
+      /** Secret (`wrangler secret put`): the APNs key's id. Pushes are skipped without it. */
+      APNS_KEY_ID?: string;
+      /** Secret (`wrangler secret put`): the APNs .p8 key (PKCS #8 PEM). */
+      APNS_PRIVATE_KEY?: string;
     }
   }
 }
