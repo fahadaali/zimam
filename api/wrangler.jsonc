@@ -15,6 +15,11 @@
   "vars": {
     // Sign in with Apple audiences: the app bundle id and the web Services ID.
     "APPLE_AUDIENCES": "app.zimam.Zimam,app.zimam.web",
-    "ALLOWED_ORIGINS": "https://zimam.app"
+    "ALLOWED_ORIGINS": "https://zimam.app",
+    // In-app assistant. Keys are secrets: `npx wrangler secret put ANTHROPIC_API_KEY`
+    // (and DEEPSEEK_API_KEY, AI_GATEWAY_TOKEN when used). Never put them here.
+    "AI_PROVIDER": "anthropic",
+    "AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/302d00b357e2c90ed474d13642708b30/zimam",
+    "AI_MONTHLY_LIMIT": "300"
   }
 }

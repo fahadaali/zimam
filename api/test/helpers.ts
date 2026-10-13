@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
+import type { AiProvider, AiRequest, AiResult } from "../src/ai/provider";
 import { createApp } from "../src/app";
 import { sha256Hex } from "../src/auth/crypto";
 
@@ -7,7 +8,38 @@ const { publicKey, privateKey } = await generateKeyPair("RS256");
 const jwk = { ...(await exportJWK(publicKey)), kid: "test-key", alg: "RS256", use: "sig" };
 
 export const testAppleKeys = createLocalJWKSet({ keys: [jwk] });
-export const app = createApp({ appleKeys: testAppleKeys });
+/** A model provider that answers from a queue and keeps every request it was sent. */
+export class FakeAi implements AiProvider {
+  readonly name = "fake";
+  requests: AiRequest[] = [];
+  private answers: ((request: AiRequest) => AiResult | Promise<AiResult>)[] = [];
+
+  /** Queues the JSON the next call returns, or an error it throws. */
+  answer(json: unknown, usage = { input: 100, output: 20 }) {
+    this.answers.push(() => ({ json, usage }));
+  }
+
+  fail(error: Error) {
+    this.answers.push(() => {
+      throw error;
+    });
+  }
+
+  reset() {
+    this.requests = [];
+    this.answers = [];
+  }
+
+  async complete(request: AiRequest): Promise<AiResult> {
+    this.requests.push(request);
+    const next = this.answers.shift();
+    if (!next) throw new Error("FakeAi: no answer queued");
+    return next(request);
+  }
+}
+
+export const fakeAi = new FakeAi();
+export const app = createApp({ appleKeys: testAppleKeys, ai: () => fakeAi });
 
 interface AppleTokenOptions {
   audience?: string;
