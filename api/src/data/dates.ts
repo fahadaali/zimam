@@ -54,3 +54,47 @@ export function dualText(day: string, primary: "hijri" | "gregorian"): string {
 export function timeIn(timeZone: string, instant: Date): string {
   return new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(instant);
 }
+
+export interface HijriParts {
+  year: number;
+  month: number;
+  day: number;
+}
+
+/** Umm al-Qura year, month and day of a local day. */
+export function hijriParts(day: string): HijriParts {
+  const parts = new Intl.DateTimeFormat("en-u-ca-islamic-umalqura-nu-latn", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(noon(day));
+  const get = (type: string) => Number.parseInt(parts.find((p) => p.type === type)?.value ?? "", 10);
+  return { year: get("year"), month: get("month"), day: get("day") };
+}
+
+const HIJRI_YEAR_DAYS = 354.367;
+const HIJRI_MONTH_DAYS = 29.5306;
+
+/**
+ * The Gregorian day of an Umm al-Qura date. Without a year it is the next such date on or
+ * after `from`. Null when the date does not exist (the 30th of a 29-day month).
+ */
+export function dayOfHijri(target: { year?: number | null; month: number; day: number }, from: string): string | null {
+  if (target.month < 1 || target.month > 12 || target.day < 1 || target.day > 30) return null;
+  const start = hijriParts(from);
+  let year = target.year ?? start.year;
+  if (target.year == null && (target.month < start.month || (target.month === start.month && target.day < start.day))) {
+    year += 1;
+  }
+  const estimate = Math.round(
+    (year - start.year) * HIJRI_YEAR_DAYS + (target.month - start.month) * HIJRI_MONTH_DAYS + (target.day - start.day),
+  );
+  // The mean-length estimate lands within a few days of the real date; search around it.
+  for (const delta of [0, -1, 1, -2, 2, -3, 3, -4, 4]) {
+    const candidate = addDays(from, estimate + delta);
+    const p = hijriParts(candidate);
+    if (p.year === year && p.month === target.month && p.day === target.day) return candidate;
+  }
+  return null;
+}

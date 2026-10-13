@@ -86,8 +86,54 @@ npm run db:migrate:local
 
 يحسب الخادم «اليوم» بالمنطقة الزمنية في إعدادات المستخدم (`timeZone`، والافتراضي `Asia/Riyadh`)، وأوقات الصلاة بمكتبة `adhan` من `location` وطريقة الحساب. ويرسلهما التطبيق عبر `PATCH /v1/me` حين يسمح المستخدم بالموقع.
 
+## المساعد الذكي داخل التطبيق
+
+ثلاثة مسارات بعد تسجيل الدخول، لا تحفظ شيئاً: يعرض التطبيق الاقتراح ويؤكده المستخدم ثم يحفظه بالمزامنة كالعادة.
+
+| المسار | ما يفعله |
+| --- | --- |
+| `POST /v1/assistant/parse` | `{ text, now? }` يحوّل جملة («ذكرني أراجع العقد بعد المغرب يوم الخميس») إلى اقتراح مهمة `{ title, notes?, dueDate?, dueTime?, duePrayer?, duePrayerOffset?, priority, tags, projectId? }` |
+| `POST /v1/assistant/breakdown` | `{ taskId }` يرجع `{ subtasks }` من ٣ إلى ٨ عناوين قصيرة لمهمة يراها المستخدم، و404 لغيرها |
+| `GET /v1/assistant/summary?date=` | `{ date, text }` ملخص صباحي من بيانات `getAgenda` وحدها: مهام اليوم والمتأخرة وأقرب مهمة مرتبطة بصلاة. اليوم الفارغ يُجاب دون النموذج ودون احتساب |
+
+- `now` وقت الجهاز (ISO مع المنطقة)، والافتراضي وقت الخادم. «اليوم» بمنطقة المستخدم (`timeZone`، والافتراضي `Asia/Riyadh`).
+- يُعطى النموذج اليوم بالتقويمين، وجدول الأيام الأربعة عشر القادمة بأسمائها وبالهجري، وأسماء المشاريع التي يستطيع المستخدم الإضافة إليها. التاريخ الهجري في الجملة («١٥ رمضان») يرجعه النموذج أجزاءً ويحوّله الخادم بتقويم أم القرى (`dayOfHijri` في `src/data/dates.ts`)، فلا يحسب النموذج التقويم.
+- جواب النموذج غير موثوق: يُتحقق منه بـ zod بقواعد `TaskFields` نفسها، وتُزال الرموز التعبيرية والتطويل، ويُحذف `projectId` إن لم يكن من مشاريع المستخدم، ويُقدَّم الربط بالصلاة على الوقت إن جاء الاثنان.
+- الأخطاء: `400 invalid` لمدخل خاطئ، و`429 ai_quota_exceeded` مع `limit` و`resetsOn` (أول الشهر القادم)، و`503 ai_unavailable` إن فشل المزوّد أو رفض أو رجع جواباً لا يصلح. الفشل لا يُحتسب من الحصة.
+
+الملفات: `src/ai/provider.ts` (واجهة `AiProvider` وتنفيذا Anthropic وDeepSeek)، و`src/ai/prompts.ts` (التعليمات)، و`src/ai/validate.ts` (فحص الأجوبة)، و`src/ai/quota.ts`، و`src/routes/assistant.ts`. المزوّد يُمرَّر عبر `Deps.ai` فتستعمل الاختبارات مزوّداً وهمياً (`FakeAi` في `test/helpers.ts`).
+
+### المزوّد والنموذج
+
+- `AI_PROVIDER = "anthropic"`: نموذج `claude-haiku-5-5` (أرخص نماذج كلود الحالية، وجيد في العربية)، بمخرجات منظّمة (`output_config.format` بمخطط JSON) وجهد `low`.
+- `AI_PROVIDER = "deepseek"`: نموذج `deepseek-chat` بوضع JSON (`response_format: { type: "json_object" }`)، والمخطط في رسالة النظام.
+- `AI_MODEL` (اختياري) يغيّر النموذج دون تغيير الكود.
+
+كل الطلبات تمر عبر Cloudflare AI Gateway، والمفتاح في الترويسة لا في الرابط.
+
+### الحصة
+
+`AI_MONTHLY_LIMIT` طلباً لكل مستخدم في الشهر الميلادي بتوقيت UTC (الافتراضي ٣٠٠). الجدول `ai_usage` يحفظ لكل مستخدم وشهر عدد الطلبات والرموز الداخلة والخارجة، لا النصوص. الفحص قبل الطلب والتسجيل بعد نجاحه، فطلبان متزامنان عند الحد قد يتجاوزانه بواحد.
+
+### الإعداد
+
+القيم غير السرية في `wrangler.jsonc` (`vars`): `AI_PROVIDER` و`AI_GATEWAY_URL` و`AI_MONTHLY_LIMIT`. المفاتيح أسرار فقط، ولا تدخل المستودع ولا التطبيق:
+
+1. في لوحة كلاودفلير: **AI → AI Gateway → Create Gateway** باسم `zimam` في الحساب `302d00b357e2c90ed474d13642708b30`. الرابط حينها `https://gateway.ai.cloudflare.com/v1/302d00b357e2c90ed474d13642708b30/zimam`، ويضيف الخادم إليه `/anthropic/v1/messages` أو `/deepseek/chat/completions`.
+2. يُستحسن تفعيل السجلات وحدّ المعدل في البوابة. وإن فُعّلت **Authenticated Gateway** فأنشئ رمزاً وأضفه سراً (`AI_GATEWAY_TOKEN`)، ويُرسل في `cf-aig-authorization: Bearer …`.
+3. أضف المفاتيح من داخل `api/`:
+
+```sh
+npx wrangler secret put ANTHROPIC_API_KEY
+npx wrangler secret put DEEPSEEK_API_KEY    # عند استعمال DeepSeek
+npx wrangler secret put AI_GATEWAY_TOKEN    # للبوابة الموثّقة فقط
+npx wrangler d1 migrations apply zimam --remote   # جدول ai_usage
+```
+
+للتبديل إلى DeepSeek غيّر `AI_PROVIDER` في `wrangler.jsonc` إلى `"deepseek"` وانشر. وللتطوير المحلي ضع المفاتيح في `api/.dev.vars` (لا يُرفع إلى المستودع).
+
 ## لم يُبنَ بعد
 
 - إلغاء الدعوة قبل استعمالها: العمود `revoked_at` موجود ولا مسار له بعد.
 - إلغاء رمز Apple عند حذف الحساب (يحتاج مفتاح Sign in with Apple في أسرار كلاودفلير).
-- المساعد الذكي عبر AI Gateway، وإشعارات APNs، والاستيراد عبر Queues، والمزامنة اللحظية بـ Durable Objects.
+- حصص المساعد بحسب الاشتراك (الحد الآن واحد للجميع)، وإشعارات APNs، والاستيراد عبر Queues، والمزامنة اللحظية بـ Durable Objects.
