@@ -47,6 +47,20 @@ final class SyncTests: XCTestCase {
         XCTAssertEqual(results[0].uuid, UUID(uuidString: "0B9C6F8E-6F2C-4A4E-9A51-1D2C3B4A5E6F"))
     }
 
+    func testSettingsSendNullLocationSoSharingCanBeTurnedOff() throws {
+        let off = User.Settings(timeZone: "Asia/Riyadh")
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(off)) as! [String: Any]
+        XCTAssertTrue(json["location"] is NSNull)
+        XCTAssertEqual(json["timeZone"] as? String, "Asia/Riyadh")
+
+        let on = User.Settings(location: .init(latitude: 24.7, longitude: 46.7))
+        let decoded = try JSONDecoder().decode(User.Settings.self, from: JSONEncoder().encode(on))
+        XCTAssertEqual(decoded, on)
+        // Older servers without the new fields still decode.
+        let legacy = try JSONDecoder().decode(User.Settings.self, from: Data(#"{"calendar":"hijri","prayerMethod":"ummAlQura","weekStart":0}"#.utf8))
+        XCTAssertNil(legacy.location)
+    }
+
     func testArabicSearchFolding() {
         XCTAssertEqual(ArabicSearch.fold("مُراجَعة  العقد ١٢"), "مراجعه العقد 12")
         XCTAssertTrue(ArabicSearch.matches("مُراجَعة العقد مع الإدارة", query: "الاداره عقد"))

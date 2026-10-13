@@ -212,11 +212,39 @@ public struct User: Codable, Equatable, Sendable {
         public var prayerMethod: PrayerMethod
         /// 0 = Sunday.
         public var weekStart: Int
+        /// IANA zone, so the server (Claude, ChatGPT) knows which day is "today".
+        public var timeZone: String?
+        /// Where the server computes prayer times for agendas. Set only when the user shares a location.
+        public var location: Coordinate?
 
-        public init(calendar: CalendarKind = .hijri, prayerMethod: PrayerMethod = .ummAlQura, weekStart: Int = 0) {
+        public struct Coordinate: Codable, Equatable, Sendable {
+            public var latitude: Double
+            public var longitude: Double
+
+            public init(latitude: Double, longitude: Double) {
+                self.latitude = latitude
+                self.longitude = longitude
+            }
+        }
+
+        public init(calendar: CalendarKind = .hijri, prayerMethod: PrayerMethod = .ummAlQura, weekStart: Int = 0,
+                    timeZone: String? = nil, location: Coordinate? = nil) {
             self.calendar = calendar
             self.prayerMethod = prayerMethod
             self.weekStart = weekStart
+            self.timeZone = timeZone
+            self.location = location
+        }
+        private enum CodingKeys: String, CodingKey { case calendar, prayerMethod, weekStart, timeZone, location }
+
+        /// Sends `location: null` when there is none, so turning sharing off clears it on the server.
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(calendar, forKey: .calendar)
+            try c.encode(prayerMethod, forKey: .prayerMethod)
+            try c.encode(weekStart, forKey: .weekStart)
+            try c.encodeIfPresent(timeZone, forKey: .timeZone)
+            try c.encode(location, forKey: .location)
         }
     }
 }

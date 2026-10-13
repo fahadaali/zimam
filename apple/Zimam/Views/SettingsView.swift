@@ -11,6 +11,7 @@ struct SettingsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncEngine.self) private var sync
     @Environment(LocationProvider.self) private var location
+    @AppStorage(SessionStore.shareLocationKey) private var shareLocation = false
     @Environment(NotificationScheduler.self) private var notifications
     @Environment(\.dateFormatterZimam) private var formatter
     @Environment(\.dismiss) private var dismiss
@@ -102,10 +103,20 @@ struct SettingsView: View {
             if let schedule = location.schedule(method: settings.prayerMethod) {
                 PrayerTimesList(schedule: schedule)
             }
+            Toggle("أوقات الصلاة في كلود وChatGPT", isOn: $shareLocation)
+                .frame(minHeight: ZimamSpacing.space11)
+                .onChange(of: shareLocation) { _, _ in
+                    Task {
+                        await session.sharePlace(latitude: location.coordinate?.latitude,
+                                                 longitude: location.coordinate?.longitude)
+                    }
+                }
         } header: {
             Text("أوقات الصلاة")
         } footer: {
-            Text("تُحسب الأوقات على جهازك، ولا يُرسل موقعك إلى أي خادم.")
+            Text(shareLocation
+                 ? "تُحسب الأوقات على جهازك، ويُحفظ في خادم زمام موقع تقريبي على مستوى المدينة لتظهر الأوقات في جدولك عند كلود وChatGPT."
+                 : "تُحسب الأوقات على جهازك، ولا يُرسل موقعك إلى أي خادم.")
         }
     }
 
