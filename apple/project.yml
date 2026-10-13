@@ -7,7 +7,6 @@ options:
   deploymentTarget:
     iOS: "18.0"
     macOS: "15.0"
-  createIntermediateGroups: true
 
 settings:
   base:
@@ -32,9 +31,7 @@ targets:
     sources:
       - path: Zimam
       - path: ../design/generated/ZimamTokens.swift
-        group: Design
       - path: ../design/fonts/apple
-        group: Design/Fonts
         buildPhase: resources
     dependencies:
       - package: ZimamKit
