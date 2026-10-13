@@ -212,5 +212,11 @@ public struct User: Codable, Equatable, Sendable {
         public var prayerMethod: PrayerMethod
         /// 0 = Sunday.
         public var weekStart: Int
+
+        public init(calendar: CalendarKind = .hijri, prayerMethod: PrayerMethod = .ummAlQura, weekStart: Int = 0) {
+            self.calendar = calendar
+            self.prayerMethod = prayerMethod
+            self.weekStart = weekStart
+        }
     }
 }

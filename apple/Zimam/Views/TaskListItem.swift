@@ -1,7 +1,22 @@
 import SwiftData
 import SwiftUI
 
+/// Where a task row leads: the task's detail screen.
+struct TaskRoute: Hashable {
+    let id: UUID
+}
+
+extension View {
+    /// Lets any task row in this navigation stack open the task's details.
+    func taskDetailDestination() -> some View {
+        navigationDestination(for: TaskRoute.self) { route in
+            TaskDetailView(taskId: route.id)
+        }
+    }
+}
+
 /// A task row inside a list, with completion and swipe-to-delete wired to the store.
+/// Tapping the row opens the task's details.
 struct TaskListItem: View {
     let task: TaskItem
     var projectName: String?
@@ -12,10 +27,12 @@ struct TaskListItem: View {
 
     var body: some View {
         let store = Store(context: context, sync: sync)
-        TaskRow(task: task, projectName: projectName) {
-            withAnimation {
-                store.toggleDone(task)
-                if task.isDone { onCompleted?(task.id) }
+        NavigationLink(value: TaskRoute(id: task.id)) {
+            TaskRow(task: task, projectName: projectName) {
+                withAnimation {
+                    store.toggleDone(task)
+                    if task.isDone { onCompleted?(task.id) }
+                }
             }
         }
         .listRowBackground(ZimamColor.surfaceRaised)

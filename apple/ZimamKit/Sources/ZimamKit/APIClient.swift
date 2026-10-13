@@ -52,6 +52,15 @@ public final class APIClient: @unchecked Sendable {
         try await send("GET", "v1/me")
     }
 
+    /// `PATCH /v1/me`: changes the name and/or settings; fields left nil stay as they are.
+    public func updateMe(name: String? = nil, settings: User.Settings? = nil) async throws -> User {
+        struct Body: Encodable {
+            let name: String?
+            let settings: User.Settings?
+        }
+        return try await send("PATCH", "v1/me", body: Body(name: name, settings: settings))
+    }
+
     /// Changes after `cursor`, oldest first. Repeat with the returned cursor while `hasMore`.
     public func pull(cursor: Int64, limit: Int = 500) async throws -> PullResponse {
         try await send("GET", "v1/sync", query: [URLQueryItem(name: "cursor", value: String(cursor)), URLQueryItem(name: "limit", value: String(limit))])

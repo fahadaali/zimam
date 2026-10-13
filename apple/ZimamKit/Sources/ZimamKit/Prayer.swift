@@ -20,6 +20,19 @@ public enum Prayer: String, CaseIterable, Codable, Sendable {
 public enum PrayerMethod: String, CaseIterable, Codable, Sendable {
     case ummAlQura, muslimWorldLeague, egyptian, karachi, dubai, kuwait, qatar, northAmerica
 
+    public var arabicName: String {
+        switch self {
+        case .ummAlQura: "أم القرى"
+        case .muslimWorldLeague: "رابطة العالم الإسلامي"
+        case .egyptian: "الهيئة المصرية العامة للمساحة"
+        case .karachi: "جامعة العلوم الإسلامية بكراتشي"
+        case .dubai: "دبي"
+        case .kuwait: "الكويت"
+        case .qatar: "قطر"
+        case .northAmerica: "الجمعية الإسلامية لأمريكا الشمالية"
+        }
+    }
+
     var adhanMethod: CalculationMethod {
         switch self {
         case .ummAlQura: .ummAlQura

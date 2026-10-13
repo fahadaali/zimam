@@ -31,6 +31,9 @@ final class SyncEngine {
     @ObservationIgnored private var runAgain = false
     /// Called when the server no longer accepts the session.
     @ObservationIgnored var onUnauthorized: (() -> Void)?
+    /// Called after local edits and after each sync, so what depends on the data
+    /// (scheduled notifications) can refresh.
+    @ObservationIgnored var onDataChanged: (@MainActor () -> Void)?
 
     private static let cursorKey = "sync.cursor"
 
@@ -42,6 +45,11 @@ final class SyncEngine {
     private var cursor: Int64 {
         get { Int64(UserDefaults.standard.integer(forKey: Self.cursorKey)) }
         set { UserDefaults.standard.set(Int(newValue), forKey: Self.cursorKey) }
+    }
+
+    /// Tells listeners that a local edit was saved. `Store` calls this after each commit.
+    func noteLocalChange() {
+        onDataChanged?()
     }
 
     /// Syncs soon, folding a burst of edits into one request.
@@ -73,9 +81,11 @@ final class SyncEngine {
                 return
             } catch {
                 lastError = "تعذّرت المزامنة، وستُعاد المحاولة تلقائياً."
+                onDataChanged?()
                 return
             }
         } while runAgain
+        onDataChanged?()
     }
 
     /// Removes every local record and starts the next sync from scratch.
@@ -87,6 +97,7 @@ final class SyncEngine {
         try context.delete(model: ProjectItem.self)
         try context.save()
         cursor = 0
+        onDataChanged?()
     }
 
     // MARK: Push
