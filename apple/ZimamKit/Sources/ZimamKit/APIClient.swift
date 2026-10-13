@@ -33,19 +33,30 @@ public final class APIClient: @unchecked Sendable {
     }
 
     /// Exchanges a Sign in with Apple identity token for a Zimam session.
-    /// `nonce` is the raw value whose SHA-256 went into the Apple request.
-    public func signInWithApple(identityToken: String, nonce: String?, name: String?, device: String?) async throws -> SignInResponse {
+    /// `nonce` is the raw value whose SHA-256 went into the Apple request. `authorizationCode`
+    /// lets the server keep Apple's refresh token, which it revokes when the account is deleted.
+    public func signInWithApple(
+        identityToken: String, nonce: String?, name: String?, device: String?, authorizationCode: String? = nil
+    ) async throws -> SignInResponse {
         struct Body: Encodable {
             let identityToken: String
             let nonce: String?
             let name: String?
             let device: String?
+            let authorizationCode: String?
         }
-        return try await send("POST", "v1/auth/apple", body: Body(identityToken: identityToken, nonce: nonce, name: name, device: device))
+        let body = Body(identityToken: identityToken, nonce: nonce, name: name, device: device, authorizationCode: authorizationCode)
+        return try await send("POST", "v1/auth/apple", body: body)
     }
 
     public func signOut() async throws {
         let _: Empty = try await send("POST", "v1/auth/logout")
+    }
+
+    /// `DELETE /v1/me`: deletes the account and its data on the server, ends every session,
+    /// and revokes Sign in with Apple. Shared projects the user owns pass to another member.
+    public func deleteAccount() async throws {
+        let _: Empty = try await send("DELETE", "v1/me")
     }
 
     public func me() async throws -> User {

@@ -19,6 +19,9 @@ struct SettingsView: View {
 
     @State private var saveFailed = false
     @State private var confirmingSignOut = false
+    @State private var confirmingDeleteAccount = false
+    @State private var isDeletingAccount = false
+    @State private var deleteFailed = false
 
     init() {}
 
@@ -137,7 +140,7 @@ struct SettingsView: View {
     }
 
     private var accountSection: some View {
-        Section("الحساب") {
+        Section {
             if let name = session.user?.name {
                 LabeledContent("الاسم", value: name)
             }
@@ -145,6 +148,24 @@ struct SettingsView: View {
                 confirmingSignOut = true
             }
             .frame(minHeight: ZimamSpacing.space11)
+            Button("حذف الحساب", systemImage: "person.crop.circle.badge.xmark", role: .destructive) {
+                confirmingDeleteAccount = true
+            }
+            .disabled(isDeletingAccount)
+            .frame(minHeight: ZimamSpacing.space11)
+            .confirmationDialog("حذف الحساب؟", isPresented: $confirmingDeleteAccount, titleVisibility: .visible) {
+                Button("حذف الحساب", role: .destructive, action: deleteAccount)
+                Button("إلغاء", role: .cancel) {}
+            } message: {
+                Text("تُحذف مهامك ومشاريعك وتذكيراتك من خادم زمام ومن هذا الجهاز نهائياً، ولا يمكن استرجاعها. المشروع المشترك ينتقل إلى أقدم أعضائه.")
+            }
+        } header: {
+            Text("الحساب")
+        } footer: {
+            if deleteFailed {
+                Text("تعذّر حذف الحساب. تحقّق من الاتصال وحاول مرة أخرى.")
+                    .foregroundStyle(ZimamColor.priorityHigh)
+            }
         }
     }
 
@@ -205,6 +226,22 @@ struct SettingsView: View {
         Task {
             await session.signOut()
             try? sync.reset()
+        }
+    }
+
+    /// Waits for the server before wiping anything, then clears local data as sign-out does.
+    private func deleteAccount() {
+        isDeletingAccount = true
+        deleteFailed = false
+        Task {
+            let deleted = await session.deleteAccount()
+            isDeletingAccount = false
+            guard deleted else {
+                deleteFailed = true
+                return
+            }
+            try? sync.reset()
+            dismiss()
         }
     }
 

@@ -4,6 +4,12 @@ declare global {
       DB: D1Database;
       /** Comma-separated Sign in with Apple audiences (bundle id, web Services ID). */
       APPLE_AUDIENCES: string;
+      /** Apple developer team id; signs the Sign in with Apple client secret. Not a secret. */
+      APPLE_TEAM_ID: string;
+      /** Secret (`wrangler secret put`): the Sign in with Apple key id. */
+      APPLE_KEY_ID?: string;
+      /** Secret (`wrangler secret put`): the Sign in with Apple key, the .p8 file's PEM text. */
+      APPLE_PRIVATE_KEY?: string;
       /** Comma-separated browser origins allowed to call the API. */
       ALLOWED_ORIGINS: string;
       /** In-app assistant provider: "anthropic" or "deepseek". */

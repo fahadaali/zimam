@@ -15,6 +15,10 @@
   "vars": {
     // Sign in with Apple audiences: the app bundle id and the web Services ID.
     "APPLE_AUDIENCES": "app.zimam.Zimam,app.zimam.web",
+    // Signs the Sign in with Apple client secret, to keep and later revoke Apple's
+    // refresh token. The key is secret: `npx wrangler secret put APPLE_KEY_ID` and
+    // `npx wrangler secret put APPLE_PRIVATE_KEY`. Never put them here.
+    "APPLE_TEAM_ID": "72V86SZ2XC",
     "ALLOWED_ORIGINS": "https://zimam.app,https://zimam-web.fahad2ao.workers.dev",
     // In-app assistant. Keys are secrets: `npx wrangler secret put ANTHROPIC_API_KEY`
     // (and DEEPSEEK_API_KEY, AI_GATEWAY_TOKEN when used). Never put them here.

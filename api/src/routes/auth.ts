@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { storeAppleRefreshToken } from "../auth/account";
 import { verifyAppleToken } from "../auth/apple";
 import { createSession, deleteSession } from "../auth/sessions";
 import { appleAudiences, upsertAppleUser } from "../auth/users";
@@ -15,6 +16,8 @@ const AppleSignIn = z.object({
   /** Apple sends the name only on the first sign-in, to the client. */
   name: z.string().trim().max(200).optional(),
   device: z.string().trim().max(100).optional(),
+  /** Apple's one-time authorization code, exchanged for a refresh token that account deletion revokes. */
+  authorizationCode: z.string().min(1).max(1000).optional(),
 });
 
 export const auth = new Hono<AppEnv>();
@@ -33,6 +36,10 @@ auth.post("/apple", async (c) => {
 
   const db = c.env.DB;
   const user = await upsertAppleUser(db, identity, body.data.name ?? null);
+  if (body.data.authorizationCode) {
+    // Never blocks sign-in: without the Apple key, or with a bad code, the user still gets in.
+    await storeAppleRefreshToken(db, c.var.deps.appleTokens(c.env), user.id as string, identity, body.data.authorizationCode);
+  }
 
   const token = await createSession(db, user.id as string, body.data.device ?? null);
   return c.json({ token, user: userOut(user) });

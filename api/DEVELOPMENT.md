@@ -15,11 +15,12 @@ npm run db:migrate:local
 | الملف | ما فيه |
 | --- | --- |
 | `migrations/` | مخطط قاعدة البيانات D1، ملف لكل تغيير ولا يُعدَّل ملف بعد نشره |
-| `src/auth/` | التحقق من رمز Sign in with Apple، وجلسات الخادم (يُحفظ تجزيء الرمز فقط) |
+| `src/auth/` | التحقق من رمز Sign in with Apple، وجلسات الخادم (يُحفظ تجزيء الرمز فقط)، ورمز Apple الذي يُلغى عند حذف الحساب (`apple-tokens.ts`) |
 | `src/data/schemas.ts` | شكل كل كيان وقيوده (zod) |
 | `src/data/mutations.ts` | كل كتابة تمر من هنا: الصلاحيات، والأحدث يفوز، وسجل التغييرات |
 | `src/data/pull.ts` | ما تغيّر للمستخدم منذ مؤشر معيّن |
 | `src/data/membership.ts` | إضافة الأعضاء وإزالتهم وما يلزم مزامنتهم |
+| `src/data/account.ts` | حذف الحساب وبياناته |
 | `src/routes/` | المسارات |
 
 ## المزامنة
@@ -40,7 +41,7 @@ npm run db:migrate:local
 
 الأدوار: المالك والمحرر يعدّلان، والمشاهد يقرأ ويعلّق، والمالك وحده يحذف المشروع ويدعو ويغيّر الأدوار ويزيل الأعضاء.
 
-- الدعوة رابط `https://zimam.app/join/<code>` يُستعمل مرة واحدة وينتهي بعد ٧ أيام. يُحفظ تجزيء الرمز فقط في جدول `invites`، فلا يظهر الرمز بعد إنشائه.
+- الدعوة رابط `https://zimam.app/join/<code>` يُستعمل مرة واحدة وينتهي بعد ٧ أيام. يُحفظ تجزيء الرمز فقط في جدول `invites`، فلا يظهر الرمز بعد إنشائه. ولكل دعوة معرّف `id` يرى به المالك دعواته ويلغي منها ما لم يُستعمل.
 - من يقبل دعوة وهو عضو يبقى على الأعلى من دوره ودور الدعوة، ولا تُستهلك الدعوة إلا إذا رفعت دوره.
 - المجلدات لا تُشارَك، لأن مشاركة المجلد لا تشارك المشاريع التي فيه.
 
@@ -50,9 +51,9 @@ npm run db:migrate:local
 
 | المسار | ما يفعله |
 | --- | --- |
-| `POST /v1/auth/apple` | `{ identityToken, nonce?, name?, device? }` يرجع `{ token, user }` |
+| `POST /v1/auth/apple` | `{ identityToken, nonce?, name?, device?, authorizationCode? }` يرجع `{ token, user }` |
 | `POST /v1/auth/logout` | ينهي الجلسة |
-| `GET`, `PATCH`, `DELETE /v1/me` | الحساب والإعدادات (`calendar`، `prayerMethod`، `weekStart`، `timeZone`، `location`)، والحذف يمسح بيانات المستخدم |
+| `GET`, `PATCH`, `DELETE /v1/me` | الحساب والإعدادات (`calendar`، `prayerMethod`، `weekStart`، `timeZone`، `location`)، والحذف يمسح بيانات المستخدم (انظر «حذف الحساب») ويرجع 204 |
 | `GET`, `POST /v1/projects` | المشاريع مع عدد المهام والمنجز منها |
 | `GET`, `PATCH`, `DELETE /v1/projects/:id` | المشروع وأعمدته |
 | `GET /v1/tasks` | تصفية بـ `projectId` (أو `inbox`) و`status` (أو `open`) و`dueFrom` و`dueTo` و`q` و`assignee=me` |
@@ -61,8 +62,9 @@ npm run db:migrate:local
 | `GET /v1/projects/:id/members` | الأعضاء `{ members: [{ userId, name, role, addedAt }] }`، لكل عضو |
 | `PATCH /v1/projects/:id/members/:userId` | `{ role: "editor" \| "viewer" }`، للمالك، ولا يتغيّر دور المالك |
 | `DELETE /v1/projects/:id/members/:userId` | المالك يزيل عضواً، أو العضو يغادر. المالك لا يغادر (`owner_cannot_leave`) |
-| `GET`, `POST /v1/projects/:id/invites` | للمالك: الدعوات السارية دون رموزها، وإنشاء دعوة `{ role }` ترجع `{ code, url, expiresAt }` |
-| `GET /v1/invites/:code` | معاينة الدعوة `{ projectName, role, invitedBy, expiresAt }`، و410 إن انتهت أو استُعملت (`invite_expired`، `invite_used`) |
+| `GET`, `POST /v1/projects/:id/invites` | للمالك: الدعوات السارية دون رموزها `{ invites: [{ id, role, createdBy, createdAt, expiresAt }] }`، وإنشاء دعوة `{ role }` ترجع `{ id, code, url, expiresAt }` |
+| `DELETE /v1/projects/:id/invites/:inviteId` | للمالك: إلغاء دعوة قبل استعمالها (204، وإلغاؤها مرتين لا يضر)، و410 `invite_used` إن قُبلت |
+| `GET /v1/invites/:code` | معاينة الدعوة `{ projectName, role, invitedBy, expiresAt }`، و410 إن انتهت أو استُعملت أو أُلغيت (`invite_expired`، `invite_used`، `invite_revoked`) |
 | `POST /v1/invites/:code/accept` | الانضمام إلى المشروع، يرجع `{ projectId, role }` |
 | `GET`, `POST /v1/tasks/:id/comments` | تعليقات المهمة من الأقدم مع `authorName`، وإضافة تعليق `{ body }` |
 | `DELETE /v1/comments/:id` | حذف تعليق، لكاتبه فقط |
@@ -132,8 +134,29 @@ npx wrangler d1 migrations apply zimam --remote   # جدول ai_usage
 
 للتبديل إلى DeepSeek غيّر `AI_PROVIDER` في `wrangler.jsonc` إلى `"deepseek"` وانشر. وللتطوير المحلي ضع المفاتيح في `api/.dev.vars` (لا يُرفع إلى المستودع).
 
+## حذف الحساب
+
+`DELETE /v1/me` يحذف الحساب كما تشترط مراجعة App Store (البند 5.1.1(v))، والمنطق في `src/data/account.ts`:
+
+- **المشروع الذي يملكه وحده** يُحذف بأعمدته ومهامه وتذكيراتها، كما يحذفه مالكه. والمجلد كذلك، وتخرج المشاريع التي فيه إلى المستوى الأعلى.
+- **المشروع المشترك الذي يملكه** ينتقل إلى أقدم أعضائه انضماماً (`added_at`، ثم معرّف المستخدم عند التساوي) أياً كان دوره، فيصير مالكه، ولا يضيع عمل الآخرين. ثم يخرج منه المالك السابق كأي عضو مُزال، ويُسجَّل تغيير للمشروع فيصل المالك الجديد إلى أجهزة الأعضاء.
+- **المشاريع التي هو عضو فيها** يخرج منها بـ `removeMemberStatements` نفسها: تُلغى إسناداته، وتُحذف تذكيراته، ويُضاف سجل التغيير الموجّه له. المهام التي أنشأها فيها تبقى للمشروع.
+- مهام صندوقه وتذكيراته كلها وتعليقاته في كل مكان تُحذف، مع سجل تغيير لجمهور كل سجل، فتحذفها أجهزة من يراها.
+- الدعوات التي أنشأها ولم تُستعمل تُلغى، وكل جلساته تنتهي، فلا تعمل رموزه على أي جهاز.
+- الحذف ناعم (`deleted_at`) لتعرف المزامنة به، لكن نصوص السجلات المحذوفة تُمسح (العنوان والملاحظات والوسوم والاسم ونص التعليق والموقع). وسطر المستخدم يبقى مجهول الهوية (`apple_sub = 'deleted:<id>'` دون اسم ولا بريد)، لأن سجلات أخرى تشير إليه؛ فإن سجّل الدخول بحساب Apple نفسه بدأ حساباً جديداً فارغاً.
+- الجلسات تُحذف في آخر خطوة، فإن فشل الحذف في منتصفه بقي المستخدم مسجّلاً ليعيد المحاولة، وكل خطوة تتجاوز ما أُنجز قبلها.
+
+### رمز Sign in with Apple
+
+يرسل التطبيق عند الدخول `authorizationCode` الذي يعطيه Apple. يستبدله الخادم من `https://appleid.apple.com/auth/token` برمز تحديث (`refresh_token`)، ويحفظه في سطر المستخدم (`apple_refresh_token`) مع المعرّف الذي صدر له رمز الهوية (`apple_client_id`: `app.zimam.Zimam` للتطبيق أو `app.zimam.web` للويب). ويتحقق أن الرمز للمستخدم نفسه (`sub`). وعند حذف الحساب يُلغى من `https://appleid.apple.com/auth/revoke` ويُمسح.
+
+- `client_secret` رمز JWT بـ ES256 يوقّعه الخادم بمفتاح Sign in with Apple عند كل طلب: `iss` معرّف الفريق، و`sub` معرّف العميل، و`aud` `https://appleid.apple.com`، وصلاحيته خمس دقائق.
+- معرّف الفريق `APPLE_TEAM_ID` ليس سراً، وهو في `wrangler.jsonc`. معرّف المفتاح `APPLE_KEY_ID` والمفتاح نفسه `APPLE_PRIVATE_KEY` (نص ملف `.p8`) سرّان فقط، وطريقة إنشائهما في `docs/setup.md`.
+- إن غاب السرّان، أو رفض Apple الرمز، يتم الدخول والحذف كالعادة، ويُكتب السبب في السجل دون الرمز. الاستبدال والإلغاء يمرّان عبر `Deps.appleTokens`، فتستعمل الاختبارات `FakeAppleTokens` في `test/helpers.ts`.
+- يُحفظ رمز آخر دخول فقط. من دخل من التطبيق والويب معاً يُلغى عند الحذف رمز آخرهما، وإلغاؤه يُنهي ربط زمام بحساب Apple.
+
 ## لم يُبنَ بعد
 
-- إلغاء الدعوة قبل استعمالها: العمود `revoked_at` موجود ولا مسار له بعد.
-- إلغاء رمز Apple عند حذف الحساب (يحتاج مفتاح Sign in with Apple في أسرار كلاودفلير).
+- إرسال `authorizationCode` من موقع الويب: Sign in with Apple JS يعطيه أيضاً، لكن استبداله يحتاج `redirect_uri` نفسه الذي طُلب به، والخادم لا يرسله بعد.
+
 - حصص المساعد بحسب الاشتراك (الحد الآن واحد للجميع)، وإشعارات APNs، والاستيراد عبر Queues، والمزامنة اللحظية بـ Durable Objects.
