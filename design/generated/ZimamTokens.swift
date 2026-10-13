@@ -54,6 +54,7 @@ public enum ZimamSpacing {
     public static let space4: CGFloat = 16
     public static let space6: CGFloat = 24
     public static let space8: CGFloat = 32
+    public static let space11: CGFloat = 44
 }
 
 public enum ZimamRadius {

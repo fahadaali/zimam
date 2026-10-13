@@ -1,0 +1,107 @@
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+/// An error the API returned as `{ error: { code, message } }`, or a transport failure.
+public struct APIError: Error, Equatable, Sendable {
+    public let status: Int
+    /// Stable English code, e.g. "unauthorized", "invalid".
+    public let code: String
+    public let message: String
+
+    public var isUnauthorized: Bool { status == 401 }
+}
+
+public struct SignInResponse: Decodable, Sendable {
+    public let token: String
+    public let user: User
+}
+
+/// Talks to the Zimam API (api/). Every call after sign-in sends the session token.
+public final class APIClient: @unchecked Sendable {
+    public static let maxPushBatch = 200
+
+    public let baseURL: URL
+    private let session: URLSession
+    private let token: @Sendable () -> String?
+
+    public init(baseURL: URL, session: URLSession = .shared, token: @escaping @Sendable () -> String?) {
+        self.baseURL = baseURL
+        self.session = session
+        self.token = token
+    }
+
+    /// Exchanges a Sign in with Apple identity token for a Zimam session.
+    /// `nonce` is the raw value whose SHA-256 went into the Apple request.
+    public func signInWithApple(identityToken: String, nonce: String?, name: String?, device: String?) async throws -> SignInResponse {
+        struct Body: Encodable {
+            let identityToken: String
+            let nonce: String?
+            let name: String?
+            let device: String?
+        }
+        return try await send("POST", "v1/auth/apple", body: Body(identityToken: identityToken, nonce: nonce, name: name, device: device))
+    }
+
+    public func signOut() async throws {
+        let _: Empty = try await send("POST", "v1/auth/logout")
+    }
+
+    public func me() async throws -> User {
+        try await send("GET", "v1/me")
+    }
+
+    /// Changes after `cursor`, oldest first. Repeat with the returned cursor while `hasMore`.
+    public func pull(cursor: Int64, limit: Int = 500) async throws -> PullResponse {
+        try await send("GET", "v1/sync", query: [URLQueryItem(name: "cursor", value: String(cursor)), URLQueryItem(name: "limit", value: String(limit))])
+    }
+
+    /// Sends up to `maxPushBatch` edits; each comes back with its own result, in order.
+    public func push(_ mutations: [Mutation]) async throws -> [MutationResult] {
+        struct Body: Encodable { let mutations: [Mutation] }
+        struct Response: Decodable { let results: [MutationResult] }
+        let response: Response = try await send("POST", "v1/sync", body: Body(mutations: mutations))
+        return response.results
+    }
+
+    // MARK: Transport
+
+    private struct Empty: Decodable {}
+    private struct NoBody: Encodable {}
+    private struct ErrorBody: Decodable {
+        struct Detail: Decodable {
+            let code: String
+            let message: String
+        }
+        let error: Detail
+    }
+
+    private func send<Response: Decodable>(_ method: String, _ path: String, query: [URLQueryItem] = []) async throws -> Response {
+        try await send(method, path, query: query, body: Optional<NoBody>.none)
+    }
+
+    private func send<Response: Decodable, Body: Encodable>(
+        _ method: String, _ path: String, query: [URLQueryItem] = [], body: Body?
+    ) async throws -> Response {
+        var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        if !query.isEmpty { components.queryItems = query }
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token = token() { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(body)
+        }
+
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let detail = try? JSONDecoder().decode(ErrorBody.self, from: data).error
+            throw APIError(status: status, code: detail?.code ?? "http_\(status)", message: detail?.message ?? "")
+        }
+        if Response.self == Empty.self || data.isEmpty { return try JSONDecoder().decode(Response.self, from: Data("{}".utf8)) }
+        return try JSONDecoder().decode(Response.self, from: data)
+    }
+}
