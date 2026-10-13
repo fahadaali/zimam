@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>زمام على الويب</title>
+<meta name="description" content="مهامك ومشاريعك في زمام من المتصفح.">
+<link rel="icon" href="/design/app-icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/design/app-icons/apple-touch-icon-180.png">
+<link rel="stylesheet" href="/design/generated/tokens.css">
+<link rel="stylesheet" href="/design/components/bundle.css">
+<link rel="stylesheet" href="/styles/base.css">
+<link rel="stylesheet" href="/app/app.css">
+<link rel="modulepreload" href="/app/lib/dates.js">
+<script type="module" src="/app/main.js"></script>
+<!-- Sign in with Apple JS (popup mode). The only third-party script; allowed by the CSP in _headers. -->
+<script src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/ar_SA/appleid.auth.js" defer></script>
+</head>
+<body class="zm-root">
+<a class="skip-link visually-hidden" href="#main">تخطَّ إلى المحتوى</a>
+
+<!-- Shown until the session is known, so nothing flashes. -->
+<p class="loading callout muted" id="loading">جارٍ التحميل…</p>
+
+<section class="signin" id="signin" hidden aria-labelledby="signin-title">
+  <div class="signin-card zm-card">
+    <picture>
+      <source srcset="/design/logos/zimam-lockup-ar-on-dark.svg" media="(prefers-color-scheme: dark)">
+      <img class="signin-logo" src="/design/logos/zimam-lockup-ar.svg" alt="زمام" width="496" height="160">
+    </picture>
+    <h1 class="title" id="signin-title">سجّل الدخول إلى زمام</h1>
+    <p class="callout muted">استعمل حساب أبل نفسه الذي تستعمله في تطبيق زمام، فتجد مهامك ومشاريعك هنا.</p>
+    <p class="callout signin-error" id="signin-error" role="alert"></p>
+    <button type="button" class="zm-btn zm-btn-primary signin-button" id="signin-button">تسجيل الدخول بحساب أبل</button>
+    <a class="callout signin-home" href="/">عن زمام</a>
+  </div>
+</section>
+
+<div class="shell" id="shell" hidden>
+  <header class="app-header">
+    <a class="app-logo" href="#/today">
+      <picture>
+        <source srcset="/design/logos/zimam-lockup-ar-on-dark.svg" media="(prefers-color-scheme: dark)">
+        <img src="/design/logos/zimam-lockup-ar.svg" alt="زمام: اليوم" width="496" height="160">
+      </picture>
+    </a>
+    <div class="app-header-actions">
+      <button type="button" class="zm-btn zm-btn-primary add-button" id="add-button" aria-haspopup="dialog">
+        إضافة مهمة
+      </button>
+      <button type="button" class="zm-btn zm-btn-quiet signout" id="signout-button">تسجيل الخروج</button>
+    </div>
+  </header>
+
+  <nav class="app-nav" aria-label="الأقسام">
+    <ul role="list">
+      <li><a class="callout" href="#/today" data-route="today">اليوم</a></li>
+      <li><a class="callout" href="#/upcoming" data-route="upcoming">القادم</a></li>
+      <li><a class="callout" href="#/projects" data-route="projects">المشاريع</a></li>
+      <li><a class="callout" href="#/search" data-route="search">البحث</a></li>
+    </ul>
+  </nav>
+
+  <main class="app-main" id="main" tabindex="-1">
+    <p class="callout app-error" id="app-error" role="alert"></p>
+    <div id="view"></div>
+  </main>
+</div>
+
+<!-- One polite region for status announcements. -->
+<div class="visually-hidden" id="announcer" aria-live="polite"></div>
+
+<dialog class="sheet" id="add-dialog" aria-labelledby="add-title">
+  <form class="sheet-form" id="add-form" method="dialog" novalidate>
+    <h2 class="title" id="add-title">إضافة مهمة</h2>
+
+    <div class="field">
+      <label class="headline" for="add-title-input">العنوان</label>
+      <input class="input body" id="add-title-input" name="title" type="text" required maxlength="500" enterkeyhint="done" aria-describedby="add-title-error">
+      <p class="caption field-error" id="add-title-error"></p>
+    </div>
+
+    <div class="field">
+      <label class="headline" for="add-date">التاريخ</label>
+      <input class="input body" id="add-date" name="dueDate" type="date" aria-describedby="add-date-preview">
+      <p class="caption muted" id="add-date-preview" aria-live="polite"></p>
+    </div>
+
+    <fieldset class="field group">
+      <legend class="headline">مع الصلاة <span class="caption muted">(اختياري)</span></legend>
+      <div class="row">
+        <label class="caption muted" for="add-prayer">الصلاة</label>
+        <select class="input body" id="add-prayer" name="duePrayer">
+          <option value="">بلا صلاة</option>
+          <option value="fajr">الفجر</option>
+          <option value="dhuhr">الظهر</option>
+          <option value="asr">العصر</option>
+          <option value="maghrib">المغرب</option>
+          <option value="isha">العشاء</option>
+        </select>
+      </div>
+      <div class="prayer-offset" id="prayer-offset" hidden>
+        <fieldset class="choices">
+          <legend class="visually-hidden">قبل الصلاة أو بعدها</legend>
+          <label class="choice callout"><input type="radio" name="relation" value="after" checked>بعد</label>
+          <label class="choice callout"><input type="radio" name="relation" value="before">قبل</label>
+        </fieldset>
+        <div class="row">
+          <label class="caption muted" for="add-minutes">بكم دقيقة</label>
+          <input class="input body minutes" id="add-minutes" name="minutes" type="text" inputmode="numeric" autocomplete="off" maxlength="3" placeholder="٠" aria-describedby="add-minutes-error">
+        </div>
+        <p class="caption field-error" id="add-minutes-error"></p>
+        <p class="prayer-preview"><span class="zm-chip zm-chip-prayer" id="prayer-preview"></span></p>
+      </div>
+    </fieldset>
+
+    <fieldset class="field group">
+      <legend class="headline">الأولوية</legend>
+      <div class="choices">
+        <label class="choice callout"><input type="radio" name="priority" value="0" checked>بلا أولوية</label>
+        <label class="choice callout"><input type="radio" name="priority" value="1">منخفضة</label>
+        <label class="choice callout"><input type="radio" name="priority" value="2">متوسطة</label>
+        <label class="choice callout"><input type="radio" name="priority" value="3">عالية</label>
+      </div>
+    </fieldset>
+
+    <div class="field">
+      <label class="headline" for="add-project">المشروع</label>
+      <select class="input body" id="add-project" name="projectId">
+        <option value="">بلا مشروع</option>
+      </select>
+    </div>
+
+    <p class="callout field-error" id="add-error" role="alert"></p>
+    <div class="sheet-actions">
+      <button type="submit" class="zm-btn zm-btn-primary" id="add-submit" value="add">إضافة مهمة</button>
+      <button type="button" class="zm-btn zm-btn-secondary" id="add-cancel">إلغاء</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="sheet" id="task-dialog" closedby="any" aria-labelledby="task-dialog-title">
+  <div class="sheet-form">
+    <h2 class="title task-dialog-title" id="task-dialog-title"></h2>
+    <dl class="details" id="task-details"></dl>
+    <p class="callout field-error" id="task-error" role="alert"></p>
+    <div class="sheet-actions" id="task-actions">
+      <button type="button" class="zm-btn zm-btn-secondary" id="task-delete">حذف المهمة</button>
+      <button type="button" class="zm-btn zm-btn-quiet" id="task-close">إغلاق</button>
+    </div>
+    <div class="sheet-actions confirm" id="task-confirm" hidden>
+      <p class="callout confirm-text" id="task-confirm-text">حذف هذه المهمة نهائياً؟</p>
+      <button type="button" class="zm-btn zm-btn-secondary danger" id="task-delete-confirm" aria-describedby="task-confirm-text">حذف</button>
+      <button type="button" class="zm-btn zm-btn-quiet" id="task-delete-cancel">إبقاء المهمة</button>
+    </div>
+  </div>
+</dialog>
+</body>
+</html>

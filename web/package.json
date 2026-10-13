@@ -1,0 +1,17 @@
+{
+  "name": "zimam-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/copy-design.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
+    "dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.150.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
