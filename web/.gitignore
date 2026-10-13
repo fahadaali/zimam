@@ -1,0 +1,4 @@
+node_modules/
+.wrangler/
+# Copied from ../design by `npm run build`.
+public/design/

@@ -1,0 +1,186 @@
+/* زمام — landing page. Calm: neutral surfaces, brand only for the main action and focus. */
+
+.site-header,
+main,
+.site-footer {
+  inline-size: min(100% - 2 * var(--gutter), var(--page));
+  margin-inline: auto;
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --gutter: var(--space-6);
+  }
+}
+
+.site-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding-block: var(--space-4);
+}
+
+.site-logo {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--space-11);
+}
+
+/* The lockup at 40px tall keeps clear of the 24px minimum. */
+.site-logo img {
+  block-size: calc(var(--space-8) + var(--space-2));
+  inline-size: auto;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.site-nav a,
+.site-footer a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--space-11);
+  padding-inline: var(--space-2);
+  color: var(--ink);
+}
+
+.site-footer a {
+  color: var(--ink-muted);
+}
+
+main:focus {
+  outline: none;
+}
+
+.hero {
+  padding-block: var(--space-8) var(--space-11);
+  max-inline-size: var(--measure);
+}
+
+/* Headline line height stays at the 70px of the hero style (≈1.46), so the kashida and swashes
+   never touch a neighbouring line. */
+.hero-title {
+  color: var(--ink);
+  margin-block-end: var(--space-4);
+}
+
+.hero-lead {
+  font-weight: 500;
+  margin-block-end: var(--space-3);
+}
+
+.hero-platforms {
+  margin-block-end: var(--space-6);
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.section {
+  padding-block: var(--space-8);
+  border-block-start: 1px solid var(--line);
+}
+
+.section > .title {
+  margin-block-end: var(--space-6);
+}
+
+.features,
+.platforms,
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--card-min)), 1fr));
+  gap: var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.feature,
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.feature-sample {
+  margin-block-start: auto;
+  padding-block-start: var(--space-2);
+}
+
+.platforms {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--space-11) * 5)), 1fr));
+}
+
+.platform {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-block: var(--space-3);
+  border-block-start: 1px solid var(--line-strong);
+}
+
+.mcp-lead {
+  max-inline-size: var(--measure);
+  margin-block-end: var(--space-6);
+}
+
+.mcp-url {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin-block-end: var(--space-6);
+}
+
+.mcp-url > .caption,
+.mcp-url > .copy-status {
+  flex-basis: 100%;
+}
+
+.mcp-url-value {
+  flex: 1 1 var(--card-min);
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+.copy-status {
+  color: var(--success);
+}
+
+.copy-status:empty {
+  display: none;
+}
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-block: var(--space-6) var(--space-8);
+  border-block-start: 1px solid var(--line);
+}
+
+.not-found {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-block: var(--space-11);
+}
+
+.not-found-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block-start: var(--space-3);
+}

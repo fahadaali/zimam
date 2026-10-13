@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Static assets only, no Worker script. Run `npm run build` first: it copies design/ into public/design/.
+  "name": "zimam-web",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    // /app/ is one page that switches views by the URL hash, so no SPA fallback is needed.
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}

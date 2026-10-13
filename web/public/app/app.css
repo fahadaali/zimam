@@ -1,0 +1,515 @@
+/* زمام على الويب. Phones: tab bar at the bottom and a floating add button in the bottom inline-end
+   corner (bottom left in Arabic). Wide screens: the sidebar on the inline-start side (right).
+   Tokens only; logical properties only. */
+
+:root {
+  --tabbar: calc(var(--space-11) + var(--space-3));
+  --sidebar: calc(var(--space-11) * 5);
+}
+
+/* ——— Loading and sign-in ——— */
+
+.loading {
+  padding: var(--space-8) var(--gutter);
+  text-align: center;
+}
+
+.signin {
+  min-block-size: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--gutter);
+}
+
+.signin-card {
+  inline-size: min(100%, calc(var(--space-11) * 10));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+}
+
+.signin-logo {
+  block-size: calc(var(--space-8) + var(--space-2));
+  inline-size: auto;
+}
+
+.signin-button {
+  inline-size: 100%;
+}
+
+.signin-home {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--space-11);
+  color: var(--ink-muted);
+}
+
+.signin-error,
+.app-error,
+.field-error {
+  color: var(--priority-high);
+}
+
+.signin-error:empty,
+.app-error:empty,
+.field-error:empty {
+  display: none;
+}
+
+/* ——— Shell ——— */
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas: "header" "main";
+  min-block-size: 100dvh;
+}
+
+.app-header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+  padding-inline: var(--gutter);
+  background: var(--surface);
+  border-block-end: 1px solid var(--line);
+}
+
+.app-logo {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--space-11);
+}
+
+.app-logo img {
+  block-size: var(--space-8);
+  inline-size: auto;
+}
+
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.app-nav ul {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.app-nav a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--space-11);
+  padding-inline: var(--space-3);
+  color: var(--ink-muted);
+  text-decoration: none;
+  border-radius: var(--radius-md);
+}
+
+.app-nav a[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 700;
+  background: var(--surface-sunken);
+}
+
+.app-main {
+  grid-area: main;
+  inline-size: min(100% - 2 * var(--gutter), var(--measure));
+  margin-inline: auto;
+  padding-block: var(--space-6) calc(var(--tabbar) + var(--space-11) + var(--space-8));
+}
+
+.app-main:focus {
+  outline: none;
+}
+
+/* Phones: tab bar fixed at the bottom; the add button floats above it. */
+@media (max-width: 59.99rem) {
+  .app-nav {
+    position: fixed;
+    inset-inline: 0;
+    inset-block-end: 0;
+    z-index: 2;
+    padding-block: var(--space-1) max(var(--space-1), env(safe-area-inset-bottom));
+    padding-inline: var(--space-2);
+    background: var(--surface-raised);
+    border-block-start: 1px solid var(--line);
+  }
+
+  .add-button {
+    position: fixed;
+    z-index: 3;
+    inset-block-end: calc(var(--tabbar) + var(--space-4) + env(safe-area-inset-bottom));
+    inset-inline-end: var(--gutter);
+    border-radius: var(--radius-pill);
+    padding-inline: var(--space-6);
+  }
+}
+
+/* iPad and Mac widths: header across, sidebar on the inline-start side. */
+@media (min-width: 60rem) {
+  :root {
+    --gutter: var(--space-6);
+  }
+
+  .shell {
+    grid-template-columns: var(--sidebar) minmax(0, 1fr);
+    grid-template-areas: "header header" "nav main";
+  }
+
+  .app-nav {
+    grid-area: nav;
+    padding: var(--space-4) var(--space-3);
+    background: var(--surface-sunken);
+    border-inline-end: 1px solid var(--line);
+  }
+
+  .app-nav ul {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+
+  .app-nav a {
+    justify-content: flex-start;
+  }
+
+  .app-nav a[aria-current="page"] {
+    background: var(--surface-raised);
+  }
+
+  .app-main {
+    margin-inline: var(--space-8) auto;
+    padding-block-end: var(--space-11);
+  }
+}
+
+/* ——— Views ——— */
+
+.breadcrumb {
+  margin-block-end: var(--space-2);
+}
+
+.back-link {
+  padding-inline: var(--space-2);
+}
+
+.view-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-block-end: var(--space-6);
+}
+
+/* Headings take focus on navigation so screen readers announce the view; they are not controls. */
+.view-title:focus,
+.view-title:focus-visible {
+  outline: none;
+}
+
+.empty {
+  padding-block: var(--space-8);
+  text-align: center;
+}
+
+.list-section + .list-section,
+.list-section + .task-list,
+.task-list + .done-section {
+  margin-block-start: var(--space-8);
+}
+
+.section-title,
+.day-heading {
+  margin-block-end: var(--space-3);
+}
+
+.day-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-3);
+}
+
+.task-list {
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--surface-raised);
+}
+
+.task-item:last-child .zm-task {
+  border-block-end: 0;
+}
+
+/* Completing: the circle fills, the row dims, then it leaves after a second. Fades only. */
+.task-item {
+  transition: opacity 250ms ease;
+}
+
+.task-item.is-leaving {
+  opacity: 0;
+}
+
+.zm-task-title {
+  transition: color 250ms ease;
+}
+
+.zm-check {
+  transition: background-color 250ms ease, border-color 250ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-item,
+  .zm-task-title,
+  .zm-check {
+    transition-duration: 1ms;
+  }
+}
+
+/* The task title opens its details; it keeps the body style and grows to a 44px target. */
+.zm-task-open {
+  display: block;
+  inline-size: 100%;
+  margin-block: calc(var(--space-2) * -1);
+  padding-block: var(--space-2);
+  padding-inline: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.zm-task-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.done-section {
+  border-block-start: 1px solid var(--line);
+  padding-block-start: var(--space-4);
+}
+
+.done-section > summary {
+  display: list-item;
+  padding-block: var(--space-2);
+  min-block-size: var(--space-11);
+  cursor: pointer;
+  margin-block-end: var(--space-3);
+}
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--card-min)), 1fr));
+  gap: var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+/* The whole card opens the project; the name is the link. */
+.zm-project {
+  position: relative;
+  block-size: 100%;
+}
+
+.zm-project:hover {
+  border-color: var(--line-strong);
+}
+
+.zm-project-link {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.zm-project-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+}
+
+.zm-project-head {
+  min-block-size: var(--space-11);
+  align-items: center;
+}
+
+.inbox-link {
+  margin-block-start: var(--space-6);
+}
+
+.search-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block-end: var(--space-6);
+}
+
+.search-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.search-row .input {
+  flex: 1;
+}
+
+.result-count {
+  margin-block-end: var(--space-3);
+}
+
+/* ——— Forms ——— */
+
+.input {
+  inline-size: 100%;
+  min-block-size: var(--space-11);
+  padding-block: var(--space-2);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--priority-high);
+}
+
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+legend {
+  padding: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.group {
+  gap: var(--space-2);
+}
+
+.group > legend {
+  margin-block-end: var(--space-2);
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.prayer-offset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block-start: var(--space-2);
+}
+
+.minutes {
+  inline-size: calc(var(--space-11) * 2);
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--space-11);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  cursor: pointer;
+}
+
+.choice:has(input:checked) {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand-ink);
+}
+
+.choice input {
+  margin: 0;
+  inline-size: var(--space-4);
+  block-size: var(--space-4);
+}
+
+/* ——— Dialogs ——— */
+
+.sheet {
+  inline-size: min(100% - 2 * var(--space-4), calc(var(--space-11) * 12));
+  max-block-size: calc(100dvh - 2 * var(--space-4));
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-lift);
+}
+
+.sheet::backdrop {
+  background: color-mix(in srgb, var(--surface-sunken) 80%, transparent);
+}
+
+.sheet-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+}
+
+.sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.confirm-text {
+  flex-basis: 100%;
+}
+
+.danger {
+  color: var(--priority-high);
+}
+
+.task-dialog-title {
+  overflow-wrap: anywhere;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  align-items: baseline;
+}
+
+.details .notes {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
