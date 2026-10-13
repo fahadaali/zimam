@@ -1,0 +1,76 @@
+/* زمام — component styles. RTL-first: logical properties only (inline-start = right in Arabic). */
+.zm-root, .zm-root * { box-sizing: border-box; }
+.zm-root { direction: rtl; font-family: var(--font-sans); color: var(--ink); font-kerning: normal; font-feature-settings: "kern" 1, "liga" 1, "calt" 1; }
+
+/* Thmanyah features. Kashida (مدّ) comes from tatweel characters in the text; these classes add the rest where the README allows them. The zm-kashida-N classes leave "salt" off: in the serif display face, swashes and the slanted kashida cancel each other. */
+.zm-display { font-family: var(--font-sans); font-size: 34px; line-height: 50px; font-weight: 700; font-feature-settings: "kern" 1, "liga" 1, "calt" 1, "salt" 1; }
+.zm-hero { font-family: var(--font-display); font-size: 48px; line-height: 70px; font-weight: 700; font-feature-settings: "kern" 1, "liga" 1, "calt" 1, "salt" 1; }
+.zm-kashida-1 { font-feature-settings: "kern" 1, "liga" 1, "calt" 1, "ss03" 1; }
+.zm-kashida-2 { font-feature-settings: "kern" 1, "liga" 1, "calt" 1, "ss04" 1; }
+.zm-kashida-3 { font-feature-settings: "kern" 1, "liga" 1, "calt" 1, "ss05" 1; }
+.zm-kashida-4 { font-feature-settings: "kern" 1, "liga" 1, "calt" 1, "ss06" 1; }
+.zm-kashida-5 { font-feature-settings: "kern" 1, "liga" 1, "calt" 1, "ss07" 1; }
+.zm-sr { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.zm-ico { flex: none; display: block; }
+.zm-meta-text { font-size: 13px; line-height: 20px; font-weight: 500; color: var(--ink-muted); }
+
+/* Button */
+.zm-btn { font: inherit; font-size: 15px; line-height: 24px; font-weight: 600; min-block-size: 44px; padding-block: var(--space-2); padding-inline: var(--space-4); border-radius: var(--radius-md); border: 1px solid transparent; cursor: pointer; }
+.zm-btn:focus-visible, .zm-check:focus-visible, .zm-column-add:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.zm-btn-primary { background: var(--brand); color: var(--on-brand); }
+.zm-btn-secondary { background: var(--surface-raised); color: var(--ink); border-color: var(--line-strong); }
+.zm-btn-quiet { background: transparent; color: var(--brand); }
+.zm-btn:disabled { background: var(--surface-sunken); color: var(--ink-faint); border-color: transparent; cursor: not-allowed; }
+
+/* Chips */
+.zm-chip { display: inline-flex; align-items: center; gap: var(--space-1); font-size: 13px; line-height: 20px; font-weight: 500; padding-block: 2px; padding-inline: var(--space-2); border-radius: var(--radius-pill); white-space: nowrap; }
+.zm-chip-date { background: var(--surface-sunken); color: var(--ink-muted); }
+.zm-chip-overdue { color: var(--priority-high); }
+.zm-chip-prayer { background: var(--sand-soft); color: var(--sand); }
+
+/* Priority flag */
+.zm-flag { display: inline-flex; align-items: center; justify-content: center; inline-size: 24px; block-size: 24px; border-radius: var(--radius-sm); flex: none; }
+.zm-flag .zm-ico { inline-size: 16px; block-size: 16px; }
+.zm-flag-high { color: var(--priority-high); }
+.zm-flag-medium { color: var(--priority-medium); }
+.zm-flag-low { color: var(--priority-low); }
+
+/* Task row */
+.zm-task { display: flex; align-items: flex-start; gap: var(--space-3); padding-block: var(--space-3); padding-inline: var(--space-4); background: var(--surface-raised); border-block-end: 1px solid var(--line); }
+.zm-task-selected { background: var(--brand-soft); border-radius: var(--radius-md); border-block-end-color: transparent; }
+.zm-task-compact { border-radius: var(--radius-md); border-block-end: 0; padding-inline: var(--space-3); }
+.zm-task-lifted { box-shadow: var(--shadow-lift); border-radius: var(--radius-md); border-block-end-color: transparent; }
+.zm-check { flex: none; inline-size: 24px; block-size: 24px; margin-block-start: 2px; border-radius: 50%; border: 1.5px solid var(--line-strong); background: transparent; color: var(--on-brand); display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; }
+.zm-check-on { background: var(--brand); border-color: var(--brand); }
+.zm-task-body { flex: 1; min-inline-size: 0; }
+.zm-task-title { font-size: 17px; line-height: 28px; color: var(--ink); }
+.zm-task-compact .zm-task-title { font-size: 15px; line-height: 24px; }
+.zm-task-note { font-size: 15px; line-height: 24px; color: var(--ink-muted); }
+.zm-task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-block-start: var(--space-1); }
+.zm-task-done .zm-task-title { color: var(--ink-faint); text-decoration: line-through; }
+.zm-task-selected .zm-task-title { color: var(--brand-ink); }
+
+/* Cards */
+.zm-card { background: var(--surface-raised); border-radius: var(--radius-lg); padding: var(--space-4); border: 1px solid var(--line); }
+.zm-project { display: flex; flex-direction: column; gap: var(--space-3); }
+.zm-project-active { background: var(--brand-soft); border-color: transparent; }
+.zm-project-active .zm-project-name { color: var(--brand-ink); }
+.zm-project-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.zm-project-name { font-size: 17px; line-height: 26px; font-weight: 600; }
+.zm-progress { block-size: 6px; border-radius: var(--radius-pill); background: var(--surface-sunken); overflow: hidden; }
+.zm-project-active .zm-progress { background: var(--surface-raised); }
+.zm-progress-fill { block-size: 100%; background: var(--brand); border-radius: var(--radius-pill); }
+
+/* Kanban column */
+.zm-column { background: var(--surface-sunken); border-radius: var(--radius-lg); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); inline-size: 100%; }
+.zm-column-head { display: flex; align-items: center; justify-content: space-between; padding-inline: var(--space-1); }
+.zm-column-title { margin: 0; font-size: 17px; line-height: 26px; font-weight: 600; }
+.zm-count { font-size: 13px; line-height: 20px; font-weight: 500; color: var(--ink-muted); background: var(--surface-raised); border-radius: var(--radius-pill); padding-inline: var(--space-2); }
+.zm-column-body { display: flex; flex-direction: column; gap: var(--space-2); }
+.zm-column-add { font: inherit; font-size: 15px; line-height: 24px; color: var(--ink-muted); background: transparent; border: 1px dashed var(--line-strong); border-radius: var(--radius-md); min-block-size: 44px; cursor: pointer; }
+
+/* AI suggestion */
+.zm-ai { background: var(--brand-soft); border-radius: var(--radius-lg); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
+.zm-ai-label { font-size: 13px; line-height: 20px; font-weight: 600; color: var(--brand-ink); }
+.zm-ai-text { font-size: 15px; line-height: 24px; color: var(--ink); }
+.zm-ai-actions { display: flex; gap: var(--space-2); margin-block-start: var(--space-1); }

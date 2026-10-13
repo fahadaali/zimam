@@ -1,0 +1,29 @@
+# Secrets — never commit keys or tokens
+.env
+.env.*
+!.env.example
+.dev.vars
+*.p8
+*.p12
+*.mobileprovision
+
+# Xcode
+apple/**/xcuserdata/
+apple/**/*.xcuserstate
+apple/DerivedData/
+apple/build/
+*.ipa
+*.dSYM.zip
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Node / Cloudflare
+node_modules/
+.wrangler/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db

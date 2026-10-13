@@ -1,0 +1,14 @@
+<!-- @dsCard group="الإجراءات" height=96 subtitle="أساسي · ثانوي · هادئ · معطّل" -->
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head><meta charset="utf-8"><title>Button</title>
+<style>html,body{margin:0;background:var(--surface);} #root{padding:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}</style>
+</head>
+<body>
+<div id="root" class="zm-root"></div>
+<script>
+  var Z = window.Zimam, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(Z.Button, {variant:'primary'}, 'إضافة مهمة'), h(Z.Button, {variant:'secondary'}, 'تأجيل'), h(Z.Button, {variant:'quiet'}, 'عرض الكل'), h(Z.Button, {variant:'primary', disabled:true}, 'حفظ')));
+</script>
+</body>
+</html>

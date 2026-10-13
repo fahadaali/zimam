@@ -1,0 +1,21 @@
+<!-- @dsCard group="المهام" height=420 subtitle="عادي · محدد · بأولوية · منجز · أثناء السحب" -->
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head><meta charset="utf-8"><title>TaskRow</title>
+<style>html,body{margin:0;background:var(--surface);} #root{padding:16px;display:flex;flex-direction:column;gap:12px;max-width:560px;}</style>
+</head>
+<body>
+<div id="root" class="zm-root"></div>
+<script>
+  var Z = window.Zimam, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null,
+    h('div', {style:{borderRadius:'16px',overflow:'hidden'}},
+      h(Z.TaskRow, {title:'مراجعة مسودة العقد', date:{hijri:'١٢ ربيع الآخر', gregorian:'١٤ أكتوبر'}, prayer:'بعد العصر بـ٢٠ د', priority:'high'}),
+      h(Z.TaskRow, {title:'الاتصال بالمحاسب', note:'بخصوص إقرار الربع الثالث', date:{hijri:'١٠ ربيع الآخر', gregorian:'١٢ أكتوبر', tone:'overdue'}, project:'الشركة'}),
+      h(Z.TaskRow, {title:'تجهيز عرض الاجتماع', priority:'medium', project:'الموقع الجديد'}),
+      h(Z.TaskRow, {title:'شراء مستلزمات المكتب', done:true})),
+    h(Z.TaskRow, {title:'قراءة الفصل الرابع', selected:true, prayer:'بعد الفجر', priority:'low'}),
+    h(Z.TaskRow, {title:'إرسال الفاتورة', lifted:true, compact:true, date:{hijri:'١٥ ربيع الآخر', gregorian:'١٧ أكتوبر'}})));
+</script>
+</body>
+</html>

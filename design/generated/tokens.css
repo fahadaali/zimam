@@ -1,0 +1,121 @@
+/* Zimam — generated from design/tokens.json. Do not edit by hand; run design/scripts/generate.py. */
+
+@font-face { font-family: 'thmanyah sans'; src: url('../fonts/web/thmanyahsans-Light.woff2') format('woff2'); font-weight: 300; font-style: normal; font-display: swap; }
+
+@font-face { font-family: 'thmanyah sans'; src: url('../fonts/web/thmanyahsans-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+
+@font-face { font-family: 'thmanyah sans'; src: url('../fonts/web/thmanyahsans-Medium.woff2') format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+
+@font-face { font-family: 'thmanyah sans'; src: url('../fonts/web/thmanyahsans-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+
+@font-face { font-family: 'thmanyah sans'; src: url('../fonts/web/thmanyahsans-Black.woff2') format('woff2'); font-weight: 900; font-style: normal; font-display: swap; }
+
+@font-face { font-family: 'thmanyah serif display'; src: url('../fonts/web/thmanyahserifdisplay-Light.woff2') format('woff2'); font-weight: 300; font-style: normal; font-display: swap; }
+
+@font-face { font-family: 'thmanyah serif display'; src: url('../fonts/web/thmanyahserifdisplay-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+
+@font-face { font-family: 'thmanyah serif display'; src: url('../fonts/web/thmanyahserifdisplay-Medium.woff2') format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+
+@font-face { font-family: 'thmanyah serif display'; src: url('../fonts/web/thmanyahserifdisplay-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+
+@font-face { font-family: 'thmanyah serif display'; src: url('../fonts/web/thmanyahserifdisplay-Black.woff2') format('woff2'); font-weight: 900; font-style: normal; font-display: swap; }
+
+:root, [data-theme="light"] {
+  --surface: #f6f7fb;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eceef6;
+  --line: #dde1ec;
+  --line-strong: #7f859e;
+  --ink: #171b2f;
+  --ink-muted: #565d78;
+  --ink-faint: #80869f;
+  --brand: #3a46b0;
+  --on-brand: #ffffff;
+  --brand-soft: #e7e9fb;
+  --brand-ink: #2e388f;
+  --sand: #875a0e;
+  --sand-soft: #f7eedb;
+  --priority-high: #b93e0c;
+  --priority-medium: #8a6100;
+  --priority-low: var(--brand);
+  --success: #1f6f43;
+  --focus-ring: var(--brand);
+  --shadow-lift: 0 8px 24px rgba(23,27,47,0.14);
+}
+
+[data-theme="dark"] {
+  --surface: #0e1120;
+  --surface-raised: #171b2e;
+  --surface-sunken: #0a0c17;
+  --line: #2b3048;
+  --line-strong: #686e8a;
+  --ink: #eceef7;
+  --ink-muted: #a2a8c2;
+  --ink-faint: #767c97;
+  --brand: #8f99f2;
+  --on-brand: #0e1120;
+  --brand-soft: #232a5e;
+  --brand-ink: #b9c0f8;
+  --sand: #e6bc6c;
+  --sand-soft: #372a12;
+  --priority-high: #f2925f;
+  --priority-medium: #e3b54e;
+  --priority-low: var(--brand);
+  --success: #62c98f;
+  --focus-ring: var(--brand);
+  --shadow-lift: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #0e1120;
+    --surface-raised: #171b2e;
+    --surface-sunken: #0a0c17;
+    --line: #2b3048;
+    --line-strong: #686e8a;
+    --ink: #eceef7;
+    --ink-muted: #a2a8c2;
+    --ink-faint: #767c97;
+    --brand: #8f99f2;
+    --on-brand: #0e1120;
+    --brand-soft: #232a5e;
+    --brand-ink: #b9c0f8;
+    --sand: #e6bc6c;
+    --sand-soft: #372a12;
+    --priority-high: #f2925f;
+    --priority-medium: #e3b54e;
+    --priority-low: var(--brand);
+    --success: #62c98f;
+    --focus-ring: var(--brand);
+    --shadow-lift: 0 8px 24px rgba(0,0,0,0.5);
+  }
+}
+
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+  --font-sans: "thmanyah sans", "SF Arabic", "Geeza Pro", system-ui, sans-serif;
+  --font-display: "thmanyah serif display", "thmanyah sans", "SF Arabic", system-ui, serif;
+}
+
+.display { font-family: var(--font-sans); font-size: 34px; line-height: 50px; font-weight: 700; }
+
+.title { font-family: var(--font-sans); font-size: 22px; line-height: 34px; font-weight: 700; }
+
+.headline { font-family: var(--font-sans); font-size: 17px; line-height: 26px; font-weight: 600; }
+
+.body { font-family: var(--font-sans); font-size: 17px; line-height: 28px; font-weight: 400; }
+
+.callout { font-family: var(--font-sans); font-size: 15px; line-height: 24px; font-weight: 400; }
+
+.caption { font-family: var(--font-sans); font-size: 13px; line-height: 20px; font-weight: 500; }
+
+.hero { font-family: var(--font-display); font-size: 48px; line-height: 70px; font-weight: 700; }

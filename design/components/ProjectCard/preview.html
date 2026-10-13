@@ -1,0 +1,14 @@
+<!-- @dsCard group="المشاريع" height=280 subtitle="عادي · نشط" -->
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head><meta charset="utf-8"><title>ProjectCard</title>
+<style>html,body{margin:0;background:var(--surface);} #root{padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}</style>
+</head>
+<body>
+<div id="root" class="zm-root"></div>
+<script>
+  var Z = window.Zimam, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(Z.ProjectCard, {name:'الموقع الجديد', done:7, total:12, due:{hijri:'٢٠ ربيع الآخر', gregorian:'٢٢ أكتوبر'}}), h(Z.ProjectCard, {name:'تطبيق زمام', done:3, total:18, active:true}), h(Z.ProjectCard, {name:'المنزل', done:4, total:5})));
+</script>
+</body>
+</html>

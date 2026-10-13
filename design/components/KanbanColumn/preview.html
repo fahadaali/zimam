@@ -1,0 +1,19 @@
+<!-- @dsCard group="المشاريع" height=360 subtitle="عمودان بمهام مضغوطة" -->
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head><meta charset="utf-8"><title>KanbanColumn</title>
+<style>html,body{margin:0;background:var(--surface);} #root{padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;align-items:start;}</style>
+</head>
+<body>
+<div id="root" class="zm-root"></div>
+<script>
+  var Z = window.Zimam, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null,
+    h(Z.KanbanColumn, {title:'للتنفيذ', onAdd:function(){}},
+      h(Z.TaskRow, {compact:true, title:'كتابة نطاق العمل', priority:'high'}),
+      h(Z.TaskRow, {compact:true, title:'جمع ملاحظات الفريق', prayer:'بعد الظهر'})),
+    h(Z.KanbanColumn, {title:'قيد العمل', onAdd:function(){}},
+      h(Z.TaskRow, {compact:true, title:'تصميم شاشة اليوم', date:{hijri:'١٣ ربيع الآخر', gregorian:'١٥ أكتوبر'}}))));
+</script>
+</body>
+</html>

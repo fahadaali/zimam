@@ -1,0 +1,41 @@
+<!-- @dsCard group="الخط" height=560 page subtitle="خصائص خط ثمانية في مواطنها" -->
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head><meta charset="utf-8"><title>خصائص خط ثمانية</title>
+<style>
+  html, body { margin:0; background:var(--surface); }
+  .wrap { padding:24px; display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; }
+  .cell { background:var(--surface-raised); border-radius:var(--radius-lg); padding:var(--space-4) var(--space-6); display:flex; flex-direction:column; gap:var(--space-2); }
+  .tag { font-size:13px; line-height:20px; font-weight:600; color:var(--brand-ink); }
+  .note { font-size:13px; line-height:20px; color:var(--ink-muted); margin:0; }
+  .t-display, .t-hero { margin:0; color:var(--ink); }
+  .t-body { margin:0; font-size:17px; line-height:28px; }
+  .price { margin:0; font-size:34px; line-height:50px; font-weight:700; }
+  .price small { font-size:15px; font-weight:400; color:var(--ink-muted); }
+</style>
+</head>
+<body>
+<div class="zm-root wrap">
+  <div class="cell">
+    <div class="tag">المدّ والأحرف المرسلة · عنوان الشاشة</div>
+    <h2 class="t-display zm-display">يومك بين يديـك</h2>
+    <p class="note">مدّ واحد قبل الحرف الأخير، والأحرف المرسلة مفعّلة.</p>
+  </div>
+  <div class="cell">
+    <div class="tag">الكشيدة المائلة · عنوان تسويقي</div>
+    <h2 class="t-hero zm-hero zm-kashida-1">نظّم يومـَك</h2>
+    <p class="note">تطويل ثم فتحة بين الحرف الأخير وما قبله، على حرف مفتوح نحوياً فقط («يومَك» مفعول به).</p>
+  </div>
+  <div class="cell">
+    <div class="tag">النص الجاري · بلا مدّ ولا أحرف مرسلة</div>
+    <p class="t-body">مراجعة مسودة العقد وإرسال الملاحظات للعميل قبل نهاية الأسبوع.</p>
+    <p class="note">عناوين المهام وكل ما يكتبه المستخدم يبقى بالخط كما هو.</p>
+  </div>
+  <div class="cell">
+    <div class="tag">رمز الريال · أسعار الاشتراك</div>
+    <p class="price">٢٩ ر.س <small>شهرياً</small></p>
+    <p class="note">يُكتب اختصار الريال (الراء ثم نقطة ثم السين) بعد الرقم، والخط يحوّله إلى الرمز.</p>
+  </div>
+</div>
+</body>
+</html>
