@@ -249,6 +249,19 @@ final class ReminderItem {
     }
 }
 
+/// A local record that syncs with the API.
+protocol SyncedItem: PersistentModel {
+    var updatedAt: Int64 { get set }
+    var isDirty: Bool { get set }
+    var pendingDelete: Bool { get set }
+    var syncError: String? { get set }
+}
+
+extension ProjectItem: SyncedItem {}
+extension SectionItem: SyncedItem {}
+extension TaskItem: SyncedItem {}
+extension ReminderItem: SyncedItem {}
+
 /// Every local model, for the container and for wiping data on sign-out.
 let zimamModelTypes: [any PersistentModel.Type] = [ProjectItem.self, SectionItem.self, TaskItem.self, ReminderItem.self]
 

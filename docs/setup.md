@@ -84,7 +84,22 @@
 
 1. **Identifiers ← App IDs**: المعرّف `app.zimam.Zimam`، مع تفعيل Sign in with Apple وPush Notifications وApp Groups.
 2. **Identifiers ← Services IDs**: المعرّف `app.zimam.web` لتسجيل الدخول من الموقع، مع النطاق `zimam.app`.
-3. **App Groups**: `group.app.zimam` لمشاركة البيانات بين التطبيق والويدجت والساعة.
+3. **App Groups**: `group.app.zimam` لمشاركة البيانات بين التطبيق والويدجت.
+
+### المعرّفات الخاصة بالويدجت والساعة
+
+مع التوقيع التلقائي ينشئ Xcode أغلبها عند أول بناء، لكن سجّلها بنفسك إن رفض التوقيع أو بنى Xcode Cloud قبل ذلك:
+
+| النوع | المعرّف | الإمكانات |
+| --- | --- | --- |
+| App Group | `group.app.zimam` | — |
+| App ID (التطبيق) | `app.zimam.Zimam` | Sign in with Apple، وPush Notifications، وApp Groups مع اختيار `group.app.zimam` |
+| App ID (الويدجت) | `app.zimam.Zimam.widgets` | App Groups مع اختيار `group.app.zimam` |
+| App ID (الساعة) | `app.zimam.Zimam.watchkitapp` | لا شيء إضافي |
+
+- الويدجت يعمل على الآيفون والآيباد والماك. على الماك يجب أن يكون App ID التطبيق والويدجت مفعّلاً لهما App Groups في ملف التوقيع، وإلا سأل النظام المستخدم عن السماح بالوصول إلى بيانات التطبيقات الأخرى.
+- الساعة لا تحتاج App Group ولا مجموعة Keychain: تأخذ الجلسة من الآيفون عبر WatchConnectivity وتحفظها في Keychain الخاص بها.
+- بعد الترقية يبدأ المخزن المحلي فارغاً في مجموعة التطبيقات، وتعيد أول مزامنة كل البيانات من الخادم.
 
 ### ٢. الماك
 
