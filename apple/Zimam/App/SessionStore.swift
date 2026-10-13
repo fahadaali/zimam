@@ -98,6 +98,27 @@ final class SessionStore {
         }
     }
 
+    /// Whether the user chose to keep an approximate location on the server (off by default).
+    nonisolated static let shareLocationKey = "location.shareWithServer"
+
+    /// Saves the device's time zone on the server, so agendas built for Claude and ChatGPT
+    /// start on the right day, and, only when the user turned sharing on, a city-level
+    /// location (one decimal, about 10 km) for their prayer times. Turning sharing off
+    /// clears it. Does nothing when the server already has these values.
+    func sharePlace(latitude: Double?, longitude: Double?) async {
+        guard var settings = user?.settings else { return }
+        var location: User.Settings.Coordinate?
+        if UserDefaults.standard.bool(forKey: Self.shareLocationKey), let latitude, let longitude {
+            location = User.Settings.Coordinate(latitude: (latitude * 10).rounded() / 10,
+                                                longitude: (longitude * 10).rounded() / 10)
+        }
+        let zone = TimeZone.current.identifier
+        guard settings.timeZone != zone || settings.location != location else { return }
+        settings.timeZone = zone
+        settings.location = location
+        await updateSettings(settings)
+    }
+
     /// Ends the session here and on the server; local data is wiped by the caller.
     func signOut() async {
         try? await api.signOut()

@@ -5,7 +5,8 @@ import ZimamKit
 
 /// The place prayer times are computed for. Asks for the location once when
 /// the user taps «استعمال موقعي الحالي» (when in use, one reading), and keeps
-/// the last coordinate on the device only.
+/// the last coordinate on the device. It reaches the server only, rounded to city level,
+/// when the user turns on sharing in settings (see `SessionStore.sharePlace`).
 @MainActor
 @Observable
 final class LocationProvider {

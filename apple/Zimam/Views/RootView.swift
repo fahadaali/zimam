@@ -5,6 +5,7 @@ struct RootView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncEngine.self) private var sync
     @Environment(NotificationScheduler.self) private var notifications
+    @Environment(LocationProvider.self) private var location
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -14,6 +15,8 @@ struct RootView: View {
                     .task {
                         await notifications.prepare()
                         await session.loadUser()
+                        await session.sharePlace(latitude: location.coordinate?.latitude,
+                                                 longitude: location.coordinate?.longitude)
                         await sync.sync()
                     }
                     .onChange(of: scenePhase) { _, phase in
