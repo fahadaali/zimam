@@ -8,8 +8,7 @@
     {
       "binding": "DB",
       "database_name": "zimam",
-      // Replace with the id printed by `npx wrangler d1 create zimam` before the first deploy.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "b2621fc5-378f-4871-9b25-f96ca2d9d198",
       "migrations_dir": "migrations"
     }
   ],
