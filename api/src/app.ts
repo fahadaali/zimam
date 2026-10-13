@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { fail } from "./http";
 import { requireUser } from "./middleware";
+import { devices } from "./push/devices";
 import { assistant } from "./routes/assistant";
 import { auth } from "./routes/auth";
 import { comments } from "./routes/comments";
@@ -35,6 +36,7 @@ export function createApp(deps: Deps) {
   const signedIn = [
     "/v1/me", "/v1/me/*", "/v1/sync", "/v1/projects", "/v1/projects/*",
     "/v1/tasks", "/v1/tasks/*", "/v1/invites/*", "/v1/comments/*", "/v1/assistant/*",
+    "/v1/devices/*",
   ];
   for (const path of signedIn) {
     app.use(path, requireUser);
@@ -47,6 +49,7 @@ export function createApp(deps: Deps) {
   app.route("/v1/invites", invites);
   app.route("/v1", comments);
   app.route("/v1/assistant", assistant);
+  app.route("/v1/devices", devices);
 
   app.notFound((c) => fail(c, 404, "not_found", "No such endpoint"));
   app.onError((err, c) => {

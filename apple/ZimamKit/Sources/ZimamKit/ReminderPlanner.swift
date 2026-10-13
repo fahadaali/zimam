@@ -70,6 +70,8 @@ public struct PlannedNotification: Equatable, Sendable {
 /// - Location reminders are not planned here.
 public enum ReminderPlanner {
     public static let defaultLimit = 60
+    /// The server pushes what fires beyond this window after the device's last pull
+    /// (`LOCAL_WINDOW_MS` in api/src/push/reminders.ts). Change both together.
     public static let windowDays = 14
 
     public static func plan(

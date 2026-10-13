@@ -4,6 +4,11 @@ import ZimamKit
 
 @main
 struct ZimamApp: App {
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #elseif os(macOS)
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
     private let container: ModelContainer
     @State private var session: SessionStore
     @State private var sync: SyncEngine
@@ -29,6 +34,8 @@ struct ZimamApp: App {
             let coordinate = location.coordinate
             Task { await session.sharePlace(latitude: coordinate?.latitude, longitude: coordinate?.longitude) }
         }
+        // Reminders beyond the local window come as pushes; the token is sent with this session.
+        PushRegistration.shared.api = session.api
         // Siri and Shortcuts run their intents in this process; their edits sync through the same engine.
         LiveSync.engine = sync
         #if os(iOS)

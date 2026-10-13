@@ -98,6 +98,34 @@ public final class APIClient: @unchecked Sendable {
         return response.results
     }
 
+    // MARK: Push notifications
+
+    public enum DevicePlatform: String, Encodable, Sendable {
+        case ios, macos, watchos
+    }
+
+    /// The APNs environment the app was signed for: development builds use the sandbox.
+    public enum PushEnvironment: String, Encodable, Sendable {
+        case sandbox, production
+    }
+
+    /// `PUT /v1/devices/:token`: registers this install's APNs token (hex) for the session,
+    /// so the server can push the reminders beyond the local notification window.
+    public func registerDevice(token: String, platform: DevicePlatform, environment: PushEnvironment, bundleId: String) async throws {
+        struct Body: Encodable {
+            let platform: DevicePlatform
+            let environment: PushEnvironment
+            let bundleId: String
+        }
+        let _: Empty = try await send("PUT", "v1/devices/\(token)",
+                                      body: Body(platform: platform, environment: environment, bundleId: bundleId))
+    }
+
+    /// `DELETE /v1/devices/:token`: stops pushes to this install. Called before signing out.
+    public func unregisterDevice(token: String) async throws {
+        let _: Empty = try await send("DELETE", "v1/devices/\(token)")
+    }
+
     // MARK: Transport
 
     private struct Empty: Decodable {}

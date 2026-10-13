@@ -4,6 +4,7 @@ import type { AppleTokens } from "./auth/apple-tokens";
 import type { Access } from "./data/access";
 import type { Mutator } from "./data/mutations";
 import type { Env } from "./env";
+import type { PushSender } from "./push/apns";
 
 export interface Deps {
   /** Sign in with Apple signing keys; tests pass a local key set. */
@@ -15,6 +16,8 @@ export interface Deps {
    * secrets are missing (sign-in and account deletion then skip Apple). Tests pass a fake.
    */
   appleTokens: (env: Env) => AppleTokens | null;
+  /** APNs for reminder pushes (null when its secrets are missing); tests pass a fake. */
+  push?: (env: Env) => PushSender | null;
 }
 
 export interface AppEnv {
