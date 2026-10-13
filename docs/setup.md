@@ -38,6 +38,26 @@
 2. في إعدادات بيئة الجلسة السحابية: أضف `api.cloudflare.com` إلى النطاقات المسموحة، وأضف المتغيرين `CLOUDFLARE_API_TOKEN` و`CLOUDFLARE_ACCOUNT_ID`.
 3. لا تلصق الرمز في المحادثة أبداً.
 
+### ٥. خادم MCP لكلود وChatGPT
+
+1. **مخزن KV للرموز:** من **Storage & Databases ← KV ← Create**، باسم `zimam-oauth`. أرسل لـ Claude الـ **Namespace ID** ليضعه في `mcp/wrangler.jsonc`.
+2. **Workers Builds:** مشروع ثانٍ من نفس المستودع:
+
+| الحقل | القيمة |
+| --- | --- |
+| Project name | `zimam-mcp` |
+| Production branch | `main` |
+| Root directory | `mcp` |
+| Build command | فارغ |
+| Deploy command | `npx wrangler deploy` |
+
+3. **Sign in with Apple للويب:** في حساب المطوّر، افتح Services ID `app.zimam.web`، وفعّل Sign in with Apple، واختر `app.zimam.Zimam` تطبيقاً أساسياً، وأضف:
+   - Domain: `zimam-mcp.fahad2ao.workers.dev`
+   - Return URL: `https://zimam-mcp.fahad2ao.workers.dev/authorize`
+4. **الربط في كلود:** Settings ← Connectors ← Add custom connector، بالرابط `https://zimam-mcp.fahad2ao.workers.dev/mcp`. وفي ChatGPT: فعّل وضع المطوّر (Developer mode) من الإعدادات، ثم أضف موصلاً بنفس الرابط.
+
+بعد حجز النطاق يصير الرابط `https://mcp.zimam.app/mcp`: غيّر `MCP_ORIGIN` في `mcp/wrangler.jsonc`، وأضف النطاق الجديد في Services ID.
+
 ## أبل وXcode
 
 ### ١. حساب المطوّر

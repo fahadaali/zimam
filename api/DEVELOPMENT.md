@@ -52,7 +52,7 @@ npm run db:migrate:local
 | --- | --- |
 | `POST /v1/auth/apple` | `{ identityToken, nonce?, name?, device? }` يرجع `{ token, user }` |
 | `POST /v1/auth/logout` | ينهي الجلسة |
-| `GET`, `PATCH`, `DELETE /v1/me` | الحساب والإعدادات (`calendar`، `prayerMethod`، `weekStart`)، والحذف يمسح بيانات المستخدم |
+| `GET`, `PATCH`, `DELETE /v1/me` | الحساب والإعدادات (`calendar`، `prayerMethod`، `weekStart`، `timeZone`، `location`)، والحذف يمسح بيانات المستخدم |
 | `GET`, `POST /v1/projects` | المشاريع مع عدد المهام والمنجز منها |
 | `GET`, `PATCH`, `DELETE /v1/projects/:id` | المشروع وأعمدته |
 | `GET /v1/tasks` | تصفية بـ `projectId` (أو `inbox`) و`status` (أو `open`) و`dueFrom` و`dueTo` و`q` و`assignee=me` |
@@ -70,6 +70,21 @@ npm run db:migrate:local
 كل المسارات بعد تسجيل الدخول تحتاج `Authorization: Bearer <token>`. الأخطاء بالشكل `{ error: { code, message } }`؛ الرمز ثابت بالإنجليزية، والتطبيق يعرض نصه العربي.
 
 البحث `q` يتجاهل التشكيل والتطويل، ويوحّد الألف والتاء المربوطة والألف المقصورة، ويطابق الأرقام الهندية بالعربية.
+
+## واجهة المساعدات (خادم MCP)
+
+خادم MCP في `mcp/` لا يصل إلى قاعدة البيانات، بل يستدعي هذا الـ Worker عبر Service Binding إلى الصنف `ZimamService` (`src/service.ts`). هذا المدخل لا يُفتح من الإنترنت، ويأخذ معرّف المستخدم من منحة OAuth التي تحقق منها خادم MCP.
+
+المنطق في `src/assistant.ts`، وإجاباته مهيّأة للنماذج اللغوية: الأولوية بالاسم، والتاريخ بالهجري والميلادي، ووقت الصلاة بالكلمات («بعد المغرب بـ٢٠ د»).
+
+| الطريقة | ما تفعله |
+| --- | --- |
+| `signInWithApple(identityToken, nonce)` | تتحقق من رمز Apple الصادر للويب (`app.zimam.web`) وترجع مستخدم زمام |
+| `listTasks`، `createTask`، `updateTask`، `completeTask` | المهام بنفس صلاحيات التطبيق وسجل المزامنة |
+| `listProjects` | المشاريع مع الدور وعدد المهام |
+| `getAgenda({ from?, days? })` | الأيام بالتقويمين، وأوقات الصلاة إن حفظ المستخدم موقعه، ومهام كل يوم، والمتأخرة |
+
+يحسب الخادم «اليوم» بالمنطقة الزمنية في إعدادات المستخدم (`timeZone`، والافتراضي `Asia/Riyadh`)، وأوقات الصلاة بمكتبة `adhan` من `location` وطريقة الحساب. ويرسلهما التطبيق عبر `PATCH /v1/me` حين يسمح المستخدم بالموقع.
 
 ## لم يُبنَ بعد
 

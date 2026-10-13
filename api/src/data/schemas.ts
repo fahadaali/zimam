@@ -111,7 +111,28 @@ export const Settings = z.object({
   prayerMethod: z.enum(["ummAlQura", "muslimWorldLeague", "egyptian", "karachi", "dubai", "kuwait", "qatar", "northAmerica"]),
   /** 0 = Sunday. */
   weekStart: z.number().int().min(0).max(6),
+  /** IANA zone the user's days start in, for agendas built on the server (MCP). */
+  timeZone: z.string().refine(isTimeZone, "Unknown time zone"),
+  /** Where prayer times are computed for server-built agendas; the app sends it when allowed. */
+  location: z
+    .object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) })
+    .nullable(),
 });
 export type Settings = z.infer<typeof Settings>;
 
-export const DEFAULT_SETTINGS: Settings = { calendar: "hijri", prayerMethod: "ummAlQura", weekStart: 0 };
+export const DEFAULT_SETTINGS: Settings = {
+  calendar: "hijri",
+  prayerMethod: "ummAlQura",
+  weekStart: 0,
+  timeZone: "Asia/Riyadh",
+  location: null,
+};
+
+function isTimeZone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}

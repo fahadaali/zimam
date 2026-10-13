@@ -1,0 +1,8 @@
+# Served by the MCP and web workers as static assets: only what browsers need.
+fonts/apple
+components
+scripts
+tokens.json
+README.md
+*.md
+.assetsignore

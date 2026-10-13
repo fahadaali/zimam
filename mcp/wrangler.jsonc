@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zimam-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  // Lets the OAuth provider fetch Client ID Metadata Documents without reaching private addresses.
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "observability": { "enabled": true },
+  "kv_namespaces": [
+    {
+      // OAuth clients, grants and tokens (stored hashed). Create with: npx wrangler kv namespace create zimam-oauth
+      "binding": "OAUTH_KV",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+  // Tasks are read and written through the API worker's RPC entrypoint, never over the internet.
+  "services": [{ "binding": "API", "service": "zimam", "entrypoint": "ZimamService" }],
+  // Logos, tokens.css and the web fonts for the consent page.
+  "assets": { "directory": "../design" },
+  "vars": {
+    "MCP_ORIGIN": "https://zimam-mcp.fahad2ao.workers.dev",
+    // Sign in with Apple Services ID for the web.
+    "APPLE_WEB_CLIENT_ID": "app.zimam.web"
+  }
+}
