@@ -16,7 +16,7 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     # Your Apple Developer Team ID (Membership details). Set it here, not in Xcode,
     # so it survives regenerating the project.
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: 72V86SZ2XC
     CODE_SIGN_STYLE: Automatic
     # The API worker. Becomes https://api.zimam.app once the domain is attached.
     ZIMAM_API_URL: "https://zimam.fahad2ao.workers.dev"
