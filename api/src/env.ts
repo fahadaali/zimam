@@ -1,3 +1,5 @@
+import type { UserChannel } from "./realtime/channel";
+
 declare global {
   namespace Cloudflare {
     interface Env {
@@ -32,6 +34,8 @@ declare global {
       APNS_KEY_ID?: string;
       /** Secret (`wrangler secret put`): the APNs .p8 key (PKCS #8 PEM). */
       APNS_PRIVATE_KEY?: string;
+      /** Realtime sync: one `UserChannel` Durable Object per user, holding their WebSockets. */
+      USER_CHANNEL: DurableObjectNamespace<UserChannel>;
     }
   }
 }

@@ -1,16 +1,19 @@
 // زمام على الويب: sign in with Apple, then Today, Upcoming, Projects and Search over the REST API.
 // Plain DOM and ES modules; views are chosen by the URL hash (#/today, #/projects/<id>, …).
-import { api, errorText, session, whenSignedOut } from "./lib/api.js";
+import { api, apiBase, errorText, session, whenSignedOut } from "./lib/api.js";
 import { Button, ButtonLink, PrayerChip, ProjectCard, TaskRow, h, setRowDone } from "./lib/components.js";
 import { addDays, dayHeading, dualDate, dueChip, isIsoDate, localIsoDate, relativeDay, weekdayName } from "./lib/dates.js";
 import { randomNonce, sha256Hex } from "./lib/nonce.js";
 import { arabicNumber, parseDigits } from "./lib/numbers.js";
 import { prayerPhrase } from "./lib/prayer.js";
+import { createRealtime, realtimeUrl } from "./lib/realtime.js";
 import { PRIORITY_WORDS, groupByDay, isOpen, priorityKey, progressText, splitToday, taskCount } from "./lib/tasks.js";
 
 const APPLE_CLIENT_ID = "app.zimam.web";
 const LEAVE_AFTER = 1000; // a completed task stays a second so it can be undone
 const FADE = 250;
+const LIVE_DEBOUNCE = 800; // folds a burst of changes into one reload
+const LIVE_RETRY = 2000; // while the person is in the middle of something
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -32,6 +35,8 @@ const state = {
   projects: [],
   today: localIsoDate(),
   renderId: 0,
+  /** When this tab last changed a task, so its own echo does not cut the leave animation short. */
+  localChangeAt: 0,
 };
 
 const primary = () => state.me?.settings?.calendar ?? "hijri";
@@ -62,6 +67,7 @@ async function prepareNonce() {
 }
 
 function showSignIn(message = "") {
+  live.stop();
   els.loading.hidden = true;
   els.shell.hidden = true;
   els.signin.hidden = false;
@@ -117,6 +123,7 @@ els.signinButton.addEventListener("click", async () => {
 whenSignedOut(() => showSignIn("انتهت الجلسة. سجّل الدخول مرة أخرى."));
 
 els.signout.addEventListener("click", async () => {
+  live.stop();
   els.signout.disabled = true;
   try {
     await api.signOut();
@@ -148,6 +155,44 @@ async function start() {
   els.loading.hidden = true;
   els.signin.hidden = true;
   els.shell.hidden = false;
+  render({ focus: false });
+  live.start();
+}
+
+// ——— Realtime ———
+
+// Changes from other devices, other members of a shared project, and Claude reload the view.
+const live = createRealtime({
+  getTicket: () => api.realtimeTicket(),
+  urlFor: (ticket) => realtimeUrl(apiBase(), ticket),
+  onChange: scheduleLiveRefresh,
+});
+
+let liveTimer;
+function scheduleLiveRefresh() {
+  clearTimeout(liveTimer);
+  liveTimer = setTimeout(liveRefresh, LIVE_DEBOUNCE);
+}
+
+/** Whether a reload now would get in the way: a dialog, a task leaving its list, or keyboard focus in the view. */
+function busy() {
+  if (document.querySelector("dialog[open]")) return true;
+  if (Date.now() - state.localChangeAt < LEAVE_AFTER + FADE + 500) return true;
+  const active = document.activeElement;
+  return !!active && els.view.contains(active) && active.matches("input, select, textarea, :focus-visible");
+}
+
+async function liveRefresh() {
+  if (els.shell.hidden) return;
+  if (document.hidden) {
+    document.addEventListener("visibilitychange", scheduleLiveRefresh, { once: true });
+    return;
+  }
+  if (busy()) {
+    liveTimer = setTimeout(liveRefresh, LIVE_RETRY);
+    return;
+  }
+  await refreshProjects();
   render({ focus: false });
 }
 
@@ -253,6 +298,7 @@ async function toggleTask(task, li, row, { leaveWhenDone }) {
   clearTimeout(li.leaveTimer);
   li.classList.remove("is-leaving");
   clearError();
+  state.localChangeAt = Date.now();
 
   const call = done ? api.completeTask(task.id) : api.reopenTask(task.id);
   if (done && leaveWhenDone) li.leaveTimer = setTimeout(() => leave(li, task), LEAVE_AFTER);

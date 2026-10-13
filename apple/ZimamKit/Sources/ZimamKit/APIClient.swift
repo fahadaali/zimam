@@ -18,6 +18,24 @@ public struct SignInResponse: Decodable, Sendable {
     public let user: User
 }
 
+/// What the realtime socket says. It never carries data, only that something the user
+/// can see changed up to a change-log sequence number; the app pulls if it is behind.
+public enum RealtimeMessage {
+    /// The server closes the socket with this code when its session ends (sign-out, account deletion).
+    public static let signedOutCloseCode = 4001
+
+    /// The seq of a `{"type":"changed","seq":N}` message, or nil for anything else ("pong").
+    public static func changedSeq(_ text: String) -> Int64? {
+        struct Message: Decodable {
+            let type: String
+            let seq: Int64?
+        }
+        guard let message = try? JSONDecoder().decode(Message.self, from: Data(text.utf8)),
+              message.type == "changed" else { return nil }
+        return message.seq
+    }
+}
+
 /// Talks to the Zimam API (api/). Every call after sign-in sends the session token.
 public final class APIClient: @unchecked Sendable {
     public static let maxPushBatch = 200
@@ -96,6 +114,19 @@ public final class APIClient: @unchecked Sendable {
         struct Response: Decodable { let results: [MutationResult] }
         let response: Response = try await send("POST", "v1/sync", body: Body(mutations: mutations))
         return response.results
+    }
+
+    // MARK: Realtime
+
+    /// `GET /v1/realtime` as a WebSocket request (`wss`), signed in with the session token,
+    /// or nil when signed out. The server only sends `{"type":"changed","seq":N}`; see `RealtimeMessage`.
+    public func realtimeRequest() -> URLRequest? {
+        guard let token = token() else { return nil }
+        var components = URLComponents(url: baseURL.appendingPathComponent("v1/realtime"), resolvingAgainstBaseURL: false)!
+        components.scheme = components.scheme == "http" ? "ws" : "wss"
+        var request = URLRequest(url: components.url!)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return request
     }
 
     // MARK: Push notifications

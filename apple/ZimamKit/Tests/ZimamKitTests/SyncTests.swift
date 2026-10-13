@@ -67,4 +67,24 @@ final class SyncTests: XCTestCase {
         XCTAssertFalse(ArabicSearch.matches("شراء هدية", query: "عقد"))
         XCTAssertFalse(ArabicSearch.matches("أي نص", query: "  "))
     }
+
+    func testRealtimeRequestUsesWebSocketSchemeAndSession() throws {
+        let api = APIClient(baseURL: URL(string: "https://api.zimam.app")!) { "zs_token" }
+        let request = try XCTUnwrap(api.realtimeRequest())
+        XCTAssertEqual(request.url?.absoluteString, "wss://api.zimam.app/v1/realtime")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer zs_token")
+
+        let local = APIClient(baseURL: URL(string: "http://localhost:8787")!) { "zs_token" }
+        XCTAssertEqual(local.realtimeRequest()?.url?.absoluteString, "ws://localhost:8787/v1/realtime")
+
+        let signedOut = APIClient(baseURL: URL(string: "https://api.zimam.app")!) { nil }
+        XCTAssertNil(signedOut.realtimeRequest())
+    }
+
+    func testRealtimeMessages() {
+        XCTAssertEqual(RealtimeMessage.changedSeq(#"{"type":"changed","seq":42}"#), 42)
+        XCTAssertNil(RealtimeMessage.changedSeq("pong"))
+        XCTAssertNil(RealtimeMessage.changedSeq(#"{"type":"other","seq":1}"#))
+        XCTAssertNil(RealtimeMessage.changedSeq(#"{"type":"changed"}"#))
+    }
 }

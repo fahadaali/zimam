@@ -5,6 +5,7 @@ import { appleTokensFromEnv } from "./auth/apple-tokens";
 import type { Env } from "./env";
 import { apnsFromEnv } from "./push/apns";
 import { sendDueReminders } from "./push/reminders";
+import { channelRealtime } from "./realtime/notify";
 import type { Deps } from "./types";
 
 const deps: Deps = {
@@ -12,6 +13,7 @@ const deps: Deps = {
   ai: (env) => providerFromEnv(env),
   appleTokens: (env) => appleTokensFromEnv(env),
   push: (env) => apnsFromEnv(env),
+  realtime: (env) => channelRealtime(env.USER_CHANNEL),
 };
 const app = createApp(deps);
 
@@ -23,3 +25,4 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 export { ZimamService } from "./service";
+export { UserChannel } from "./realtime/channel";
