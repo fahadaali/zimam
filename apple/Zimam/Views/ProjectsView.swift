@@ -5,12 +5,18 @@ import ZimamKit
 struct ProjectsView: View {
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
-    @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete && $0.kindRaw == "project" },
-           sort: [SortDescriptor(\ProjectItem.sortOrder), SortDescriptor(\ProjectItem.createdAt)])
-    private var projects: [ProjectItem]
+    // Kept simple: a compound predicate with two sort keys is too slow for the type checker.
+    @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }, sort: \ProjectItem.sortOrder)
+    private var allProjects: [ProjectItem]
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }) private var tasks: [TaskItem]
     @State private var naming = false
     @State private var newName = ""
+
+    init() {}
+
+    private var projects: [ProjectItem] {
+        allProjects.filter { $0.kindRaw == "project" }
+    }
 
     var body: some View {
         List {
