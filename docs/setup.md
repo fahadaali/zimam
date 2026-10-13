@@ -18,7 +18,7 @@
 
 | الحقل | القيمة |
 | --- | --- |
-| Project name | `zimam-api` (يطابق `name` في `api/wrangler.jsonc`) |
+| Project name | `zimam` (يطابق `name` في `api/wrangler.jsonc`) |
 | Production branch | `main` |
 | Root directory | `api` |
 | Build command | فارغ |
@@ -28,7 +28,7 @@
 
 ### ٣. النطاق
 
-بعد حجز `zimam.app` على كلاودفلير: **Workers & Pages ← zimam-api ← Settings ← Domains & Routes ← Add ← Custom domain** بالقيمة `api.zimam.app`.
+بعد حجز `zimam.app` على كلاودفلير: **Workers & Pages ← zimam ← Settings ← Domains & Routes ← Add ← Custom domain** بالقيمة `api.zimam.app`.
 
 ### ٤. (اختياري) تشغيل wrangler من جلسة Claude السحابية
 
