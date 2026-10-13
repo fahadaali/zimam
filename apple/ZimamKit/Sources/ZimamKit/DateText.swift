@@ -35,6 +35,16 @@ public struct DualDateFormatter {
         return (primary == .hijri ? parts : parts.reversed()).joined(separator: "، ")
     }
 
+    /// The clock time in the user's locale: «٣:٠٠ م».
+    public func time(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
     /// «اليوم», «غداً», «أمس», or the weekday for the coming week; nil further out.
     public func relativeWord(for date: Date, now: Date = Date()) -> String? {
         var calendar = Calendar(identifier: .gregorian)

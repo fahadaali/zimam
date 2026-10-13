@@ -45,6 +45,8 @@ targets:
         # macOS sandbox; Xcode applies these to the Mac build only.
         ENABLE_APP_SANDBOX: YES
         ENABLE_OUTGOING_NETWORK_CONNECTIONS: YES
+        # Location for prayer times (adds the sandbox location entitlement on the Mac).
+        ENABLE_RESOURCE_ACCESS_LOCATION: YES
     info:
       path: Zimam/Resources/Info.plist
       properties:
@@ -78,6 +80,9 @@ targets:
           - thmanyahserifdisplay-Bold.otf
           - thmanyahserifdisplay-Black.otf
         ATSApplicationFontsPath: .
+        # Prayer times are computed on the device from the location; it is never sent anywhere.
+        NSLocationWhenInUseUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، فتصلك المهام والتذكيرات المرتبطة بالصلاة في وقتها. يبقى الموقع على جهازك ولا يُرسل إلى أي خادم.
+        NSLocationUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، فتصلك المهام والتذكيرات المرتبطة بالصلاة في وقتها. يبقى الموقع على جهازك ولا يُرسل إلى أي خادم.
         ZimamAPIURL: $(ZIMAM_API_URL)
     entitlements:
       path: Zimam/Resources/Zimam.entitlements

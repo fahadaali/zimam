@@ -4,6 +4,7 @@ import ZimamKit
 struct RootView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncEngine.self) private var sync
+    @Environment(NotificationScheduler.self) private var notifications
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -11,11 +12,16 @@ struct RootView: View {
             if session.isSignedIn {
                 MainView()
                     .task {
+                        await notifications.prepare()
                         await session.loadUser()
                         await sync.sync()
                     }
                     .onChange(of: scenePhase) { _, phase in
+                        // Each return also moves the rolling notification window forward.
                         if phase == .active { Task { await sync.sync() } }
+                    }
+                    .onChange(of: session.user?.settings.prayerMethod) { _, _ in
+                        notifications.reschedule()
                     }
             } else {
                 SignInView()
@@ -35,16 +41,16 @@ struct MainView: View {
     var body: some View {
         TabView {
             Tab("اليوم", systemImage: "sun.max") {
-                NavigationStack { TodayView() }
+                NavigationStack { TodayView().taskDetailDestination() }
             }
             Tab("القادم", systemImage: "calendar") {
-                NavigationStack { UpcomingView() }
+                NavigationStack { UpcomingView().taskDetailDestination() }
             }
             Tab("المشاريع", systemImage: "folder") {
-                NavigationStack { ProjectsView() }
+                NavigationStack { ProjectsView().taskDetailDestination() }
             }
             Tab(role: .search) {
-                NavigationStack { SearchView() }
+                NavigationStack { SearchView().taskDetailDestination() }
             }
         }
         .tabViewStyle(.sidebarAdaptable)

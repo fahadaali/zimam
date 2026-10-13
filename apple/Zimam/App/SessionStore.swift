@@ -12,6 +12,7 @@ import UIKit
 @Observable
 final class SessionStore {
     nonisolated private static let tokenAccount = "token"
+    private static let cachedUserKey = "session.user"
 
     private(set) var isSignedIn: Bool
     private(set) var user: User?
@@ -21,7 +22,9 @@ final class SessionStore {
     @ObservationIgnored private var pendingNonce: String?
 
     init() {
-        isSignedIn = Keychain.read(Self.tokenAccount) != nil
+        let signedIn = Keychain.read(Self.tokenAccount) != nil
+        isSignedIn = signedIn
+        user = signedIn ? Self.loadCachedUser() : nil
         let configured = Bundle.main.object(forInfoDictionaryKey: "ZimamAPIURL") as? String
         let baseURL = configured.flatMap(URL.init(string:)) ?? URL(string: "https://zimam.fahad2ao.workers.dev")!
         api = APIClient(baseURL: baseURL) { Keychain.read(SessionStore.tokenAccount) }
@@ -56,6 +59,7 @@ final class SessionStore {
                     identityToken: identityToken, nonce: pendingNonce, name: name, device: Self.deviceName)
                 Keychain.write(response.token, for: Self.tokenAccount)
                 user = response.user
+                Self.saveCachedUser(response.user)
                 isSignedIn = true
             } catch {
                 errorMessage = "تعذّر الاتصال بزمام. تحقّق من الإنترنت وحاول مرة أخرى."
@@ -65,7 +69,33 @@ final class SessionStore {
     }
 
     func loadUser() async {
-        user = try? await api.me()
+        if let loaded = try? await api.me() { setUser(loaded) }
+    }
+
+    /// Replaces the signed-in user, e.g. after the server returns an updated account.
+    func setUser(_ newUser: User) {
+        user = newUser
+        Self.saveCachedUser(newUser)
+    }
+
+    /// Applies new settings right away (the date formatter switches calendars at once),
+    /// then saves them with `PATCH /v1/me`. Returns false and restores the old
+    /// settings if the server could not be reached.
+    @discardableResult
+    func updateSettings(_ settings: User.Settings) async -> Bool {
+        guard var updated = user else { return false }
+        let previous = updated
+        updated.settings = settings
+        user = updated
+        do {
+            let saved = try await api.updateMe(settings: settings)
+            setUser(saved)
+            return true
+        } catch {
+            // An expired session is handled by the next sync, which signs out.
+            user = previous
+            return false
+        }
     }
 
     /// Ends the session here and on the server; local data is wiped by the caller.
@@ -78,7 +108,22 @@ final class SessionStore {
     func endSession() {
         Keychain.delete(Self.tokenAccount)
         user = nil
+        Self.saveCachedUser(nil)
         isSignedIn = false
+    }
+
+    /// The account and its settings, kept so the app opens with the right calendar offline.
+    private static func loadCachedUser() -> User? {
+        guard let data = UserDefaults.standard.data(forKey: cachedUserKey) else { return nil }
+        return try? JSONDecoder().decode(User.self, from: data)
+    }
+
+    private static func saveCachedUser(_ user: User?) {
+        if let user, let data = try? JSONEncoder().encode(user) {
+            UserDefaults.standard.set(data, forKey: cachedUserKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: cachedUserKey)
+        }
     }
 
     private static var deviceName: String {
