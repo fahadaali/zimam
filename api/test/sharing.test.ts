@@ -57,7 +57,7 @@ describe("Invites", () => {
 
     const list = await call("GET", `/v1/projects/${projectId}/invites`, { token: owner.token });
     expect(list.body.invites).toEqual([
-      { role: "viewer", createdBy: owner.userId, createdAt: expect.any(Number), expiresAt: created.body.expiresAt },
+      { id: created.body.id, role: "viewer", createdBy: owner.userId, createdAt: expect.any(Number), expiresAt: created.body.expiresAt },
     ]);
     expect(JSON.stringify(list.body)).not.toContain(created.body.code);
     expect((await call("GET", `/v1/projects/${projectId}/invites`, { token: editor.token })).status).toBe(403);

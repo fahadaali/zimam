@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
 import type { AiProvider, AiRequest, AiResult } from "../src/ai/provider";
 import { createApp } from "../src/app";
+import { AppleTokenError, type AppleTokens } from "../src/auth/apple-tokens";
 import { sha256Hex } from "../src/auth/crypto";
 
 const { publicKey, privateKey } = await generateKeyPair("RS256");
@@ -39,7 +40,44 @@ export class FakeAi implements AiProvider {
 }
 
 export const fakeAi = new FakeAi();
-export const app = createApp({ appleKeys: testAppleKeys, ai: () => fakeAi });
+
+/** Apple's token endpoints: codes map to refresh tokens, and revoked tokens are kept for checking. */
+export class FakeAppleTokens implements AppleTokens {
+  /** Set to false to act as if the Apple key secrets were missing. */
+  configured = true;
+  codes = new Map<string, { refreshToken: string; sub: string | null }>();
+  exchanged: { code: string; clientId: string }[] = [];
+  revoked: { refreshToken: string; clientId: string }[] = [];
+  failRevoke = false;
+
+  async exchangeCode(code: string, clientId: string) {
+    this.exchanged.push({ code, clientId });
+    const grant = this.codes.get(code);
+    if (!grant) throw new AppleTokenError("Apple /auth/token failed: invalid_grant");
+    this.codes.delete(code);
+    return grant;
+  }
+
+  async revoke(refreshToken: string, clientId: string) {
+    if (this.failRevoke) throw new AppleTokenError("Apple /auth/revoke failed: HTTP 503");
+    this.revoked.push({ refreshToken, clientId });
+  }
+
+  reset() {
+    this.configured = true;
+    this.codes.clear();
+    this.exchanged = [];
+    this.revoked = [];
+    this.failRevoke = false;
+  }
+}
+
+export const fakeApple = new FakeAppleTokens();
+export const app = createApp({
+  appleKeys: testAppleKeys,
+  ai: () => fakeAi,
+  appleTokens: () => (fakeApple.configured ? fakeApple : null),
+});
 
 interface AppleTokenOptions {
   audience?: string;

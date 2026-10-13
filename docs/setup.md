@@ -125,6 +125,24 @@ claude mcp add xcode -- xcrun mcpbridge
 
 في Xcode: **Product ← Xcode Cloud ← Create Workflow**، واربطه بـ `fahadaali/zimam`، وابدأ البناء عند كل دمج إلى `main`، ثم ارفع البناء إلى TestFlight.
 
+### ٥. مفتاح Sign in with Apple (لحذف الحساب)
+
+تشترط مراجعة App Store (البند 5.1.1(v)) أن يُلغي حذفُ الحساب ربطَه بـ Sign in with Apple. يفعل الخادم ذلك بمفتاح من حسابك، ودونه يتم الدخول والحذف لكن لا يُلغى الربط عند Apple.
+
+1. في [developer.apple.com](https://developer.apple.com/account): **Certificates, Identifiers & Profiles ← Keys ← +**.
+2. سمّه `Zimam Sign in with Apple`، وفعّل **Sign in with Apple**، ثم **Configure** واختر `app.zimam.Zimam` معرّفاً أساسياً، ثم **Save ← Continue ← Register**.
+3. نزّل ملف المفتاح `AuthKey_XXXXXXXXXX.p8`. يُنزَّل مرة واحدة فقط، فاحفظه في مكان آمن خارج المستودع. وانسخ **Key ID** (عشرة أحرف).
+4. معرّف الفريق `72V86SZ2XC` موجود في `api/wrangler.jsonc` (`APPLE_TEAM_ID`)، وليس سراً. إن تغيّر الفريق فغيّره هناك.
+5. من داخل `api/` أضف السرّين (لا يُلصقان في المحادثة ولا يدخلان المستودع):
+
+```sh
+cd api
+npx wrangler secret put APPLE_KEY_ID          # الصق Key ID
+npx wrangler secret put APPLE_PRIVATE_KEY < AuthKey_XXXXXXXXXX.p8   # نص الملف كاملاً مع سطري BEGIN وEND
+```
+
+المفتاح نفسه يخدم التطبيق (`app.zimam.Zimam`) والويب (`app.zimam.web`) ما دام Services ID مربوطاً بالتطبيق الأساسي كما في خطوة خادم MCP. وللتطوير المحلي ضعهما في `api/.dev.vars` (لا يُرفع إلى المستودع)، والمفتاح في سطر واحد مع `\n` مكان فواصل الأسطر.
+
 ## طريقة العمل بعد الربط
 
 - Claude في الجلسة السحابية يكتب الخادم والموقع وخادم MCP ويختبرها، ويكتب كود Swift ويرفعه.

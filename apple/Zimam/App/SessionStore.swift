@@ -54,9 +54,12 @@ final class SessionStore {
             let name = credential.fullName
                 .map { PersonNameComponentsFormatter.localizedString(from: $0, style: .default) }
                 .flatMap { $0.isEmpty ? nil : $0 }
+            // The server exchanges it for Apple's refresh token, revoked when the account is deleted.
+            let authorizationCode = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
             do {
                 let response = try await api.signInWithApple(
-                    identityToken: identityToken, nonce: pendingNonce, name: name, device: Self.deviceName)
+                    identityToken: identityToken, nonce: pendingNonce, name: name, device: Self.deviceName,
+                    authorizationCode: authorizationCode)
                 Keychain.write(response.token, for: Self.tokenAccount)
                 user = response.user
                 Self.saveCachedUser(response.user)
@@ -123,6 +126,19 @@ final class SessionStore {
     func signOut() async {
         try? await api.signOut()
         endSession()
+    }
+
+    /// Deletes the account on the server, then ends the session here; local data is wiped
+    /// by the caller, as on sign-out. Returns false, still signed in, if the server did not
+    /// confirm the deletion (an expired session is handled by the next sync, which signs out).
+    func deleteAccount() async -> Bool {
+        do {
+            try await api.deleteAccount()
+        } catch {
+            return false
+        }
+        endSession()
+        return true
     }
 
     /// Called when the server rejects the token (expired or revoked).

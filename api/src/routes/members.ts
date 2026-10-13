@@ -72,15 +72,45 @@ members.get("/:id/invites", async (c) => {
   if (me instanceof Response) return me;
   if (me.role !== "owner") return ownerOnly(c, "Only the owner can see invites");
   const { results } = await c.env.DB.prepare(
-    `SELECT role, created_by, created_at, expires_at FROM invites
+    `SELECT id, role, created_by, created_at, expires_at FROM invites
      WHERE project_id = ? AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > ?
      ORDER BY created_at`,
   )
     .bind(me.projectId, Date.now())
-    .all<{ role: string; created_by: string; created_at: number; expires_at: number }>();
+    .all<{ id: string; role: string; created_by: string; created_at: number; expires_at: number }>();
   return c.json({
-    invites: results.map((r) => ({ role: r.role, createdBy: r.created_by, createdAt: r.created_at, expiresAt: r.expires_at })),
+    invites: results.map((r) => ({
+      id: r.id,
+      role: r.role,
+      createdBy: r.created_by,
+      createdAt: r.created_at,
+      expiresAt: r.expires_at,
+    })),
   });
+});
+
+/** DELETE /:id/invites/:inviteId — the owner revokes a link before it is used. Revoking twice is fine. */
+members.delete("/:id/invites/:inviteId", async (c) => {
+  const me = await myRole(c);
+  if (me instanceof Response) return me;
+  if (me.role !== "owner") return ownerOnly(c, "Only the owner can revoke invites");
+  const db = c.env.DB;
+  const id = c.req.param("inviteId").toLowerCase();
+  const invite = await db
+    .prepare(`SELECT accepted_at, revoked_at FROM invites WHERE id = ? AND project_id = ?`)
+    .bind(id, me.projectId)
+    .first<{ accepted_at: number | null; revoked_at: number | null }>();
+  if (!invite) return fail(c, 404, "not_found", "invite not found");
+  if (invite.accepted_at != null) return fail(c, 410, "invite_used", "The invite was already used");
+  if (invite.revoked_at == null) {
+    // Guarded, so an invite accepted in the meantime stays accepted.
+    const revoked = await db
+      .prepare(`UPDATE invites SET revoked_at = ?2 WHERE id = ?1 AND accepted_at IS NULL AND revoked_at IS NULL`)
+      .bind(id, Date.now())
+      .run();
+    if (revoked.meta.changes !== 1) return fail(c, 410, "invite_used", "The invite was already used");
+  }
+  return c.body(null, 204);
 });
 
 /** POST /:id/invites { role } — a single-use link valid for 7 days. */
@@ -95,12 +125,13 @@ members.post("/:id/invites", async (c) => {
   if (project?.kind !== "project") return fail(c, 400, "invalid", "Only projects can be shared");
 
   const code = randomToken();
+  const id = crypto.randomUUID();
   const now = Date.now();
   const expiresAt = now + INVITE_TTL_MS;
   await c.env.DB.prepare(
-    `INSERT INTO invites (code_hash, project_id, role, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO invites (id, code_hash, project_id, role, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(await sha256Hex(code), me.projectId, body.data.role, c.var.userId, now, expiresAt)
+    .bind(id, await sha256Hex(code), me.projectId, body.data.role, c.var.userId, now, expiresAt)
     .run();
-  return c.json({ code, url: `${INVITE_URL}${code}`, expiresAt }, 201);
+  return c.json({ id, code, url: `${INVITE_URL}${code}`, expiresAt }, 201);
 });
