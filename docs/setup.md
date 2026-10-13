@@ -76,6 +76,28 @@
 
 التفاصيل في `web/README.md`.
 
+### ٧. الاستيراد: طابوران ومخزن R2 (قبل النشر التالي)
+
+> **مهم:** أنشئ الطابورين `zimam-imports` و`zimam-imports-dlq` ومخزن R2 `zimam-imports` **قبل** دمج فرع الاستيراد إلى `main`. الخادم يربطها في `api/wrangler.jsonc`، فإن لم تكن موجودة فشل النشر التالي كله (لا الاستيراد وحده)، وبقي الخادم على نسخته السابقة حتى تُنشأ.
+
+1. فعّل R2 في الحساب مرة واحدة إن لم يكن مفعّلاً: **Storage & Databases ← R2** ثم اتبع خطوات التفعيل (قد تطلب كلاودفلير وسيلة دفع وإن بقي الاستعمال في الحد المجاني).
+2. من داخل `api/` (أو من لوحة كلاودفلير: **Storage & Databases ← Queues ← Create** و**R2 ← Create bucket** بالأسماء نفسها):
+
+```sh
+cd api
+npx wrangler queues create zimam-imports --message-retention-period-secs 86400
+npx wrangler queues create zimam-imports-dlq --message-retention-period-secs 86400
+npx wrangler r2 bucket create zimam-imports
+# شبكة أمان: أي ملف بقي في المخزن أكثر من ٧ أيام يُحذف (الخادم يحذفها عند انتهاء كل استيراد)
+npx wrangler r2 bucket lifecycle add zimam-imports expire-leftovers --expire-days 7
+```
+
+3. لا شيء آخر: جدول `import_jobs` (`api/migrations/0006_imports.sql`) يطبّقه أمر النشر في Workers Builds تلقائياً، والمستهلك (consumer) معرّف في `wrangler.jsonc` فيُربط بالنشر.
+
+- مدة الاحتفاظ يوم واحد لأن رمز Todoist الذي يلصقه المستخدم يمر في أول رسالة من الطابور فقط، فلا يبقى فيه أطول من ذلك إن تعطّل المستهلك. الرمز لا يُحفظ في قاعدة البيانات ولا في R2 ولا في السجلات.
+- إن أردت أن ينشئها Claude من الجلسة السحابية (الخطوة ٤)، فأضف إلى رمز API صلاحيتي **Queues: Edit** و**Workers R2 Storage: Edit**.
+- الطوابير متاحة في الخطة المجانية، لكن D1 فيها يسمح بـ ٥٠ استعلاماً فقط لكل تشغيل، والمستهلك يكتب ٥٠ عنصراً في التشغيل الواحد (`CHUNK_SIZE` في `api/src/imports/jobs.ts`) بنحو ١٠٠–٢٥٠ استعلاماً، وهذا يناسب خطة Workers المدفوعة (١٠٠٠ استعلام). على الخطة المجانية خفّض `CHUNK_SIZE` إلى ٥.
+
 ## أبل وXcode
 
 ### ١. حساب المطوّر

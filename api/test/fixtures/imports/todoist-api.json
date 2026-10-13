@@ -1,0 +1,42 @@
+{
+  "projects": [
+    { "id": "2203306141", "name": "Inbox", "parent_id": null, "order": 0, "is_inbox_project": true, "view_style": "list", "color": "grey", "is_favorite": false, "is_shared": false, "comment_count": 0, "url": "https://app.todoist.com/app/project/2203306141" },
+    { "id": "2203306142", "name": "العمل", "parent_id": null, "order": 1, "is_inbox_project": false, "view_style": "list", "color": "blue", "is_favorite": true, "is_shared": false, "comment_count": 0, "url": "https://app.todoist.com/app/project/2203306142" },
+    { "id": "2203306143", "name": "مشروع الموقع", "parent_id": "2203306142", "order": 1, "is_inbox_project": false, "view_style": "board", "color": "green", "is_favorite": false, "is_shared": false, "comment_count": 0, "url": "https://app.todoist.com/app/project/2203306143" },
+    { "id": "2203306144", "name": "المنزل", "parent_id": null, "order": 2, "is_inbox_project": false, "view_style": "list", "color": "red", "is_favorite": false, "is_shared": false, "comment_count": 0, "url": "https://app.todoist.com/app/project/2203306144" }
+  ],
+  "sections": [
+    { "id": "7025", "project_id": "2203306143", "order": 1, "name": "للعمل" },
+    { "id": "7026", "project_id": "2203306143", "order": 2, "name": "قيد التنفيذ" },
+    { "id": "7027", "project_id": "2203306141", "order": 1, "name": "Later" }
+  ],
+  "tasks": [
+    {
+      "id": "7498225981", "project_id": "2203306143", "section_id": "7026", "parent_id": null, "order": 1,
+      "content": "تصميم الصفحة الرئيسية", "description": "ألوان الهوية، والخط", "is_completed": false,
+      "labels": ["تصميم"], "priority": 4, "comment_count": 0, "creator_id": "2671355", "created_at": "2026-10-01T08:00:00.000000Z",
+      "due": { "date": "2026-10-20", "string": "Oct 20", "lang": "en", "is_recurring": false },
+      "url": "https://app.todoist.com/app/task/7498225981", "duration": null, "deadline": null
+    },
+    {
+      "id": "7498225982", "project_id": "2203306143", "section_id": "7026", "parent_id": "7498225981", "order": 1,
+      "content": "اختيار الخط", "description": "", "is_completed": false,
+      "labels": [], "priority": 3, "comment_count": 0, "creator_id": "2671355", "created_at": "2026-10-01T08:05:00.000000Z",
+      "due": null, "url": "https://app.todoist.com/app/task/7498225982", "duration": null, "deadline": { "date": "2026-10-28", "lang": "en" }
+    },
+    {
+      "id": "7498225983", "project_id": "2203306141", "section_id": "7027", "parent_id": null, "order": 1,
+      "content": "ورد الصباح", "description": "", "is_completed": false,
+      "labels": [], "priority": 1, "comment_count": 0, "creator_id": "2671355", "created_at": "2026-10-02T10:00:00.000000Z",
+      "due": { "date": "2026-10-14", "datetime": "2026-10-14T02:30:00Z", "timezone": "Asia/Riyadh", "string": "every day at 5:30am", "lang": "en", "is_recurring": true },
+      "url": "https://app.todoist.com/app/task/7498225983", "duration": null, "deadline": null
+    },
+    {
+      "id": "7498225984", "project_id": "2203306144", "section_id": null, "parent_id": null, "order": 1,
+      "content": "سقي النباتات", "description": "", "is_completed": false,
+      "labels": ["منزل"], "priority": 2, "comment_count": 0, "creator_id": "2671355", "created_at": "2026-10-02T10:00:00.000000Z",
+      "due": { "date": "2026-10-16", "string": "every other thursday", "lang": "en", "is_recurring": true },
+      "url": "https://app.todoist.com/app/task/7498225984", "duration": null, "deadline": null
+    }
+  ]
+}

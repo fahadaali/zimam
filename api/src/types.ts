@@ -4,6 +4,7 @@ import type { AppleTokens } from "./auth/apple-tokens";
 import type { Access } from "./data/access";
 import type { Mutator } from "./data/mutations";
 import type { Env } from "./env";
+import type { ImportDeps } from "./imports/jobs";
 import type { PushSender } from "./push/apns";
 import type { Realtime } from "./realtime/notify";
 
@@ -21,6 +22,8 @@ export interface Deps {
   push?: (env: Env) => PushSender | null;
   /** Realtime "pull now" nudges after writes (src/realtime/); none when absent. Tests pass a fake or the real channel. */
   realtime?: (env: Env) => Realtime | null;
+  /** The imports queue, R2 bucket and fetch; defaults to the Worker's bindings. Tests pass fakes. */
+  imports?: (env: Env) => ImportDeps;
 }
 
 export interface AppEnv {

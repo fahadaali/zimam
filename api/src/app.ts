@@ -6,6 +6,7 @@ import { devices } from "./push/devices";
 import { assistant } from "./routes/assistant";
 import { auth } from "./routes/auth";
 import { comments } from "./routes/comments";
+import { imports } from "./routes/imports";
 import { invites } from "./routes/invites";
 import { me } from "./routes/me";
 import { members } from "./routes/members";
@@ -37,7 +38,7 @@ export function createApp(deps: Deps) {
   const signedIn = [
     "/v1/me", "/v1/me/*", "/v1/sync", "/v1/projects", "/v1/projects/*",
     "/v1/tasks", "/v1/tasks/*", "/v1/invites/*", "/v1/comments/*", "/v1/assistant/*",
-    "/v1/devices/*", "/v1/realtime/ticket",
+    "/v1/devices/*", "/v1/realtime/ticket", "/v1/imports", "/v1/imports/*",
   ];
   for (const path of signedIn) {
     app.use(path, requireUser);
@@ -52,6 +53,7 @@ export function createApp(deps: Deps) {
   app.route("/v1/assistant", assistant);
   app.route("/v1/devices", devices);
   app.route("/v1/realtime", realtime);
+  app.route("/v1/imports", imports);
 
   app.notFound((c) => fail(c, 404, "not_found", "No such endpoint"));
   app.onError((err, c) => {

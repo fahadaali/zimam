@@ -1,0 +1,12 @@
+TYPE,CONTENT,DESCRIPTION,PRIORITY,INDENT,AUTHOR,RESPONSIBLE,DATE,DATE_LANG,TIMEZONE,DURATION,DURATION_UNIT,DEADLINE,DEADLINE_LANG
+section,التحضير,,,,,,,,,,,,
+task,حجز القاعة @زواج,"الاتصال بثلاث قاعات، ومقارنة الأسعار",4,1,Fahad (48151623),,Oct 20 2026,en,Asia/Riyadh,60,minute,,
+task,مقارنة الأسعار,,1,2,Fahad (48151623),,,en,Asia/Riyadh,,,,
+note,"القاعة الأولى أرخص، لكن ""المواقف"" قليلة",,,,Fahad (48151623),,,,,,,,
+task,"شراء البشت، والعقال",,3,1,Fahad (48151623),,2026-10-25 17:30,en,Asia/Riyadh,,,,
+,,,,,,,,,,,,,
+section,الدعوات,,,,,,,,,,,,
+task,إرسال الدعوات,"القائمة:
+- العائلة
+- الأصدقاء",2,1,Fahad (48151623),,every day,en,Asia/Riyadh,,,,
+task,Confirm the caterer,,4,1,Fahad (48151623),,tomorrow,en,Asia/Riyadh,,,2026-10-30,en

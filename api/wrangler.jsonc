@@ -35,5 +35,23 @@
   "durable_objects": {
     "bindings": [{ "name": "USER_CHANNEL", "class_name": "UserChannel" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserChannel"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserChannel"] }],
+  // Imports from other apps (src/imports/). The queues and the bucket must exist before
+  // deploying: see docs/setup.md, «الاستيراد».
+  "queues": {
+    "producers": [{ "binding": "IMPORTS", "queue": "zimam-imports" }],
+    "consumers": [
+      {
+        "queue": "zimam-imports",
+        // One chunk of one job per invocation keeps D1 queries well under the limit.
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        // Keep in step with MAX_RETRIES in src/imports/jobs.ts.
+        "max_retries": 3,
+        "dead_letter_queue": "zimam-imports-dlq"
+      },
+      { "queue": "zimam-imports-dlq", "max_batch_size": 10, "max_retries": 3 }
+    ]
+  },
+  "r2_buckets": [{ "binding": "IMPORT_FILES", "bucket_name": "zimam-imports" }]
 }

@@ -1,0 +1,83 @@
+{
+  "kind": "tasks#taskLists",
+  "items": [
+    {
+      "kind": "tasks#taskList",
+      "id": "MDk2NTk1NjI3NjQ4OTg0NzA5MzY6MDow",
+      "title": "مهامي",
+      "updated": "2026-10-10T08:12:44.123Z",
+      "selfLink": "https://www.googleapis.com/tasks/v1/users/@me/lists/MDk2NTk1NjI3NjQ4OTg0NzA5MzY6MDow",
+      "items": [
+        {
+          "kind": "tasks#task",
+          "id": "dGFzay0z",
+          "title": "Pay electricity bill",
+          "updated": "2026-10-05T14:20:00.000Z",
+          "status": "completed",
+          "completed": "2026-10-05T14:20:00.000Z",
+          "due": "2026-10-05T00:00:00.000Z",
+          "position": "00000000000000000001",
+          "hidden": true,
+          "links": []
+        },
+        {
+          "kind": "tasks#task",
+          "id": "dGFzay0x",
+          "title": "تجديد رخصة القيادة",
+          "notes": "من أبشر، قبل نهاية الشهر",
+          "updated": "2026-10-10T08:12:44.123Z",
+          "status": "needsAction",
+          "due": "2026-10-22T00:00:00.000Z",
+          "position": "00000000000000000000",
+          "links": []
+        },
+        {
+          "kind": "tasks#task",
+          "id": "dGFzay0y",
+          "title": "تصوير الصورة الشخصية",
+          "updated": "2026-10-10T08:13:01.000Z",
+          "status": "needsAction",
+          "parent": "dGFzay0x",
+          "position": "00000000000000000000",
+          "links": []
+        },
+        {
+          "kind": "tasks#task",
+          "id": "dGFzay00",
+          "title": "مهمة محذوفة",
+          "updated": "2026-10-01T08:00:00.000Z",
+          "status": "needsAction",
+          "deleted": true,
+          "position": "00000000000000000002"
+        },
+        {
+          "kind": "tasks#task",
+          "id": "dGFzay01",
+          "title": "",
+          "updated": "2026-10-01T08:00:00.000Z",
+          "status": "needsAction",
+          "position": "00000000000000000003"
+        }
+      ]
+    },
+    {
+      "kind": "tasks#taskList",
+      "id": "bGlzdC0y",
+      "title": "Shopping",
+      "updated": "2026-10-11T18:00:00.000Z",
+      "items": [
+        {
+          "kind": "tasks#task",
+          "id": "dGFzay02",
+          "title": "Dates (تمر)",
+          "updated": "2026-10-11T18:00:00.000Z",
+          "status": "needsAction",
+          "position": "00000000000000000000",
+          "links": [
+            { "type": "email", "description": "Order confirmation", "link": "https://mail.google.com/mail/#all/abc123" }
+          ]
+        }
+      ]
+    }
+  ]
+}
