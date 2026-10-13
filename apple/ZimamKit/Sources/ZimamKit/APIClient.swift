@@ -61,6 +61,19 @@ public final class APIClient: @unchecked Sendable {
         return try await send("PATCH", "v1/me", body: Body(name: name, settings: settings))
     }
 
+    /// `GET /v1/tasks`: tasks the user can see, dated ones first by date and time. `status` is
+    /// "todo", "doing", "done" or "open" (todo or doing); `dueFrom` and `dueTo` are inclusive
+    /// days like "2026-10-15". Used by the watch, which keeps no local copy.
+    public func listTasks(status: String? = nil, dueFrom: String? = nil, dueTo: String? = nil, limit: Int = 100) async throws -> [TaskRecord] {
+        struct Response: Decodable { let tasks: [TaskRecord] }
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let status { query.append(URLQueryItem(name: "status", value: status)) }
+        if let dueFrom { query.append(URLQueryItem(name: "dueFrom", value: dueFrom)) }
+        if let dueTo { query.append(URLQueryItem(name: "dueTo", value: dueTo)) }
+        let response: Response = try await send("GET", "v1/tasks", query: query)
+        return response.tasks
+    }
+
     /// Changes after `cursor`, oldest first. Repeat with the returned cursor while `hasMore`.
     public func pull(cursor: Int64, limit: Int = 500) async throws -> PullResponse {
         try await send("GET", "v1/sync", query: [URLQueryItem(name: "cursor", value: String(cursor)), URLQueryItem(name: "limit", value: String(limit))])

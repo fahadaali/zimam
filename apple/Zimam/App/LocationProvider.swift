@@ -25,16 +25,13 @@ final class LocationProvider {
     private let delegate = LocationDelegate()
     @ObservationIgnored private var waitingForPermission = false
 
-    private static let latitudeKey = "location.latitude"
-    private static let longitudeKey = "location.longitude"
     private static let deniedMessage = "لا يصل زمام إلى موقعك. اسمح له من إعدادات النظام لحساب أوقات الصلاة."
     private static let failedMessage = "تعذّر تحديد موقعك. حاول مرة أخرى."
 
     init() {
-        let defaults = UserDefaults.standard
-        if let latitude = defaults.object(forKey: Self.latitudeKey) as? Double,
-           let longitude = defaults.object(forKey: Self.longitudeKey) as? Double {
-            coordinate = Coordinate(latitude: latitude, longitude: longitude)
+        // Saved in the App Group, so the large widget can find the next prayer.
+        if let saved = SharedSettings.coordinate() {
+            coordinate = Coordinate(latitude: saved.latitude, longitude: saved.longitude)
         }
         manager.desiredAccuracy = kCLLocationAccuracyKilometer
         manager.delegate = delegate
@@ -95,8 +92,8 @@ final class LocationProvider {
         isLocating = false
         errorMessage = nil
         coordinate = Coordinate(latitude: latitude, longitude: longitude)
-        UserDefaults.standard.set(latitude, forKey: Self.latitudeKey)
-        UserDefaults.standard.set(longitude, forKey: Self.longitudeKey)
+        SharedSettings.saveCoordinate(SharedSettings.Coordinate(latitude: latitude, longitude: longitude))
+        ZimamShared.reloadWidgets()
         onChange?()
     }
 

@@ -11,8 +11,8 @@ import UIKit
 @MainActor
 @Observable
 final class SessionStore {
-    nonisolated private static let tokenAccount = "token"
-    private static let cachedUserKey = "session.user"
+    /// The Keychain account of the session token. The watch link reads it too.
+    nonisolated static let tokenAccount = "token"
 
     private(set) var isSignedIn: Bool
     private(set) var user: User?
@@ -134,17 +134,19 @@ final class SessionStore {
     }
 
     /// The account and its settings, kept so the app opens with the right calendar offline.
+    /// It lives in the App Group, where the widgets read the calendar and prayer method too.
     private static func loadCachedUser() -> User? {
-        guard let data = UserDefaults.standard.data(forKey: cachedUserKey) else { return nil }
-        return try? JSONDecoder().decode(User.self, from: data)
+        SharedSettings.user()
     }
 
+    /// Saves the account after sign-in, sign-out and settings changes, then tells the
+    /// widgets and the watch (which gets the token and calendar with it).
     private static func saveCachedUser(_ user: User?) {
-        if let user, let data = try? JSONEncoder().encode(user) {
-            UserDefaults.standard.set(data, forKey: cachedUserKey)
-        } else {
-            UserDefaults.standard.removeObject(forKey: cachedUserKey)
-        }
+        SharedSettings.saveUser(user)
+        ZimamShared.reloadWidgets()
+        #if os(iOS)
+        WatchLink.shared.sendSession()
+        #endif
     }
 
     private static var deviceName: String {

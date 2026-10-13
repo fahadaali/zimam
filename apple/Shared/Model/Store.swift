@@ -2,12 +2,27 @@ import Foundation
 import SwiftData
 import ZimamKit
 
+/// What `Store` needs from the sync engine. The app passes its `SyncEngine`; the widget
+/// extension has none, so its edits stay marked dirty and the app sends them on its next sync.
+@MainActor
+protocol SyncScheduling: AnyObject {
+    /// Syncs soon, folding a burst of edits into one request.
+    func scheduleSync()
+    /// Tells listeners (notifications, widgets) that a local edit was saved.
+    func noteLocalChange()
+}
+
 /// Every local edit goes through here: it marks the record for sync, asks the
-/// sync engine to send it soon, and lets the notification scheduler refresh.
+/// sync engine to send it soon, and lets the notification scheduler and the widgets refresh.
 @MainActor
 struct Store {
     let context: ModelContext
-    let sync: SyncEngine
+    let sync: (any SyncScheduling)?
+
+    init(context: ModelContext, sync: (any SyncScheduling)?) {
+        self.context = context
+        self.sync = sync
+    }
 
     // MARK: Tasks
 
@@ -131,8 +146,13 @@ struct Store {
 
     private func commit() {
         try? context.save()
-        sync.scheduleSync()
-        sync.noteLocalChange()
+        if let sync {
+            // The app's listener reschedules notifications and reloads the widgets.
+            sync.scheduleSync()
+            sync.noteLocalChange()
+        } else {
+            ZimamShared.reloadWidgets()
+        }
     }
 
     // MARK: Recurrence

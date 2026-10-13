@@ -3,19 +3,6 @@ import Observation
 import SwiftData
 import ZimamKit
 
-/// A local record that syncs with the API.
-protocol SyncedItem: PersistentModel {
-    var updatedAt: Int64 { get set }
-    var isDirty: Bool { get set }
-    var pendingDelete: Bool { get set }
-    var syncError: String? { get set }
-}
-
-extension ProjectItem: SyncedItem {}
-extension SectionItem: SyncedItem {}
-extension TaskItem: SyncedItem {}
-extension ReminderItem: SyncedItem {}
-
 /// Sends local edits to the API, then applies what changed on the server.
 /// Runs on launch, when the app returns to the foreground, and shortly after each edit.
 @MainActor
@@ -42,9 +29,11 @@ final class SyncEngine {
         self.context = context
     }
 
+    /// Kept in the App Group next to the store it describes. The store moved there
+    /// empty, so the cursor starts from zero with it and the first sync refills it.
     private var cursor: Int64 {
-        get { Int64(UserDefaults.standard.integer(forKey: Self.cursorKey)) }
-        set { UserDefaults.standard.set(Int(newValue), forKey: Self.cursorKey) }
+        get { Int64(ZimamShared.defaults.integer(forKey: Self.cursorKey)) }
+        set { ZimamShared.defaults.set(Int(newValue), forKey: Self.cursorKey) }
     }
 
     /// Tells listeners that a local edit was saved. `Store` calls this after each commit.
@@ -281,3 +270,6 @@ final class SyncEngine {
         return try? context.fetch(descriptor).first
     }
 }
+
+/// `Store` asks the engine to send edits soon and tells it that the data changed.
+extension SyncEngine: SyncScheduling {}

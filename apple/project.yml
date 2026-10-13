@@ -7,6 +7,7 @@ options:
   deploymentTarget:
     iOS: "18.0"
     macOS: "15.0"
+    watchOS: "11.0"
 
 settings:
   base:
@@ -30,11 +31,20 @@ targets:
     supportedDestinations: [iOS, macOS]
     sources:
       - path: Zimam
+      # Shared with the widget extension: SwiftData models, Store, the App Group store, intents.
+      - path: Shared
+      # Shared with the widget extension and the watch app.
+      - path: Common
       - path: ../design/generated/ZimamTokens.swift
       - path: ../design/fonts/apple
         buildPhase: resources
     dependencies:
       - package: ZimamKit
+      # Embedded in Zimam.app/PlugIns on iPhone, iPad and Mac.
+      - target: ZimamWidgets
+      # Embedded in Zimam.app/Watch ("Embed Watch Content"), iOS only.
+      - target: ZimamWatch
+        destinationFilters: [iOS]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.zimam.Zimam
@@ -88,3 +98,95 @@ targets:
       path: Zimam/Resources/Zimam.entitlements
       properties:
         com.apple.developer.applesignin: [Default]
+        # The local store and the settings the widgets read (see Shared/Model/ZimamStore.swift).
+        com.apple.security.application-groups: [group.app.zimam]
+
+  # Home Screen, Lock Screen and Mac desktop widgets: today's tasks from the shared store,
+  # completed in place with CompleteTaskIntent.
+  ZimamWidgets:
+    type: app-extension
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: ZimamWidgets
+      - path: Shared
+      - path: Common
+      - path: ../design/generated/ZimamTokens.swift
+      - path: ../design/fonts/apple
+        buildPhase: resources
+    dependencies:
+      - package: ZimamKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.zimam.Zimam.widgets
+        PRODUCT_NAME: ZimamWidgets
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # Installed inside the app, so the archive stays an app archive.
+        SKIP_INSTALL: YES
+        # Mac widgets must be sandboxed.
+        ENABLE_APP_SANDBOX: YES
+    info:
+      path: ZimamWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: زمام
+        CFBundleDevelopmentRegion: ar
+        CFBundleLocalizations: [ar]
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        UIAppFonts:
+          - thmanyahsans-Light.otf
+          - thmanyahsans-Regular.otf
+          - thmanyahsans-Medium.otf
+          - thmanyahsans-Bold.otf
+          - thmanyahsans-Black.otf
+          - thmanyahserifdisplay-Light.otf
+          - thmanyahserifdisplay-Regular.otf
+          - thmanyahserifdisplay-Medium.otf
+          - thmanyahserifdisplay-Bold.otf
+          - thmanyahserifdisplay-Black.otf
+        ATSApplicationFontsPath: .
+    entitlements:
+      path: ZimamWidgets/ZimamWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.app.zimam]
+
+  # The Apple Watch app (single target, watchOS 11). It has no local store: it calls the
+  # API with the session the iPhone app sends over WatchConnectivity.
+  ZimamWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "11.0"
+    sources:
+      - path: ZimamWatch
+      - path: Common
+      - path: ../design/generated/ZimamTokens.swift
+      - path: ../design/fonts/apple
+        buildPhase: resources
+    dependencies:
+      - package: ZimamKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.zimam.Zimam.watchkitapp
+        PRODUCT_NAME: ZimamWatch
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: YES
+    info:
+      path: ZimamWatch/Info.plist
+      properties:
+        CFBundleDisplayName: زمام
+        CFBundleDevelopmentRegion: ar
+        CFBundleLocalizations: [ar]
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: app.zimam.Zimam
+        WKRunsIndependentlyOfCompanionApp: false
+        UIAppFonts:
+          - thmanyahsans-Light.otf
+          - thmanyahsans-Regular.otf
+          - thmanyahsans-Medium.otf
+          - thmanyahsans-Bold.otf
+          - thmanyahsans-Black.otf
+          - thmanyahserifdisplay-Light.otf
+          - thmanyahserifdisplay-Regular.otf
+          - thmanyahserifdisplay-Medium.otf
+          - thmanyahserifdisplay-Bold.otf
+          - thmanyahserifdisplay-Black.otf
+        ZimamAPIURL: $(ZIMAM_API_URL)
