@@ -12,4 +12,6 @@
 | [`docs/`](docs/) | وثيقة الفكرة والقرارات |
 
 - قواعد المشروع لـ Claude Code: [`CLAUDE.md`](CLAUDE.md)
+- ربط المستودع بكلاودفلير وXcode: [`docs/setup.md`](docs/setup.md)
+- تطوير الواجهة البرمجية واختبارها: [`api/DEVELOPMENT.md`](api/DEVELOPMENT.md)
 - توليد رموز التصميم: `python3 design/scripts/generate.py`

@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zimam-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "zimam",
+      // Replace with the id printed by `npx wrangler d1 create zimam` before the first deploy.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    // Sign in with Apple audiences: the app bundle id and the web Services ID.
+    "APPLE_AUDIENCES": "app.zimam.Zimam,app.zimam.web",
+    "ALLOWED_ORIGINS": "https://zimam.app"
+  }
+}
