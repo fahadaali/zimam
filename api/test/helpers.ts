@@ -68,7 +68,7 @@ export async function push(token: string, mutations: unknown[]) {
   return res.body.results as { entity: string; id: string; status: string; message?: string }[];
 }
 
-/** Adds a member directly; the sharing endpoints come in a later change. */
+/** Adds a member directly, without an invite or the sync catch-up that accepting one queues. */
 export async function addMember(projectId: string, userId: string, role: "editor" | "viewer") {
   await env.DB.prepare(`INSERT INTO project_members (project_id, user_id, role, added_at) VALUES (?, ?, ?, ?)`)
     .bind(projectId, userId, role, Date.now())

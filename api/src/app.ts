@@ -3,7 +3,10 @@ import { cors } from "hono/cors";
 import { fail } from "./http";
 import { requireUser } from "./middleware";
 import { auth } from "./routes/auth";
+import { comments } from "./routes/comments";
+import { invites } from "./routes/invites";
 import { me } from "./routes/me";
+import { members } from "./routes/members";
 import { projects } from "./routes/projects";
 import { sync } from "./routes/sync";
 import { tasks } from "./routes/tasks";
@@ -28,13 +31,20 @@ export function createApp(deps: Deps) {
 
   app.get("/health", (c) => c.json({ ok: true }));
   app.route("/v1/auth", auth);
-  for (const path of ["/v1/me", "/v1/me/*", "/v1/sync", "/v1/projects", "/v1/projects/*", "/v1/tasks", "/v1/tasks/*"]) {
+  const signedIn = [
+    "/v1/me", "/v1/me/*", "/v1/sync", "/v1/projects", "/v1/projects/*",
+    "/v1/tasks", "/v1/tasks/*", "/v1/invites/*", "/v1/comments/*",
+  ];
+  for (const path of signedIn) {
     app.use(path, requireUser);
   }
   app.route("/v1/me", me);
   app.route("/v1/sync", sync);
   app.route("/v1/projects", projects);
+  app.route("/v1/projects", members);
   app.route("/v1/tasks", tasks);
+  app.route("/v1/invites", invites);
+  app.route("/v1", comments);
 
   app.notFound((c) => fail(c, 404, "not_found", "No such endpoint"));
   app.onError((err, c) => {
