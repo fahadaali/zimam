@@ -49,5 +49,5 @@
 ## طريقة العمل
 - كل ميزة على فرع مستقل، ثم طلب دمج إلى `main`. لا تدفع مباشرة إلى `main`.
 - الدفع إلى `main` ينشر `api/` و`mcp/` و`web/` تلقائياً عبر Workers Builds، ويبني Xcode Cloud التطبيق إلى TestFlight.
-- قبل طلب الدمج: ابنِ التطبيق وشغّل الاختبارات (عبر Xcode MCP: `xcrun mcpbridge`)، وشغّل اختبارات Workers.
+- قبل طلب الدمج: ابنِ التطبيق وشغّل الاختبارات (عبر Xcode MCP: `xcrun mcpbridge`)، وشغّل اختبارات Workers (`cd api && npm test`، مع `npm run typecheck`).
 - رسائل الـ commit بالإنجليزية وقصيرة؛ وصف طلب الدمج بالعربية.

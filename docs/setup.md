@@ -58,7 +58,7 @@ xcodegen          # يولّد Zimam.xcodeproj من project.yml
 open Zimam.xcodeproj
 ```
 
-ملف المشروع `Zimam.xcodeproj` يُولَّد ولا يدخل المستودع؛ أي تعديل على الأهداف أو الإعدادات يكون في `apple/project.yml` ثم يُعاد تشغيل `xcodegen`. في Xcode اختر فريقك من **Signing & Capabilities** مرة واحدة.
+المرجع هو `apple/project.yml`. المشروع المولَّد `Zimam.xcodeproj` يدخل المستودع معه حتى يجده Xcode Cloud، لكنه لا يُعدَّل يدوياً: أي تغيير في الأهداف أو الإعدادات يكون في `project.yml` ثم يُعاد تشغيل `xcodegen`. في Xcode اختر فريقك من **Signing & Capabilities** مرة واحدة.
 
 ### ٣. Claude Code على الماك مع Xcode
 
@@ -70,7 +70,7 @@ claude mcp add xcode -- xcrun mcpbridge
 
 ### ٤. Xcode Cloud
 
-في Xcode: **Product ← Xcode Cloud ← Create Workflow**، واربطه بـ `fahadaali/zimam`، وابدأ البناء عند كل دمج إلى `main`، ثم ارفع البناء إلى TestFlight. يحتاج سكربت `ci_scripts/ci_post_clone.sh` يثبّت XcodeGen ويولّد المشروع، وسيُضاف مع `project.yml`.
+في Xcode: **Product ← Xcode Cloud ← Create Workflow**، واربطه بـ `fahadaali/zimam`، وابدأ البناء عند كل دمج إلى `main`، ثم ارفع البناء إلى TestFlight.
 
 ## طريقة العمل بعد الربط
 

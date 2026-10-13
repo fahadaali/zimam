@@ -7,3 +7,5 @@ Cloudflare Worker يخدم التطبيق والموقع: الحسابات، و�
 - المساعد الذكي: عبر Cloudflare AI Gateway إلى كلود أو DeepSeek.
 - الأسرار عبر `wrangler secret put` فقط، ونسخة محلية في `.dev.vars` (مستثناة من المستودع).
 - النطاق المقترح: `api.zimam.app`.
+
+التشغيل والاختبار والمسارات والمزامنة: [`DEVELOPMENT.md`](DEVELOPMENT.md).
