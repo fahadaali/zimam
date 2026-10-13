@@ -6,7 +6,8 @@ import { sha256Hex } from "../src/auth/crypto";
 const { publicKey, privateKey } = await generateKeyPair("RS256");
 const jwk = { ...(await exportJWK(publicKey)), kid: "test-key", alg: "RS256", use: "sig" };
 
-export const app = createApp({ appleKeys: createLocalJWKSet({ keys: [jwk] }) });
+export const testAppleKeys = createLocalJWKSet({ keys: [jwk] });
+export const app = createApp({ appleKeys: testAppleKeys });
 
 interface AppleTokenOptions {
   audience?: string;

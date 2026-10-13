@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { listProjects } from "../data/queries";
 import { projectOut, type Row, sectionOut } from "../data/rows";
 import type { AppEnv } from "../types";
 import { createResource, deleteResource, loadVisible, updateResource } from "./resources";
@@ -8,18 +9,9 @@ export const projects = new Hono<AppEnv>();
 
 /** Projects and folders the user belongs to, with top-level task counts for the project card. */
 projects.get("/", async (c) => {
-  const { results } = await c.env.DB.prepare(
-    `SELECT p.*, m.role,
-       (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.parent_id IS NULL AND t.deleted_at IS NULL) AS total,
-       (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.parent_id IS NULL AND t.deleted_at IS NULL
-          AND t.status = 'done') AS done
-     FROM projects p JOIN project_members m ON m.project_id = p.id AND m.user_id = ?
-     WHERE p.deleted_at IS NULL ORDER BY p.sort_order, p.created_at`,
-  )
-    .bind(c.var.userId)
-    .all<Row>();
+  const rows = await listProjects(c.env.DB, c.var.userId);
   return c.json({
-    projects: results.map((r) => ({ ...projectOut(r), role: r.role, taskCount: r.total, doneCount: r.done })),
+    projects: rows.map((r) => ({ ...projectOut(r), role: r.role, taskCount: r.total, doneCount: r.done })),
   });
 });
 
