@@ -1,0 +1,88 @@
+# Source of truth for the Xcode project. Run `xcodegen` in this folder after
+# every change, and commit the regenerated Zimam.xcodeproj with it.
+name: Zimam
+options:
+  bundleIdPrefix: app.zimam
+  developmentLanguage: ar
+  deploymentTarget:
+    iOS: "18.0"
+    macOS: "15.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Your Apple Developer Team ID (Membership details). Set it here, not in Xcode,
+    # so it survives regenerating the project.
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    # The API worker. Becomes https://api.zimam.app once the domain is attached.
+    ZIMAM_API_URL: "https://zimam.fahad2ao.workers.dev"
+
+packages:
+  ZimamKit:
+    path: ZimamKit
+
+targets:
+  Zimam:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: Zimam
+      - path: ../design/generated/ZimamTokens.swift
+        group: Design
+      - path: ../design/fonts/apple
+        group: Design/Fonts
+        buildPhase: resources
+    dependencies:
+      - package: ZimamKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.zimam.Zimam
+        PRODUCT_NAME: Zimam
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: YES
+        # macOS sandbox; Xcode applies these to the Mac build only.
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_OUTGOING_NETWORK_CONNECTIONS: YES
+    info:
+      path: Zimam/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: زمام
+        CFBundleDevelopmentRegion: ar
+        CFBundleLocalizations: [ar]
+        ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.productivity
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # Thmanyah fonts: listed for iOS, and loaded from the Resources folder on macOS.
+        UIAppFonts:
+          - thmanyahsans-Light.otf
+          - thmanyahsans-Regular.otf
+          - thmanyahsans-Medium.otf
+          - thmanyahsans-Bold.otf
+          - thmanyahsans-Black.otf
+          - thmanyahserifdisplay-Light.otf
+          - thmanyahserifdisplay-Regular.otf
+          - thmanyahserifdisplay-Medium.otf
+          - thmanyahserifdisplay-Bold.otf
+          - thmanyahserifdisplay-Black.otf
+        ATSApplicationFontsPath: .
+        ZimamAPIURL: $(ZIMAM_API_URL)
+    entitlements:
+      path: Zimam/Resources/Zimam.entitlements
+      properties:
+        com.apple.developer.applesignin: [Default]

@@ -1,11 +1,35 @@
 # تطبيق زمام لأجهزة أبل
 
-هنا يُنشأ مشروع Xcode: تطبيق SwiftUI متعدد المنصات (آيفون، آيباد، ماك) مع هدف لساعة أبل وهدف للويدجت.
+تطبيق SwiftUI واحد للآيفون والآيباد والماك. هدفا ساعة أبل والويدجت يُضافان في خطوة لاحقة.
 
-عند إنشاء المشروع:
-- أضف `../design/generated/ZimamTokens.swift` إلى كل الأهداف.
-- أضف ملفات `../design/fonts/apple/*.otf` إلى كل الأهداف، وسجّلها في `UIAppFonts`.
-- استعمل `../design/app-icons/app-icon-1024.png` و`app-icon-dark-1024.png` و`app-icon-tinted-1024.png` في AppIcon.
-- لغة التطوير الافتراضية العربية، واتجاه الواجهة من اليمين لليسار.
+## التشغيل على الماك
 
-التقنيات: SwiftUI، SwiftData، App Intents، WidgetKit، ActivityKit، EventKit، UserNotifications، Sign in with Apple، StoreKit 2.
+```sh
+brew install xcodegen
+cd apple
+xcodegen            # يولّد Zimam.xcodeproj من project.yml
+open Zimam.xcodeproj
+```
+
+- المرجع هو `project.yml`. يُعاد تشغيل `xcodegen` بعد أي تعديل عليه، ويُرفع `Zimam.xcodeproj` المولَّد معه حتى يجده Xcode Cloud. لا يُعدَّل المشروع من Xcode مباشرة لأن التوليد التالي يمسح التعديل.
+- ضع معرّف فريقك (Team ID) في `DEVELOPMENT_TEAM` داخل `project.yml`، لا في Xcode.
+- عنوان الخادم في `ZIMAM_API_URL` داخل `project.yml`.
+
+## الهيكل
+
+| المجلد | ما فيه |
+| --- | --- |
+| `ZimamKit/` | حزمة Swift مستقلة عن الواجهة: التاريخ الهجري (أم القرى) مع الميلادي، وأوقات الصلاة (مكتبة Adhan)، والبحث العربي، وعميل الواجهة البرمجية وأشكال بيانات المزامنة. اختباراتها: `cd apple/ZimamKit && swift test` |
+| `Zimam/App/` | نقطة البداية، وتسجيل الدخول بحساب أبل، وحفظ الجلسة في Keychain |
+| `Zimam/Model/` | نماذج SwiftData المحلية للعمل دون اتصال، و`Store` الذي تمر منه كل تعديلات المستخدم |
+| `Zimam/Sync/` | محرك المزامنة: يرسل التعديلات المحلية ثم يستقبل تغييرات الخادم |
+| `Zimam/Components/` | مكافئات مكوّنات `design/components/`: سطر المهمة، وشريحتا التاريخ والصلاة، وبطاقة المشروع، والزر |
+| `Zimam/Views/` | الشاشات: اليوم، والقادم، والمشاريع، والبحث، وإضافة مهمة، وتسجيل الدخول |
+
+يُضاف للهدف تلقائياً `../design/generated/ZimamTokens.swift` وخطوط ثمانية من `../design/fonts/apple/`، وأيقونة التطبيق وشعاره منسوخان في `Zimam/Resources/Assets.xcassets`.
+
+## تذكير بالقواعد
+
+- الألوان والمسافات والزوايا والخطوط من `ZimamColor` و`ZimamSpacing` و`ZimamRadius` و`ZimamType` فقط.
+- `leading` و`trailing` دائماً، لا `left` و`right`.
+- كل تاريخ بالهجري والميلادي عبر `DualDateFormatter`، والفاصل بينهما «،».
