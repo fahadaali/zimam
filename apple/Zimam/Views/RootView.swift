@@ -24,6 +24,16 @@ struct RootView: View {
                         // Each return also moves the rolling notification window forward.
                         if phase == .active { Task { await sync.sync() } }
                     }
+                    // Realtime only while the app is in use; the pull on return catches up.
+                    .onChange(of: scenePhase, initial: true) { _, phase in
+                        switch phase {
+                        case .active: sync.startRealtime()
+                        case .background: sync.stopRealtime()
+                        default: break
+                        }
+                    }
+                    // Signing out replaces this view, and its socket closes with it.
+                    .onDisappear { sync.stopRealtime() }
                     .onChange(of: session.user?.settings.prayerMethod) { _, _ in
                         notifications.reschedule()
                     }

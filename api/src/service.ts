@@ -2,6 +2,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { Assistant, type AgendaRequest, type TaskFields, type TaskFilter } from "./assistant";
 import { appleKeys } from "./auth/apple";
 import type { Env } from "./env";
+import { channelRealtime, latestSeq, notifyChangesSince } from "./realtime/notify";
 
 /**
  * RPC entrypoint for the MCP worker (`mcp/`), reached only through its service binding,
@@ -10,6 +11,18 @@ import type { Env } from "./env";
 export class ZimamService extends WorkerEntrypoint<Env> {
   private get assistant() {
     return new Assistant(this.env, appleKeys);
+  }
+
+  /** Runs a write, then (after returning) tells everyone who can see what it changed to pull. */
+  private async writing<T>(work: () => Promise<T>): Promise<T> {
+    const since = await latestSeq(this.env.DB);
+    try {
+      return await work();
+    } finally {
+      if (since !== null) {
+        this.ctx.waitUntil(notifyChangesSince(this.env.DB, channelRealtime(this.env.USER_CHANNEL), since));
+      }
+    }
   }
 
   signInWithApple(identityToken: string, nonce: string) {
@@ -21,15 +34,15 @@ export class ZimamService extends WorkerEntrypoint<Env> {
   }
 
   createTask(userId: string, fields: TaskFields) {
-    return this.assistant.createTask(userId, fields);
+    return this.writing(() => this.assistant.createTask(userId, fields));
   }
 
   updateTask(userId: string, id: string, fields: TaskFields) {
-    return this.assistant.updateTask(userId, id, fields);
+    return this.writing(() => this.assistant.updateTask(userId, id, fields));
   }
 
   completeTask(userId: string, id: string) {
-    return this.assistant.completeTask(userId, id);
+    return this.writing(() => this.assistant.completeTask(userId, id));
   }
 
   listProjects(userId: string) {

@@ -11,13 +11,14 @@
   Cross-Origin-Resource-Policy: same-origin
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
 
-# The app: Apple's sign-in script and popup, and the API (workers.dev now, api.zimam.app later).
+# The app: Apple's sign-in script and popup, and the API (workers.dev now, api.zimam.app later),
+# over HTTPS and over the realtime WebSocket (wss).
 # The popup needs window.opener, hence same-origin-allow-popups. Trusted Types are report-only
 # until Apple's script is known to work under them; the app's own code never writes HTML strings.
 /app/*
   ! Content-Security-Policy
   ! Cross-Origin-Opener-Policy
   Cross-Origin-Opener-Policy: same-origin-allow-popups
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://appleid.cdn-apple.com; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self' https://zimam.fahad2ao.workers.dev https://api.zimam.app https://appleid.apple.com; frame-src https://appleid.apple.com; object-src 'none'; base-uri 'none'; form-action 'self' https://appleid.apple.com; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://appleid.cdn-apple.com; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self' https://zimam.fahad2ao.workers.dev wss://zimam.fahad2ao.workers.dev https://api.zimam.app wss://api.zimam.app https://appleid.apple.com; frame-src https://appleid.apple.com; object-src 'none'; base-uri 'none'; form-action 'self' https://appleid.apple.com; frame-ancestors 'none'
   Content-Security-Policy-Report-Only: require-trusted-types-for 'script'
   Cache-Control: no-cache

@@ -4,7 +4,8 @@ import SwiftData
 import ZimamKit
 
 /// Sends local edits to the API, then applies what changed on the server.
-/// Runs on launch, when the app returns to the foreground, and shortly after each edit.
+/// Runs on launch, when the app returns to the foreground, shortly after each edit,
+/// and when the realtime channel says the server has changes this device has not pulled.
 @MainActor
 @Observable
 final class SyncEngine {
@@ -16,6 +17,8 @@ final class SyncEngine {
     @ObservationIgnored private let context: ModelContext
     @ObservationIgnored private var scheduled: Task<Void, Never>?
     @ObservationIgnored private var runAgain = false
+    @ObservationIgnored private var realtime: RealtimeChannel?
+    @ObservationIgnored private var remoteSync: Task<Void, Never>?
     /// Called when the server no longer accepts the session.
     @ObservationIgnored var onUnauthorized: (() -> Void)?
     /// Called after local edits and after each sync, so what depends on the data
@@ -77,9 +80,47 @@ final class SyncEngine {
         onDataChanged?()
     }
 
+    // MARK: Realtime
+
+    /// Opens the realtime channel. Call while the app is active and signed in.
+    func startRealtime() {
+        if realtime == nil {
+            let channel = RealtimeChannel(api: api)
+            channel.onChanged = { [weak self] seq in self?.noteServerChange(seq: seq) }
+            channel.onResync = { [weak self] in
+                guard let self else { return }
+                Task { await self.sync() }
+            }
+            realtime = channel
+        }
+        realtime?.start()
+    }
+
+    /// Closes the realtime channel: in the background and after signing out.
+    func stopRealtime() {
+        realtime?.stop()
+        remoteSync?.cancel()
+    }
+
+    /// The server has changes up to `seq`. Pulls unless this device already has them; a sync
+    /// in progress (often this device's own push, whose pull reaches `seq`) is waited out first.
+    func noteServerChange(seq: Int64) {
+        guard seq > cursor else { return }
+        remoteSync?.cancel()
+        remoteSync = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            while isSyncing, !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            guard !Task.isCancelled, seq > cursor else { return }
+            await sync()
+        }
+    }
+
     /// Removes every local record and starts the next sync from scratch.
     func reset() throws {
         scheduled?.cancel()
+        stopRealtime()
         try context.delete(model: ReminderItem.self)
         try context.delete(model: TaskItem.self)
         try context.delete(model: SectionItem.self)

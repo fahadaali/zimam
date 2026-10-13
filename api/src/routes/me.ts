@@ -5,6 +5,7 @@ import { deleteAccount } from "../data/account";
 import { type Row, userOut } from "../data/rows";
 import { Settings } from "../data/schemas";
 import { fail, readJson } from "../http";
+import { closeSockets } from "../realtime/notify";
 import type { AppEnv } from "../types";
 
 export const me = new Hono<AppEnv>();
@@ -48,5 +49,6 @@ me.delete("/", async (c) => {
   if (!user) return fail(c, 404, "not_found", "User not found");
   await deleteAccount(c.env.DB, c.var.access, c.var.mutator, c.var.userId);
   await revokeAppleAuthorization(() => c.var.deps.appleTokens(c.env), user);
+  closeSockets(c, c.var.userId);
   return c.body(null, 204);
 });

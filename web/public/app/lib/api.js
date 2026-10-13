@@ -121,4 +121,6 @@ export const api = {
   completeTask: (id) => request("POST", `/v1/tasks/${encodeURIComponent(id)}/complete`),
   reopenTask: (id) => request("PATCH", `/v1/tasks/${encodeURIComponent(id)}`, { status: "todo" }),
   deleteTask: (id) => request("DELETE", `/v1/tasks/${encodeURIComponent(id)}`),
+  /** A single-use ticket for the realtime socket (lib/realtime.js); browsers cannot send headers on it. */
+  realtimeTicket: () => request("POST", "/v1/realtime/ticket"),
 };

@@ -2,11 +2,13 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { storeAppleRefreshToken } from "../auth/account";
 import { verifyAppleToken } from "../auth/apple";
+import { sha256Hex } from "../auth/crypto";
 import { createSession, deleteSession } from "../auth/sessions";
 import { appleAudiences, upsertAppleUser } from "../auth/users";
 import { userOut } from "../data/rows";
 import { fail, readJson } from "../http";
 import { requireUser } from "../middleware";
+import { closeSockets } from "../realtime/notify";
 import type { AppEnv } from "../types";
 
 const AppleSignIn = z.object({
@@ -47,5 +49,6 @@ auth.post("/apple", async (c) => {
 
 auth.post("/logout", requireUser, async (c) => {
   await deleteSession(c.env.DB, c.var.token);
+  closeSockets(c, c.var.userId, await sha256Hex(c.var.token));
   return c.body(null, 204);
 });

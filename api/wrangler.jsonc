@@ -30,5 +30,10 @@
     "APNS_TEAM_ID": "72V86SZ2XC"
   },
   // Pushes the reminders beyond the app's local notification window (src/push/reminders.ts).
-  "triggers": { "crons": ["*/5 * * * *"] }
+  "triggers": { "crons": ["*/5 * * * *"] },
+  // Realtime sync: one UserChannel per user holds their WebSockets (src/realtime/channel.ts).
+  "durable_objects": {
+    "bindings": [{ "name": "USER_CHANNEL", "class_name": "UserChannel" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserChannel"] }]
 }

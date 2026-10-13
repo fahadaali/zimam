@@ -5,6 +5,7 @@ import type { Access } from "./data/access";
 import type { Mutator } from "./data/mutations";
 import type { Env } from "./env";
 import type { PushSender } from "./push/apns";
+import type { Realtime } from "./realtime/notify";
 
 export interface Deps {
   /** Sign in with Apple signing keys; tests pass a local key set. */
@@ -18,6 +19,8 @@ export interface Deps {
   appleTokens: (env: Env) => AppleTokens | null;
   /** APNs for reminder pushes (null when its secrets are missing); tests pass a fake. */
   push?: (env: Env) => PushSender | null;
+  /** Realtime "pull now" nudges after writes (src/realtime/); none when absent. Tests pass a fake or the real channel. */
+  realtime?: (env: Env) => Realtime | null;
 }
 
 export interface AppEnv {
