@@ -12,6 +12,8 @@ struct TodayView: View {
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
     @State private var showingAdd = false
     @State private var lingering: Set<UUID> = []
+    /// The Apple Calendar event whose details are open.
+    @State private var openEvent: ShownEvent?
 
     private var items: [TaskItem] {
         let today = formatter.dayString(from: Date())
@@ -25,6 +27,7 @@ struct TodayView: View {
 
     var body: some View {
         let names = projectNames(projects)
+        let events = todayEvents
         List(selection: taskSelection) {
             Section {
                 // «ملخص اليوم» from the assistant; hidden offline.
@@ -36,11 +39,33 @@ struct TodayView: View {
             } header: {
                 ScreenHeader(title: "اليوم", subtitle: formatter.dual(Date()))
             }
+            // Apple Calendar's events today, read only, when «إظهار أحداث التقويم» is on.
+            if !events.isEmpty {
+                Section {
+                    ForEach(events) { item in
+                        EventRow(item: item) { openEvent = item }
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    }
+                } header: {
+                    Text("أحداث اليوم")
+                        .font(ZimamType.headline)
+                        .foregroundStyle(ZimamColor.ink)
+                        .textCase(nil)
+                        .accessibilityAddTraits(.isHeader)
+                }
+            }
         }
         .zimamList()
         .overlay(alignment: .bottomTrailing) { AddTaskButton { showingAdd = true } }
         .sheet(isPresented: $showingAdd) { AddTaskView(due: .today) }
+        .sheet(item: $openEvent) { item in CalendarEventSheet(item: item) }
         .toolbar { ToolbarItem { AccountMenu() } }
+    }
+
+    private var todayEvents: [ShownEvent] {
+        let today = formatter.dayString(from: Date())
+        return CalendarEvents.shared.events(from: today, to: today, timeZone: formatter.timeZone)
     }
 
     private func linger(_ id: UUID) {
