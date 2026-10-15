@@ -1,0 +1,157 @@
+/* The import view (#/import, import-view.js). Tokens only; logical properties only. */
+
+.header-link[aria-current="page"] {
+  color: var(--ink);
+  background: var(--surface-sunken);
+}
+
+.import-section + .import-section {
+  margin-block-start: var(--space-8);
+}
+
+.import-section[hidden] {
+  display: none;
+}
+
+.import-section.zm-card {
+  padding: var(--space-4);
+}
+
+/* Sources: one choice per row, with the source's name above a short line on what it takes. */
+.import-sources {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.import-choice {
+  padding-block: var(--space-2);
+}
+
+.import-choice-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.import-choice:has(input:checked) .muted {
+  color: var(--brand-ink);
+}
+
+.import-howto {
+  margin-block: var(--space-4);
+}
+
+.import-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.import-form .field[hidden] {
+  display: none;
+}
+
+.import-form input[type="file"] {
+  padding-block: var(--space-2);
+}
+
+.import-link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--space-11);
+}
+
+.import-note {
+  margin-block-start: var(--space-4);
+}
+
+/* A running job: status, bar, counts, notes. */
+.import-job {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.import-status-done {
+  color: var(--success);
+}
+
+.import-status-failed {
+  color: var(--priority-high);
+}
+
+.import-status-queued,
+.import-status-running {
+  color: var(--ink-muted);
+}
+
+/* The status word never relies on colour alone; a mark goes before it. */
+.import-status-done::before {
+  content: "✓ ";
+}
+
+.import-status-failed::before {
+  content: "! ";
+}
+
+.import-progress {
+  inline-size: 100%;
+  block-size: var(--space-2);
+  accent-color: var(--brand);
+}
+
+.import-counts {
+  margin-block: var(--space-2);
+}
+
+.import-subtitle {
+  font-weight: 600;
+  margin-block-start: var(--space-2);
+}
+
+.import-messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding-inline-start: var(--space-4);
+}
+
+/* History: each import is a button that shows its details above. */
+.import-history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--surface-raised);
+}
+
+.import-history-item + .import-history-item {
+  border-block-start: 1px solid var(--line);
+}
+
+.import-history-open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  inline-size: 100%;
+  min-block-size: var(--space-11);
+  padding-block: var(--space-3);
+  padding-inline: var(--space-4);
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.import-history-open:hover {
+  background: var(--surface-sunken);
+}
+
+.import-history-file {
+  overflow-wrap: anywhere;
+}

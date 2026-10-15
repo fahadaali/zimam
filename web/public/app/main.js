@@ -20,6 +20,7 @@ import { randomNonce, sha256Hex } from "./lib/nonce.js";
 import { arabicNumber, parseDigits } from "./lib/numbers.js";
 import { prayerPhrase } from "./lib/prayer.js";
 import { createRealtime, realtimeUrl } from "./lib/realtime.js";
+import { viewImport } from "./import-view.js";
 import { PRIORITY_WORDS, groupByDay, isOpen, priorityKey, progressText, splitToday, taskCount } from "./lib/tasks.js";
 
 const APPLE_CLIENT_ID = "app.zimam.ios.web";
@@ -313,6 +314,8 @@ async function liveRefresh() {
     return;
   }
   await refreshProjects();
+  // The import view follows its job itself; re-rendering would reset the form mid-way.
+  if (parseRoute().name === "import") return;
   render({ focus: false });
 }
 
@@ -328,13 +331,14 @@ function parseRoute() {
   if (parts[0] === "projects") return { name: "projects" };
   if (parts[0] === "inbox") return { name: "inbox" };
   if (parts[0] === "search") return { name: "search", q: params.get("q") ?? "" };
+  if (parts[0] === "import") return { name: "import" };
   return { name: "today" };
 }
 
-const NAV = { today: "today", upcoming: "upcoming", projects: "projects", project: "projects", inbox: "projects", search: "search" };
+const NAV = { today: "today", upcoming: "upcoming", projects: "projects", project: "projects", inbox: "projects", search: "search", import: "import" };
 
 function updateNav(route) {
-  for (const link of document.querySelectorAll(".app-nav a")) {
+  for (const link of document.querySelectorAll("a[data-route]")) {
     if (link.dataset.route === NAV[route.name]) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
@@ -344,7 +348,15 @@ window.addEventListener("hashchange", () => {
   if (!els.shell.hidden) render({ focus: true });
 });
 
-const VIEWS = { today: viewToday, upcoming: viewUpcoming, projects: viewProjects, project: viewProject, inbox: viewInbox, search: viewSearch };
+const VIEWS = {
+  today: viewToday,
+  upcoming: viewUpcoming,
+  projects: viewProjects,
+  project: viewProject,
+  inbox: viewInbox,
+  search: viewSearch,
+  import: () => viewImport({ primary: primary(), today: state.today, announce, onImported: refreshProjects }),
+};
 
 async function render({ focus = false } = {}) {
   const id = ++state.renderId;
