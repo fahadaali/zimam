@@ -136,6 +136,17 @@ struct Store {
         return reminder
     }
 
+    /// A reminder on arriving at or leaving a place. It fires on iPhone and iPad only
+    /// (`NotificationScheduler`); the server stores it and never pushes it.
+    @discardableResult
+    func addLocationReminder(to taskId: UUID, place: ReminderRecord.Location) -> ReminderItem {
+        let record = ReminderRecord(taskId: taskId, kind: .location, location: place)
+        let reminder = ReminderItem(record, dirty: true)
+        context.insert(reminder)
+        commit()
+        return reminder
+    }
+
     func deleteReminder(_ reminder: ReminderItem) {
         reminder.pendingDelete = true
         touch(reminder)

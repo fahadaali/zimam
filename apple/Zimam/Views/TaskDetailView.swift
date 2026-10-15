@@ -505,6 +505,11 @@ private struct RemindersSection: View {
     @State private var time = Date().addingTimeInterval(3600)
     @State private var prayer: Prayer = .asr
     @State private var offset = 0
+    @State private var addingPlace = false
+
+    private var hasPlaces: Bool {
+        reminders.contains { $0.kindRaw == ReminderRecord.Kind.location.rawValue }
+    }
 
     var body: some View {
         Section {
@@ -533,15 +538,47 @@ private struct RemindersSection: View {
                 askForAlerts()
             }
             .frame(minHeight: ZimamSpacing.space11)
+
+            Button("إضافة تذكير بالموقع", systemImage: "mappin.and.ellipse") { addingPlace = true }
+                .frame(minHeight: ZimamSpacing.space11)
+                .sheet(isPresented: $addingPlace) {
+                    LocationReminderSheet { place in
+                        store.addLocationReminder(to: task.id, place: place)
+                        #if os(iOS)
+                        // Location while using the app lets the system watch the place.
+                        location.requestAuthorization()
+                        #endif
+                        askForAlerts()
+                    }
+                }
+            #if os(iOS)
+            if hasPlaces && !location.canWatchPlaces && !location.isUndecided,
+               let url = LocationProvider.systemSettingsURL {
+                Link(destination: url) {
+                    Label(location.isDenied ? "السماح بالموقع لتذكيرات الموقع" : "تفعيل الموقع الدقيق لتذكيرات الموقع",
+                          systemImage: "gear")
+                }
+                .frame(minHeight: ZimamSpacing.space11)
+            }
+            #endif
         } header: {
             Text("التذكيرات")
         } footer: {
-            if notifications.isDenied {
-                Text("الإشعارات متوقفة لزمام. فعّلها من إعدادات النظام لتصلك التذكيرات.")
-            } else if location.coordinate == nil {
-                Text("تذكيرات الصلاة تحتاج موقعك. حدّده من الإعدادات.")
-            } else if task.dueDate == nil {
-                Text("تذكير الصلاة لمهمة بلا تاريخ يتكرر كل يوم.")
+            VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
+                if notifications.isDenied {
+                    Text("الإشعارات متوقفة لزمام. فعّلها من إعدادات النظام لتصلك التذكيرات.")
+                } else if location.coordinate == nil {
+                    Text("تذكيرات الصلاة تحتاج موقعك. حدّده من الإعدادات.")
+                } else if task.dueDate == nil {
+                    Text("تذكير الصلاة لمهمة بلا تاريخ يتكرر كل يوم.")
+                }
+                if hasPlaces {
+                    #if os(iOS)
+                    Text("تذكير الموقع يصلك كلما وصلت إلى المكان أو غادرته حتى تنجز المهمة.")
+                    #else
+                    Text("تذكيرات الموقع تصل على الآيفون والآيباد، ولا تعمل على الماك.")
+                    #endif
+                }
             }
         }
     }
@@ -556,6 +593,8 @@ private struct ReminderRow: View {
     let onDelete: () -> Void
 
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(NotificationScheduler.self) private var notifications
+    @Environment(LocationProvider.self) private var location
 
     var body: some View {
         HStack(spacing: ZimamSpacing.space2) {
@@ -585,8 +624,43 @@ private struct ReminderRow: View {
                     .foregroundStyle(date < Date() ? ZimamColor.inkFaint : ZimamColor.ink)
             }
         case .location:
-            Label("تذكير بالموقع", systemImage: "location")
-                .font(ZimamType.callout)
+            let place = reminder.record.location
+            VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
+                Label(LocationReminderPlanner.displayName(place?.name),
+                      systemImage: place?.trigger == .leave ? "figure.walk.departure" : "figure.walk.arrival")
+                    .font(ZimamType.callout)
+                    .foregroundStyle(placeNote == nil ? ZimamColor.ink : ZimamColor.inkMuted)
+                if let place {
+                    Text(LocationReminderPlanner.summary(place, locale: formatter.locale))
+                        .font(ZimamType.caption)
+                        .foregroundStyle(ZimamColor.inkMuted)
+                }
+                if let placeNote {
+                    Text(placeNote)
+                        .font(ZimamType.caption)
+                        .foregroundStyle(ZimamColor.inkMuted)
+                }
+            }
         }
+    }
+
+    /// Why a location reminder is not watched on this device, or nil when it is (or when
+    /// notifications themselves are off, which the section's footer already says).
+    private var placeNote: String? {
+        #if os(iOS)
+        if notifications.watchedPlaces.contains(reminder.id) || !notifications.isEnabled { return nil }
+        if !location.canWatchPlaces {
+            return location.isUndecided || location.isDenied
+                ? "لا يعمل حتى تسمح لزمام بالموقع."
+                : "لا يعمل حتى تفعّل «الموقع الدقيق» لزمام."
+        }
+        if notifications.watchedPlaces.count >= LocationReminderPlanner.maxRegions {
+            let count = LocationReminderPlanner.maxRegions.formatted(.number.locale(formatter.locale))
+            return "لا يعمل الآن: يراقب زمام \(count) أماكن على الأكثر، أقربها موعداً."
+        }
+        return nil
+        #else
+        return "لا يعمل على الماك، ويصلك على الآيفون والآيباد."
+        #endif
     }
 }

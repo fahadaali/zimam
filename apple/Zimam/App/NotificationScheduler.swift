@@ -1,3 +1,6 @@
+#if os(iOS)
+import CoreLocation
+#endif
 import Foundation
 import Observation
 import SwiftData
@@ -8,10 +11,20 @@ import ZimamKit
 /// iOS allows 64 per app, so it schedules the soonest ones (see `ReminderPlanner`)
 /// and recomputes the window on launch, after each sync and after each local edit.
 /// The server sends what lies beyond the window over APNs.
+///
+/// Location reminders («تذكير بالموقع») are `UNLocationNotificationTrigger`s on iPhone and iPad:
+/// the system watches each place and shows the notification itself, so location while using the
+/// app is enough (no «دائماً» permission, no background location, and the app is not woken).
+/// They take up to `LocationReminderPlanner.maxRegions` of the 60 slots (iOS also watches at most
+/// 20 regions per app), and repeat on every arrival or exit until the task is done. The Mac has
+/// no location triggers, so they do not fire there; the server never pushes them.
 @MainActor
 @Observable
 final class NotificationScheduler {
     private(set) var status: UNAuthorizationStatus = .notDetermined
+    /// The location reminders the device is watching now; the others are over the budget
+    /// or cannot fire here (see `LocationProvider.canWatchPlaces`).
+    private(set) var watchedPlaces: Set<UUID> = []
 
     private let context: ModelContext
     private let sync: SyncEngine
@@ -41,6 +54,10 @@ final class NotificationScheduler {
             await self?.handle(action: action, taskId: taskId)
         }
         center.delegate = delegate
+        // Location reminders start or stop with the location permission.
+        location.onAuthorizationChange = { [weak self] in
+            self?.reschedule()
+        }
     }
 
     var isEnabled: Bool { status == .authorized || status == .provisional }
@@ -97,10 +114,26 @@ final class NotificationScheduler {
     private func apply() async {
         let center = UNUserNotificationCenter.current()
         await refreshStatus()
-        center.removeAllPendingNotificationRequests()
-        guard isEnabled, session.isSignedIn else { return }
+        guard isEnabled, session.isSignedIn else {
+            center.removeAllPendingNotificationRequests()
+            watchedPlaces = []
+            return
+        }
 
-        for item in plan() {
+        let (times, places) = plan()
+        watchedPlaces = Set(places.map(\.reminderId))
+        // Everything is replaced except places already watched as planned: registering a place
+        // again while the device is inside it could fire it again.
+        let existing = await center.pendingNotificationRequests()
+        let kept = Self.alreadyWatched(existing, places: places)
+        center.removePendingNotificationRequests(withIdentifiers: existing.map(\.identifier).filter { !kept.contains($0) })
+        #if os(iOS)
+        for place in places where !kept.contains(place.id) {
+            guard !Task.isCancelled else { return }
+            try? await center.add(Self.request(for: place))
+        }
+        #endif
+        for item in times {
             guard !Task.isCancelled else { return }
             let content = UNMutableNotificationContent()
             content.title = item.title
@@ -115,7 +148,56 @@ final class NotificationScheduler {
         }
     }
 
-    private func plan() -> [PlannedNotification] {
+    /// The ids of pending requests that already watch a planned place as planned.
+    private static func alreadyWatched(_ existing: [UNNotificationRequest], places: [PlannedRegion]) -> Set<String> {
+        #if os(iOS)
+        let wanted = Dictionary(places.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var kept = Set<String>()
+        for request in existing {
+            if let place = wanted[request.identifier], Self.request(request, watches: place) {
+                kept.insert(request.identifier)
+            }
+        }
+        return kept
+        #else
+        return []
+        #endif
+    }
+
+    #if os(iOS)
+    /// A notification on entering or leaving the place, with the same «إنجاز» and «تأجيل ساعة»
+    /// as time reminders. It repeats: it fires on every arrival (or exit) until the task is done
+    /// and the next reschedule drops it.
+    private static func request(for place: PlannedRegion) -> UNNotificationRequest {
+        let content = UNMutableNotificationContent()
+        content.body = place.body
+        content.sound = .default
+        content.categoryIdentifier = categoryId
+        content.threadIdentifier = place.taskId.uuidString
+        content.userInfo = ["taskId": place.taskId.uuidString]
+        let center = CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude)
+        let region = CLCircularRegion(center: center, radius: place.radius, identifier: place.id)
+        region.notifyOnEntry = place.onArrive
+        region.notifyOnExit = !place.onArrive
+        let trigger = UNLocationNotificationTrigger(region: region, repeats: true)
+        return UNNotificationRequest(identifier: place.id, content: content, trigger: trigger)
+    }
+
+    /// Whether a pending request already watches this place with this text.
+    private static func request(_ request: UNNotificationRequest, watches place: PlannedRegion) -> Bool {
+        guard let trigger = request.trigger as? UNLocationNotificationTrigger,
+              let region = trigger.region as? CLCircularRegion else { return false }
+        return request.content.body == place.body
+            && region.center.latitude == place.latitude
+            && region.center.longitude == place.longitude
+            && region.radius == place.radius
+            && region.notifyOnEntry == place.onArrive
+            && region.notifyOnExit == !place.onArrive
+    }
+    #endif
+
+    /// The time window, and the places to watch, which come out of the same budget.
+    private func plan() -> (times: [PlannedNotification], places: [PlannedRegion]) {
         let tasks = (try? context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { !$0.pendingDelete }))) ?? []
         let reminders = (try? context.fetch(FetchDescriptor<ReminderItem>(predicate: #Predicate { !$0.pendingDelete }))) ?? []
         let plannerTasks = tasks.map { task in
@@ -125,13 +207,23 @@ final class NotificationScheduler {
         let plannerReminders = reminders.map { reminder in
             PlannerReminder(id: reminder.id, taskId: reminder.taskId,
                             kind: ReminderRecord.Kind(rawValue: reminder.kindRaw) ?? .time, at: reminder.at,
-                            prayer: reminder.prayerRaw.flatMap(Prayer.init(rawValue:)), offsetMinutes: reminder.offsetMinutes)
+                            prayer: reminder.prayerRaw.flatMap(Prayer.init(rawValue:)), offsetMinutes: reminder.offsetMinutes,
+                            location: reminder.record.location)
+        }
+        var places: [PlannedRegion] = []
+        if location.canWatchPlaces {
+            let near = location.coordinate.map {
+                LocationReminderPlanner.Point(latitude: $0.latitude, longitude: $0.longitude)
+            }
+            places = LocationReminderPlanner.plan(tasks: plannerTasks, reminders: plannerReminders, near: near)
         }
         let settings = session.user?.settings
         let formatter = DualDateFormatter(primary: settings?.calendar ?? .hijri, locale: ZimamLocale.current)
-        return ReminderPlanner.plan(tasks: plannerTasks, reminders: plannerReminders,
-                                    schedule: location.schedule(method: settings?.prayerMethod ?? .ummAlQura),
-                                    now: Date(), formatter: formatter)
+        let times = ReminderPlanner.plan(tasks: plannerTasks, reminders: plannerReminders,
+                                         schedule: location.schedule(method: settings?.prayerMethod ?? .ummAlQura),
+                                         now: Date(), formatter: formatter,
+                                         limit: LocationReminderPlanner.timeLimit(reserving: places.count))
+        return (times, places)
     }
 
     /// «إنجاز» completes the task; «تأجيل ساعة» adds a one-off reminder an hour from now.

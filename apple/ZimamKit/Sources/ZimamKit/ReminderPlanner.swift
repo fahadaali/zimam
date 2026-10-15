@@ -30,15 +30,18 @@ public struct PlannerReminder: Sendable {
     public var at: String?
     public var prayer: Prayer?
     public var offsetMinutes: Int?
+    /// For `.location`; planned by `LocationReminderPlanner`, not here.
+    public var location: ReminderRecord.Location?
 
     public init(id: UUID, taskId: UUID, kind: ReminderRecord.Kind, at: String? = nil, prayer: Prayer? = nil,
-                offsetMinutes: Int? = nil) {
+                offsetMinutes: Int? = nil, location: ReminderRecord.Location? = nil) {
         self.id = id
         self.taskId = taskId
         self.kind = kind
         self.at = at
         self.prayer = prayer
         self.offsetMinutes = offsetMinutes
+        self.location = location
     }
 }
 
@@ -67,7 +70,8 @@ public struct PlannedNotification: Equatable, Sendable {
 /// - A time reminder fires at its time.
 /// - A prayer reminder, and a task anchored to a prayer, fire at that prayer
 ///   (plus the offset) on the task's due day, or every day when it has none.
-/// - Location reminders are not planned here.
+/// - Location reminders are not planned here but by `LocationReminderPlanner`, which takes
+///   some of the same budget (`LocationReminderPlanner.timeLimit(reserving:)`).
 public enum ReminderPlanner {
     public static let defaultLimit = 60
     /// The server pushes what fires beyond this window after the device's last pull
