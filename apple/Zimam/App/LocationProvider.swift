@@ -29,8 +29,13 @@ final class LocationProvider {
     private(set) var errorMessage: String? = nil
     /// Kept here, not read from the manager, so views showing «فتح إعدادات النظام» update.
     private(set) var authorization: CLAuthorizationStatus = .notDetermined
+    /// «الموقع الدقيق» is on for Zimam. Location reminders need it: the system does not watch
+    /// places for an app that has only the approximate location.
+    private(set) var isPrecise = true
     /// Called when a new coordinate is saved.
     @ObservationIgnored var onChange: (@MainActor () -> Void)?
+    /// Called when the permission or its precision changes, so location reminders are rescheduled.
+    @ObservationIgnored var onAuthorizationChange: (@MainActor () -> Void)?
 
     private let manager = CLLocationManager()
     private let delegate = LocationDelegate()
@@ -48,6 +53,7 @@ final class LocationProvider {
             coordinate = Coordinate(latitude: saved.latitude, longitude: saved.longitude)
         }
         authorization = manager.authorizationStatus
+        isPrecise = manager.accuracyAuthorization == .fullAccuracy
         // City level is enough for prayer times, and quicker to get than a precise fix.
         manager.desiredAccuracy = kCLLocationAccuracyKilometer
         manager.delegate = delegate
@@ -65,6 +71,31 @@ final class LocationProvider {
     /// The user (or a policy) turned location off for Zimam, or Location Services are off.
     var isDenied: Bool {
         authorization == .denied || authorization == .restricted
+    }
+
+    /// The user has not answered the location prompt yet.
+    var isUndecided: Bool {
+        authorization == .notDetermined
+    }
+
+    /// Whether location reminders can fire on this device: iPhone and iPad, with location allowed
+    /// while using the app (enough for location notification triggers) and precise. The Mac has
+    /// no location notification triggers.
+    var canWatchPlaces: Bool {
+        #if os(iOS)
+        (authorization == .authorizedWhenInUse || authorization == .authorizedAlways) && isPrecise
+        #else
+        false
+        #endif
+    }
+
+    /// Asks for location while using the app, without reading it: the first location reminder
+    /// needs it to fire. Does nothing once the user has answered.
+    func requestAuthorization() {
+        authorization = manager.authorizationStatus
+        if authorization == .notDetermined {
+            manager.requestWhenInUseAuthorization()
+        }
     }
 
     /// Prayer times for the saved place, or nil before the first location.
@@ -124,6 +155,8 @@ final class LocationProvider {
 
     private func authorizationChanged(_ status: CLAuthorizationStatus) {
         authorization = status
+        isPrecise = manager.accuracyAuthorization == .fullAccuracy
+        onAuthorizationChange?()
         switch status {
         case .notDetermined:
             return
