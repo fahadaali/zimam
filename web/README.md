@@ -10,8 +10,9 @@
 | الملف | ما فيه |
 | --- | --- |
 | `public/index.html` | صفحة التعريف: الشعار، «خذ زمام يومك»، ما يميّز زمام، المنصات، وربط كلود وChatGPT |
-| `public/app/` | تطبيق الويب على `/app/`: صفحة واحدة تتبدّل عروضها برابط `#` (`#/today`، `#/upcoming`، `#/projects`، `#/projects/<id>`، `#/inbox`، `#/search?q=`) |
+| `public/app/` | تطبيق الويب على `/app/`: صفحة واحدة تتبدّل عروضها برابط `#` (`#/today`، `#/upcoming`، `#/projects`، `#/projects/<id>`، `#/inbox`، `#/search?q=`، `#/import`) |
 | `public/app/main.js` | تسجيل الدخول، والعروض، وإضافة المهمة وإنجازها وحذفها |
+| `public/app/import-view.js` | عرض «استيراد المهام» (`#/import`، من رابط «استيراد» في الترويسة): اختيار المصدر، ورفع الملف أو لصق رمز Todoist مرة واحدة، ومتابعة `GET /v1/imports/:id` حتى ينتهي، والسجل. أنماطه في `import.css`، ومنطقه الخالص في `lib/imports.js` |
 | `public/app/lib/` | وحدات ES: التواريخ (`dates.js`)، والصلاة (`prayer.js`)، والأرقام، والمهام، والـ nonce، والواجهة البرمجية، والمكوّنات |
 | `public/styles/` | أنماط مشتركة (`base.css`) وأنماط صفحة التعريف (`site.css`) |
 | `public/_headers` | ترويسات الأمان وسياسة المحتوى (CSP) |

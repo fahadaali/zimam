@@ -373,11 +373,11 @@ npx wrangler d1 migrations apply zimam --remote   # جدول realtime_tickets
 
 الاختبارات: `test/import-parsers.test.ts` لكل محلّل على ملفات حقيقية الشكل في `test/fixtures/imports/`، و`test/imports.test.ts` للمسارات والطابور (طابور وهمي عبر `Deps.imports`، وR2 من Miniflare).
 
-التالي: واجهة الاستيراد في التطبيق (SwiftUI) والويب: اختيار المصدر، ورفع الملف أو لصق الرمز، ثم متابعة `GET /v1/imports/:id` حتى ينتهي وعرض الأعداد والتحذيرات.
+الواجهة: في التطبيق «الإعدادات» ← «استيراد المهام» (`apple/Zimam/Import/`، وأنواعه وطلباته في `ZimamKit/Imports.swift` و`APIClient+Imports.swift`)، وفي الويب `#/import` (`web/public/app/import-view.js`). كلاهما يرفع الملف أو يرسل الرمز مرة واحدة، ثم يسأل `GET /v1/imports/:id` كل ثانية ونصف حتى ينتهي ويعرض الأعداد والتحذيرات والأخطاء، ثم يزامن. وتذكيرات أبل تُستورد على الجهاز عبر EventKit (`AppleRemindersImport` في ZimamKit): كل قائمة مشروع، وتُحفظ روابط ما استُورد (`calendarItemExternalIdentifier` ← معرّف المهمة) في `UserDefaults` لكل حساب، فلا تتكرر.
 
 ## لم يُبنَ بعد
 
 - إرسال `authorizationCode` من موقع الويب: Sign in with Apple JS يعطيه أيضاً، لكن استبداله يحتاج `redirect_uri` نفسه الذي طُلب به، والخادم لا يرسله بعد.
 - حصص المساعد بحسب الاشتراك (الحد الآن واحد للجميع).
-- واجهة الاستيراد في التطبيق والويب، ومصادر OAuth (Trello وAsana وNotion وMicrosoft To Do)، وتذكيرات أبل على الجهاز (انظر «الاستيراد»).
+- مصادر الاستيراد بـ OAuth (Trello وAsana وNotion وMicrosoft To Do) (انظر «الاستيراد»).
 - إشعارات الخادم لتذكيرات الموقع، ولما يتجاوز حد الستين إشعاراً داخل نافذة الأربعة عشر يوماً (انظر «إشعارات الخادم»).

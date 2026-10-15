@@ -77,14 +77,16 @@ export async function request(method, path, body) {
   const headers = { Accept: "application/json" };
   const token = currentToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  // A FormData body (a file upload) sets its own multipart Content-Type with the boundary.
+  const form = typeof FormData !== "undefined" && body instanceof FormData;
+  if (body !== undefined && !form) headers["Content-Type"] = "application/json";
 
   let response;
   try {
     response = await fetch(apiBase() + path, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : form ? body : JSON.stringify(body),
       credentials: "omit",
     });
   } catch {

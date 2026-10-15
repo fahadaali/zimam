@@ -31,6 +31,7 @@ struct SettingsView: View {
                 calendarSection
                 prayerSection
                 notificationsSection
+                importSection
                 accountSection
             }
             .scrollContentBackground(.hidden)
@@ -124,6 +125,22 @@ struct SettingsView: View {
                 Button("فتح إعدادات النظام", systemImage: "gear") { openURL(url) }
                     .frame(minHeight: ZimamSpacing.space11)
             }
+        }
+    }
+
+    /// Tasks from Todoist, TickTick, Google Tasks, a CSV file or Apple Reminders (Import/ImportView.swift).
+    private var importSection: some View {
+        Section {
+            NavigationLink {
+                ImportView()
+            } label: {
+                Label("استيراد المهام", systemImage: "square.and.arrow.down")
+            }
+            .frame(minHeight: ZimamSpacing.space11)
+        } header: {
+            Text("الاستيراد")
+        } footer: {
+            Text("انقل مهامك من Todoist أو TickTick أو Google Tasks أو تذكيرات أبل أو ملف CSV.")
         }
     }
 

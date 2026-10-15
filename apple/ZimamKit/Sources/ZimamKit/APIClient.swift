@@ -216,4 +216,19 @@ public final class APIClient: @unchecked Sendable {
         if Response.self == Empty.self || data.isEmpty { return try JSONDecoder().decode(Response.self, from: Data("{}".utf8)) }
         return try JSONDecoder().decode(Response.self, from: data)
     }
+
+    /// For requests built in other files (a multipart upload): adds the session token, sends,
+    /// and returns the body of a 2xx answer; anything else throws `APIError`, as `send` does.
+    func perform(_ request: URLRequest) async throws -> Data {
+        var request = request
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token = token() { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let detail = try? JSONDecoder().decode(ErrorBody.self, from: data).error
+            throw APIError(status: status, code: detail?.code ?? "http_\(status)", message: detail?.message ?? "")
+        }
+        return data
+    }
 }

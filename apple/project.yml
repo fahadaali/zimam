@@ -68,6 +68,10 @@ targets:
         ENABLE_OUTGOING_NETWORK_CONNECTIONS: YES
         # Location for prayer times (adds the sandbox location entitlement on the Mac).
         ENABLE_RESOURCE_ACCESS_LOCATION: YES
+        # Importing Apple Reminders on the Mac: EventKit's sandbox entitlement is the Calendars one.
+        ENABLE_RESOURCE_ACCESS_CALENDARS: YES
+        # The import file picker (.fileImporter) on the Mac: read-only access to the chosen file.
+        ENABLE_USER_SELECTED_FILES: readonly
     info:
       path: Zimam/Resources/Info.plist
       properties:
@@ -105,6 +109,8 @@ targets:
         # (settings) keeps a city-level place (rounded to 0.1°) on the server; the text says so.
         NSLocationWhenInUseUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، فتصلك المهام والتذكيرات المرتبطة بالصلاة في وقتها. يبقى الموقع على جهازك، إلا إن فعّلت أوقات الصلاة في كلود وChatGPT فيُحفظ في خادم زمام موقع تقريبي على مستوى المدينة.
         NSLocationUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، فتصلك المهام والتذكيرات المرتبطة بالصلاة في وقتها. يبقى الموقع على جهازك، إلا إن فعّلت أوقات الصلاة في كلود وChatGPT فيُحفظ في خادم زمام موقع تقريبي على مستوى المدينة.
+        # Apple Reminders import (Zimam/Import/RemindersImporter.swift): read only when the user imports.
+        NSRemindersFullAccessUsageDescription: يقرأ زمام قوائم التذكيرات التي تختارها حين تطلب استيرادها، فيضيفها مشاريع ومهام في حسابك على زمام. لا يغيّر التذكيرات ولا يحذفها، ولا يقرؤها في غير الاستيراد.
         ZimamAPIURL: $(ZIMAM_API_URL)
         # Sign in with Google reads its client from GIDClientID, and Google's sign-in page
         # returns to the reversed client ID scheme (handled by .onOpenURL in ZimamApp).
