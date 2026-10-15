@@ -40,7 +40,7 @@
 
 ### ٥. خادم MCP لكلود وChatGPT
 
-1. **مخزن KV للرموز:** من **Storage & Databases ← KV ← Create**، باسم `zimam-oauth`. أرسل لـ Claude الـ **Namespace ID** ليضعه في `mcp/wrangler.jsonc`.
+1. **مخزن KV للرموز:** من **Storage & Databases ← KV ← Create**، باسم `zimam-oauth`. معرّفه (`b74ed41be5be43c4aa567d1c010dd4df`) في `mcp/wrangler.jsonc`.
 2. **Workers Builds:** مشروع ثانٍ من نفس المستودع:
 
 | الحقل | القيمة |
