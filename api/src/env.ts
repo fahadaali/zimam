@@ -71,6 +71,26 @@ declare global {
       SUBSCRIPTIONS_ENFORCED: string;
       /** Comma-separated user ids or emails treated as pro whatever their subscription (the owner). */
       PRO_USERS?: string;
+      // Imports through OAuth (src/imports/oauth.ts). A source whose secrets are missing is listed
+      // as unavailable. All are secrets (`wrangler secret put`) except the Google web client id.
+      /** The Google web OAuth client (also in GOOGLE_CLIENT_IDS): Google Calendar imports. Not a secret. */
+      GOOGLE_WEB_CLIENT_ID?: string;
+      /** Secret: the Google web client's secret. */
+      GOOGLE_CLIENT_SECRET?: string;
+      /** Secrets: the Microsoft Entra app (Microsoft To Do). */
+      MS_CLIENT_ID?: string;
+      MS_CLIENT_SECRET?: string;
+      /** Secrets: the Notion public integration. */
+      NOTION_CLIENT_ID?: string;
+      NOTION_CLIENT_SECRET?: string;
+      /** Secret: the Trello Power-Up's API key. */
+      TRELLO_API_KEY?: string;
+      /** Secrets: the Asana app. */
+      ASANA_CLIENT_ID?: string;
+      ASANA_CLIENT_SECRET?: string;
+      /** Secrets: the TickTick Open API app. */
+      TICKTICK_CLIENT_ID?: string;
+      TICKTICK_CLIENT_SECRET?: string;
     }
   }
 }

@@ -10,18 +10,35 @@ final class ImportsTests: XCTestCase {
           {"id":"todoist-csv","label":"Todoist","input":"file","extensions":[".csv"]},
           {"id":"todoist-api","label":"Todoist","input":"token"},
           {"id":"csv","label":"CSV","input":"file","extensions":[".CSV",".tsv",".txt"]},
-          {"id":"trello","label":"Trello","input":"oauth"}
+          {"id":"trello","label":"Trello","input":"oauth","available":false},
+          {"id":"pigeon","label":"Pigeon","input":"carrier","available":true}
         ]}
         """
         let sources = try JSONDecoder().decode(ImportSources.self, from: Data(json.utf8))
         XCTAssertEqual(sources.maxFileBytes, 5_242_880)
-        XCTAssertEqual(sources.sources.map(\.id), ["todoist-csv", "todoist-api", "csv", "trello"])
+        XCTAssertEqual(sources.sources.map(\.id), ["todoist-csv", "todoist-api", "csv", "trello", "pigeon"])
         XCTAssertEqual(sources.sources[0].input, .file)
         XCTAssertEqual(sources.sources[1].input, .token)
         XCTAssertEqual(sources.sources[1].extensions, [])
         XCTAssertEqual(sources.sources[2].extensions, [".csv", ".tsv", ".txt"])
+        // Without `available` (older servers), a source can start.
+        XCTAssertTrue(sources.sources[0].available)
+        XCTAssertEqual(sources.sources[3].input, .oauth)
+        XCTAssertFalse(sources.sources[3].available)
         // A kind of source this version cannot start is kept apart, not a decoding error.
-        XCTAssertEqual(sources.sources[3].input, .unsupported)
+        XCTAssertEqual(sources.sources[4].input, .unsupported)
+    }
+
+    func testReadsTheOAuthCallback() throws {
+        let id = "0B9C6F8E-6F2C-4A4E-9A51-1D2C3B4A5E6F"
+        XCTAssertEqual(ImportCallback(url: try XCTUnwrap(URL(string: "zimam://import-callback?job=\(id)"))), .job(id.lowercased()))
+        XCTAssertEqual(ImportCallback(url: try XCTUnwrap(URL(string: "zimam://import-callback?error=denied"))), .failure("denied"))
+        XCTAssertNil(ImportCallback(url: try XCTUnwrap(URL(string: "zimam://import-callback?job=nope"))))
+        XCTAssertNil(ImportCallback(url: try XCTUnwrap(URL(string: "zimam://join/ABC"))))
+        XCTAssertNil(ImportCallback(url: try XCTUnwrap(URL(string: "https://example.com/import-callback?job=\(id)"))))
+        XCTAssertEqual(ImportText.connect(ImportSource(id: "notion", label: "Notion", input: .oauth)), "الربط بـ Notion")
+        XCTAssertTrue(ImportText.oauthMessage("denied").hasPrefix("لم يكتمل الإذن"))
+        XCTAssertEqual(ImportText.title(forSource: "ticktick-api", label: "TickTick"), "TickTick: الربط بالحساب")
     }
 
     func testDecodesAJobWithCountsWarningsAndErrors() throws {

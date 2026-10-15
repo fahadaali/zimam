@@ -311,7 +311,7 @@ https://zimam.fahad2ao.workers.dev/v1/subscriptions/apple/notifications
 1. أنشئ مشروعاً من [console.cloud.google.com/projectcreate](https://console.cloud.google.com/projectcreate) باسم `zimam`.
 2. **Google Auth Platform ← Branding:** اسم التطبيق `زمام`، وبريد الدعم، وشعار زمام إن أردت (الشعار يتطلب مراجعة Google، فاتركه إن لم يلزم).
 3. **Audience:** اختر **External**، ثم **Publish app** لينتقل إلى **In production**. ما دام في وضع الاختبار لا يدخل إلا المستخدمون المضافون يدوياً.
-4. **Data Access:** لا تضف أي نطاق. زمام يطلب `openid` و`email` و`profile` فقط، وهي لا تحتاج تحققاً من Google.
+4. **Data Access:** لتسجيل الدخول لا يلزم أي نطاق: زمام يطلب `openid` و`email` و`profile` فقط، وهي لا تحتاج تحققاً من Google. واستيراد Google Calendar يضيف نطاق `calendar.readonly` (انظر «الاستيراد بإذن OAuth» أدناه).
 
 ### ٢. عملاء OAuth
 
@@ -336,7 +336,7 @@ https://zimam.fahad2ao.workers.dev/v1/subscriptions/apple/notifications
 - الرابط بلا `.html` ولا شرطة في آخره، كما يبنيه الكود من أصل الصفحة.
 - قد يأخذ Google دقائق قليلة قبل أن يقبل الرابط الجديد.
 
-معرّف العميل ليس سراً، ولا يوجد سر عميل لهذين النوعين في هذا الاستعمال (الخادم يتحقق من رمز الهوية بمفاتيح Google العامة). إن أنشأ Google سراً لعميل الويب فلا ترسله ولا تضعه في أي مكان.
+معرّف العميل ليس سراً، ولا يوجد سر عميل لهذين النوعين في هذا الاستعمال (الخادم يتحقق من رمز الهوية بمفاتيح Google العامة). إن أنشأ Google سراً لعميل الويب فلا ترسله ولا تضعه في المستودع؛ مكانه الوحيد سر `GOOGLE_CLIENT_SECRET` في كلاودفلير، ويحتاجه استيراد Google Calendar فقط (انظر «الاستيراد بإذن OAuth»).
 
 ### ٣. أين وُضع المعرّفان
 
@@ -351,6 +351,120 @@ https://zimam.fahad2ao.workers.dev/v1/subscriptions/apple/notifications
 - جدول `identities` (`api/migrations/0008_identities.sql`) يطبّقه أمر النشر في Workers Builds تلقائياً، وينقل إليه كل حسابات أبل الحالية.
 - عند الانتقال إلى `zimam.app`: أضف `https://zimam.app` و`https://mcp.zimam.app` إلى Authorized JavaScript origins لعميل الويب، و`https://zimam.app/app/google-callback` و`https://mcp.zimam.app/google-callback` إلى Authorized redirect URIs.
 - بعد تعديل `project.yml` شغّل `xcodegen`. أول بناء ينزّل حزمة GoogleSignIn-iOS (الإصدار 9.2.0 فما فوق ضمن 9.x).
+
+## الاستيراد بإذن OAuth
+
+يستورد زمام من Google Calendar وMicrosoft To Do وNotion وTrello وAsana وTickTick بإذن يمنحه المستخدم في صفحة المزوّد نفسه، دون ملف ولا رمز يُنسخ. يجري الخادم التدفق كله (التفاصيل في `api/DEVELOPMENT.md`، «الاستيراد بإذن OAuth»)، فيحتاج كل مزوّد تطبيقاً تسجّله أنت مرة واحدة، ثم أسراره في كلاودفلير.
+
+- **ما دامت أسرار مصدر غير مضبوطة** يظهر في التطبيق والموقع رمادياً مكتوباً تحته «غير متاح الآن»، ولا يتعطل شيء آخر. فاضبط المصادر واحداً واحداً متى شئت.
+- **رابط العودة (Redirect URI)** لكل مصدر هو `https://zimam.fahad2ao.workers.dev/v1/imports/oauth/<source>/callback`، حرفياً، بلا شرطة في آخره. `<source>` معرّف المصدر في الجدول.
+- **الأسرار** بـ `npx wrangler secret put` من داخل `api/` فقط، ولا تُلصق في المحادثة ولا في المستودع. كل أمر يطلب القيمة ثم يطبّقها فوراً على الخادم المنشور، فلا حاجة إلى نشر جديد.
+- جدول `import_oauth_states` (`api/migrations/0013_import_oauth.sql`) يطبّقه أمر النشر في Workers Builds تلقائياً.
+- **عند الانتقال إلى `api.zimam.app`:** رابط العودة يُبنى من نطاق الطلب، فأضف لكل مزوّد الرابط نفسه بالنطاق الجديد (`https://api.zimam.app/v1/imports/oauth/<source>/callback`) قبل نقل التطبيق والموقع إليه.
+
+| المصدر | `<source>` | الأسرار |
+| --- | --- | --- |
+| Google Calendar | `google-calendar` | `GOOGLE_CLIENT_SECRET` (والمعرّف `GOOGLE_WEB_CLIENT_ID` في `wrangler.jsonc`، ليس سراً) |
+| Microsoft To Do | `microsoft-todo` | `MS_CLIENT_ID`، `MS_CLIENT_SECRET` |
+| Notion | `notion` | `NOTION_CLIENT_ID`، `NOTION_CLIENT_SECRET` |
+| Trello | `trello` | `TRELLO_API_KEY` |
+| Asana | `asana` | `ASANA_CLIENT_ID`، `ASANA_CLIENT_SECRET` |
+| TickTick | `ticktick-api` | `TICKTICK_CLIENT_ID`، `TICKTICK_CLIENT_SECRET` |
+
+### ١. Google Calendar
+
+يستعمل مشروع Google Cloud نفسه وعميل الويب نفسه اللذين في «الدخول بحساب قوقل».
+
+1. فعّل Google Calendar API في مشروع `zimam`: [console.cloud.google.com/apis/library/calendar-json.googleapis.com](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com) ← **Enable**.
+2. **Google Auth Platform ← Data Access ← Add or remove scopes**: أضف `https://www.googleapis.com/auth/calendar.readonly` ثم **Save**. هذا نطاق حسّاس (sensitive): حتى تتحقق Google من التطبيق (**Verification Center**، وتطلب شرح الاستعمال ومقطع فيديو لصفحة الموافقة وسياسة الخصوصية) يرى المستخدم «Google hasn't verified this app» ويكمل من **Advanced**، ويقف التطبيق عند ١٠٠ مستخدم لهذا النطاق. يكفي ذلك للتجربة الشخصية؛ اطلب التحقق قبل الإطلاق.
+3. **Clients ← عميل الويب (`404741015373-ukucah…`) ← Authorized redirect URIs ← Add URI**:
+   `https://zimam.fahad2ao.workers.dev/v1/imports/oauth/google-calendar/callback` ثم **Save**.
+4. في صفحة عميل الويب نفسها: **Client secrets ← Add secret** (أو انسخ السر الموجود)، ثم:
+
+```sh
+cd api
+npx wrangler secret put GOOGLE_CLIENT_SECRET
+```
+
+المعرّف مضبوط في `api/wrangler.jsonc` (`GOOGLE_WEB_CLIENT_ID`)، فلا شيء آخر.
+
+### ٢. Microsoft To Do
+
+1. افتح [entra.microsoft.com](https://entra.microsoft.com) ← **Applications ← App registrations ← New registration** (أو من [portal.azure.com](https://portal.azure.com) بالمسار نفسه). يكفي حساب Microsoft شخصي.
+2. **Name:** `زمام`. **Supported account types:** «Accounts in any organizational directory and personal Microsoft accounts» (مهام To Do في الحسابات الشخصية غالباً). **Redirect URI:** المنصة **Web** والرابط `https://zimam.fahad2ao.workers.dev/v1/imports/oauth/microsoft-todo/callback`. ثم **Register**.
+3. **API permissions ← Add a permission ← Microsoft Graph ← Delegated permissions**: اختر `Tasks.Read` و`offline_access` (ويبقى `User.Read` الموجود). لا تحتاج «Grant admin consent»: يوافق كل مستخدم بنفسه.
+4. **Certificates & secrets ← Client secrets ← New client secret**، المدة ٢٤ شهراً، وانسخ **Value** فوراً (لا يظهر مرة أخرى). ضع تذكيراً بتجديده قبل انتهائه، وإلا توقف هذا المصدر وحده.
+5. انسخ **Application (client) ID** من **Overview**، ثم:
+
+```sh
+cd api
+npx wrangler secret put MS_CLIENT_ID
+npx wrangler secret put MS_CLIENT_SECRET
+```
+
+### ٣. Notion
+
+1. افتح [notion.so/profile/integrations](https://www.notion.so/profile/integrations) ← **New integration**، واختر النوع **Public**.
+2. الاسم `زمام` والشعار، ومساحة العمل التي تملكها، وبيانات الشركة: الموقع `https://zimam-web.fahad2ao.workers.dev`، وسياسة الخصوصية `https://zimam-web.fahad2ao.workers.dev/privacy/`، والشروط `https://zimam-web.fahad2ao.workers.dev/terms/`، وبريد الدعم.
+3. **Redirect URIs:** `https://zimam.fahad2ao.workers.dev/v1/imports/oauth/notion/callback`.
+4. **Capabilities:** «Read content» وحدها (لا تحديث ولا إضافة)، و«No user information».
+5. احفظ، ثم انسخ **OAuth Client ID** و**OAuth Client Secret** من تبويب **Configuration**:
+
+```sh
+cd api
+npx wrangler secret put NOTION_CLIENT_ID
+npx wrangler secret put NOTION_CLIENT_SECRET
+```
+
+في صفحة الموافقة يختار المستخدم الصفحات أو قواعد البيانات التي يشاركها مع زمام؛ يستورد زمام كل قاعدة بيانات مشاركة.
+
+### ٤. Trello
+
+Trello لا يعطي رمزاً عبر OAuth 2: الطريق الذي اخترناه «تفويض الرمز» (`trello.com/1/authorize` بـ `response_type=token` و`callback_method=fragment`)، فيرجع Trello إلى صفحة صغيرة في الخادم ومعه الرمز في جزء الرابط بعد `#`، وتسلّمه الصفحة للخادم مرة واحدة. يحتاج مفتاح API فقط، لا سراً ولا توقيع OAuth 1.0a.
+
+1. افتح [trello.com/power-ups/admin](https://trello.com/power-ups/admin) ← **New** (يلزم أن تكون مسؤول مساحة عمل في Trello، ويكفي أن تنشئ مساحة لنفسك).
+2. الاسم `زمام`، ومساحة العمل، والبريد، و**Iframe connector URL** `https://zimam-web.fahad2ao.workers.dev` (لا يُستعمل، لكنه مطلوب). ثم **Create**.
+3. تبويب **API key ← Generate a new API key**.
+4. في الصفحة نفسها، **Allowed origins ← Add**: `https://zimam.fahad2ao.workers.dev` (نطاق رابط العودة؛ بدونه يرفض Trello الرجوع). لا تحتاج **Secret**.
+
+```sh
+cd api
+npx wrangler secret put TRELLO_API_KEY
+```
+
+الرمز بصلاحية القراءة فقط (`scope=read`)، وينتهي بعد يوم (`expiration=1day`)، ولا يُحفظ.
+
+### ٥. Asana
+
+1. افتح [app.asana.com/0/my-apps](https://app.asana.com/0/my-apps) ← **Create new app**، الاسم `زمام`.
+2. **OAuth ← Redirect URLs ← Add redirect URL**: `https://zimam.fahad2ao.workers.dev/v1/imports/oauth/asana/callback`.
+3. **OAuth ← Permission scopes:** زمام لا يرسل نطاقاً، فيُعطى الرمز ما يحدده التطبيق هنا. اختر **Full permissions** إن عُرض، وإلا فنطاقات القراءة: `workspaces:read` و`projects:read` و`tasks:read` (ومعها ما يطلبه Asana للأقسام والوسوم إن عرضها). يقرأ زمام فقط ولا يكتب شيئاً.
+4. **Manage distribution:** «Any workspace» ليستعمله غيرك.
+5. انسخ **Client ID** و**Client secret** من **OAuth**:
+
+```sh
+cd api
+npx wrangler secret put ASANA_CLIENT_ID
+npx wrangler secret put ASANA_CLIENT_SECRET
+```
+
+### ٦. TickTick
+
+1. افتح [developer.ticktick.com/manage](https://developer.ticktick.com/manage) وادخل بحساب TickTick ← **+ App Name**، الاسم `زمام`.
+2. **OAuth redirect URL:** `https://zimam.fahad2ao.workers.dev/v1/imports/oauth/ticktick-api/callback` ثم **Save**.
+3. انسخ **Client ID** و**Client Secret**:
+
+```sh
+cd api
+npx wrangler secret put TICKTICK_CLIENT_ID
+npx wrangler secret put TICKTICK_CLIENT_SECRET
+```
+
+يقرأ بنطاق `tasks:read`. ملف النسخة الاحتياطية CSV يبقى مصدراً مستقلاً، وهو وحده ينقل المهام المنجزة والمجلدات؛ والاستيراد بالطريقتين يحدّث المهام نفسها ولا يكررها.
+
+### التجربة
+
+بعد ضبط أسرار مصدر: في التطبيق «الإعدادات ← استيراد المهام» يظهر المصدر متاحاً، و«الربط بـ …» يفتح صفحة المزوّد ثم يعود إلى شاشة متابعة الاستيراد. وفي الموقع `#/import` تنتقل الصفحة نفسها إلى المزوّد ثم ترجع إلى `#/import?job=…`. إن رجع خطأ («تعذّر إكمال الربط») فراجع رابط العودة حرفاً حرفاً، ثم سجلات الـ Worker (`npx wrangler tail`): تُكتب فيها حالة HTTP لطلب الرمز فقط، لا الرمز ولا الرمز المؤقت (code).
 
 ## طريقة العمل بعد الربط
 

@@ -1,5 +1,6 @@
-// Imports from other apps (api/DEVELOPMENT.md, «الاستيراد»): the server reads a file or a Todoist
-// token on its queue; the page starts the job, follows GET /v1/imports/:id, and shows what happened.
+// Imports from other apps (api/DEVELOPMENT.md, «الاستيراد»): the server reads a file, a Todoist
+// token, or a provider's API after its OAuth flow, on its queue; the page starts the job, follows
+// GET /v1/imports/:id, and shows what happened.
 // Pure functions: no DOM, no network, no clock unless one is passed in.
 import { dualDate } from "./dates.js";
 import { arabicNumber } from "./numbers.js";
@@ -43,11 +44,95 @@ const SOURCES = {
     howTo:
       "أي جدول صفّه الأول أسماء الأعمدة: العنوان (إلزامي)، والملاحظات، والتاريخ، والوقت، والمشروع، والقسم، والأولوية، والحالة، والوسوم. احفظه من Excel أو Numbers أو Google Sheets بصيغة CSV.",
   },
+  "google-calendar": {
+    title: "Google Calendar",
+    subtitle: "أحداث تقاويمك مهاماً",
+    howTo:
+      "تنتقل إلى Google لتأذن لزمام بقراءة تقويمك، ثم تعود هنا. يصير كل تقويم ظاهر في Google Calendar مشروعاً، وكل حدث من آخر ٣٠ يوماً إلى سنة قادمة مهمة في موعده. لا يتغيّر شيء في تقويمك.",
+  },
+  "microsoft-todo": {
+    title: "Microsoft To Do",
+    subtitle: "القوائم والمهام بحساب Microsoft",
+    howTo:
+      "تنتقل إلى Microsoft لتأذن لزمام بقراءة مهامك، ثم تعود هنا. تصير كل قائمة مشروعاً، وقائمة «المهام» صندوق الوارد، وتُنقل الأهمية والمواعيد والتذكيرات والخطوات والمنجزة.",
+  },
+  notion: {
+    title: "Notion",
+    subtitle: "قاعدة بيانات مهام",
+    howTo:
+      "تنتقل إلى Notion وتختار قاعدة بيانات المهام (أو الصفحة التي فيها) لتشاركها مع زمام، ثم تعود هنا. تصير كل قاعدة مشروعاً: العنوان، والتاريخ، والحالة أو مربع الإنجاز، والأولوية، والوسوم.",
+  },
+  trello: {
+    title: "Trello",
+    subtitle: "اللوحات والبطاقات",
+    howTo:
+      "تنتقل إلى Trello لتأذن لزمام بالقراءة، ثم تعود هنا. تصير كل لوحة مشروع كانبان، وقوائمها أعمدة، وبطاقاتها مهام بمواعيدها وتسمياتها وقوائم التحقق.",
+  },
+  asana: {
+    title: "Asana",
+    subtitle: "المشاريع والأقسام والمهام",
+    howTo:
+      "تنتقل إلى Asana لتأذن لزمام بالقراءة، ثم تعود هنا. تُنقل المشاريع غير المؤرشفة بأقسامها ومهامها والمهام الفرعية والمواعيد والمنجزة.",
+  },
+  "ticktick-api": {
+    title: "TickTick: الربط بالحساب",
+    subtitle: "القوائم والمهام المفتوحة مباشرة",
+    howTo:
+      "تنتقل إلى TickTick لتأذن لزمام بقراءة مهامك، ثم تعود هنا. تُنقل القوائم وأعمدة الكانبان والمهام المفتوحة والتكرار والتذكيرات. وللمهام المنجزة استعمل ملف النسخة الاحتياطية.",
+  },
 };
 
-/** Sources this page can start: files and tokens (OAuth ones come later). */
+/** Sources this page can start: files, tokens and OAuth flows. Inputs it does not know are left out. */
 export function usableSources(sources = []) {
-  return sources.filter((s) => s.input === "file" || s.input === "token");
+  return sources.filter((s) => s.input === "file" || s.input === "token" || s.input === "oauth");
+}
+
+/** Whether the server can start the source now (an OAuth source without its secrets cannot). */
+export function isAvailable(source) {
+  return source?.available !== false;
+}
+
+/** The first source that can be started, selected at first. */
+export function firstAvailable(sources = []) {
+  return sources.find(isAvailable) ?? null;
+}
+
+/** GET …/start?return=<this site's origin>: the provider's callback then comes back to this site. */
+export function oauthStartPath(sourceId, origin) {
+  return `/v1/imports/oauth/${encodeURIComponent(sourceId)}/start?return=${encodeURIComponent(origin)}`;
+}
+
+/**
+ * What the OAuth callback sent back in the route: `#/import?job=<id>` once the import is queued,
+ * `#/import?error=<code>` when it is not. Null when the route carries neither.
+ */
+export function oauthReturn(hash = "") {
+  const query = String(hash).split("?")[1] ?? "";
+  const params = new URLSearchParams(query);
+  const job = params.get("job");
+  if (job && /^[0-9a-f-]{36}$/i.test(job)) return { job: job.toLowerCase(), error: null };
+  const error = params.get("error");
+  if (error) return { job: null, error };
+  return null;
+}
+
+const OAUTH_ERRORS = {
+  denied: "لم يكتمل الإذن، فلم يبدأ الاستيراد. ابدأ مرة أخرى ووافق على الإذن إن أردت النقل.",
+  provider_error: "رفض المصدر طلب الإذن. حاول مرة أخرى بعد قليل.",
+  exchange_failed: "تعذّر إكمال الربط بالمصدر. ابدأ الاستيراد مرة أخرى.",
+  pro_required: "الاستيراد من هذا المصدر من مزايا «زمام الاحترافية». اشترك من تطبيق زمام: الإعدادات ثم الاشتراك.",
+  import_in_progress: "يجري استيراد آخر الآن. انتظر حتى ينتهي ثم ابدأ استيراداً جديداً.",
+  import_unavailable: "تعذّر بدء الاستيراد الآن. أعد المحاولة بعد قليل.",
+};
+
+/** Arabic text for an error code the OAuth callback came back with. */
+export function oauthErrorText(code) {
+  return OAUTH_ERRORS[code] ?? OAUTH_ERRORS.exchange_failed;
+}
+
+/** The button that starts an OAuth source: «الربط بـ Notion». */
+export function connectLabel(source) {
+  return `الربط بـ ${source?.label ?? ""}`.trim();
 }
 
 export function sourceTitle(source) {
@@ -131,6 +216,8 @@ export function importErrorText(error, { maxFileBytes = DEFAULT_MAX_BYTES, exten
         : "تعذّر قراءة الطلب. تحقّق من الملف ثم حاول مرة أخرى.";
     case "invalid_source":
       return "هذا المصدر غير متاح. حدّث الصفحة ثم حاول مرة أخرى.";
+    case "source_unavailable":
+      return "هذا المصدر غير متاح الآن. حاول لاحقاً أو اختر مصدراً آخر.";
     case "import_in_progress":
       return "يجري استيراد آخر الآن. انتظر حتى ينتهي ثم ابدأ استيراداً جديداً.";
     case "import_unavailable":

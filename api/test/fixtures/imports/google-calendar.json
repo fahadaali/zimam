@@ -1,0 +1,145 @@
+{
+  "today": "2026-10-15",
+  "calendars": [
+    {
+      "calendar": { "id": "family123@group.calendar.google.com", "summary": "Family", "summaryOverride": "العائلة", "selected": true },
+      "events": [
+        {
+          "id": "dinner1", "status": "confirmed", "summary": "عشاء العائلة",
+          "start": { "dateTime": "2026-10-18T19:00:00+01:00", "timeZone": "Europe/London" },
+          "end": { "dateTime": "2026-10-18T21:00:00+01:00", "timeZone": "Europe/London" }
+        },
+        {
+          "id": "visit_20261017T150000Z", "status": "confirmed", "summary": "زيارة الوالدة", "recurringEventId": "visit",
+          "start": { "dateTime": "2026-10-17T18:00:00+03:00", "timeZone": "Asia/Riyadh" },
+          "end": { "dateTime": "2026-10-17T20:00:00+03:00", "timeZone": "Asia/Riyadh" },
+          "originalStartTime": { "dateTime": "2026-10-17T18:00:00+03:00" }
+        },
+        {
+          "id": "visit_20261031T150000Z", "status": "confirmed", "summary": "زيارة الوالدة", "recurringEventId": "visit",
+          "start": { "dateTime": "2026-10-31T18:00:00+03:00", "timeZone": "Asia/Riyadh" },
+          "end": { "dateTime": "2026-10-31T20:00:00+03:00", "timeZone": "Asia/Riyadh" },
+          "originalStartTime": { "dateTime": "2026-10-31T18:00:00+03:00" }
+        }
+      ],
+      "series": [
+        {
+          "id": "visit", "status": "confirmed", "summary": "زيارة الوالدة",
+          "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=SA"],
+          "start": { "dateTime": "2026-09-05T18:00:00+03:00", "timeZone": "Asia/Riyadh" },
+          "end": { "dateTime": "2026-09-05T20:00:00+03:00", "timeZone": "Asia/Riyadh" }
+        },
+        {
+          "id": "visit_20261024T150000Z", "status": "cancelled", "recurringEventId": "visit",
+          "originalStartTime": { "dateTime": "2026-10-24T18:00:00+03:00" }
+        },
+        {
+          "id": "dinner1", "status": "confirmed", "summary": "عشاء العائلة",
+          "start": { "dateTime": "2026-10-18T19:00:00+01:00", "timeZone": "Europe/London" },
+          "end": { "dateTime": "2026-10-18T21:00:00+01:00", "timeZone": "Europe/London" }
+        }
+      ]
+    },
+    {
+      "calendar": { "id": "ar.saudia#holiday@group.v.calendar.google.com", "summary": "Holidays in Saudi Arabia", "selected": true },
+      "events": [],
+      "series": []
+    },
+    {
+      "calendar": { "id": "old456@group.calendar.google.com", "summary": "قديم", "selected": false },
+      "events": [],
+      "series": []
+    },
+    {
+      "calendar": { "id": "fahad@example.com", "summary": "fahad@example.com", "primary": true, "selected": true },
+      "events": [
+        {
+          "id": "meeting1", "status": "confirmed", "summary": "اجتماع الفريق",
+          "description": "<p>جدول الأعمال</p><ul><li>الميزانية</li><li>الخطة</li></ul>",
+          "location": "مكتب الرياض",
+          "start": { "dateTime": "2026-10-20T09:00:00+03:00", "timeZone": "Asia/Riyadh" },
+          "end": { "dateTime": "2026-10-20T10:00:00+03:00", "timeZone": "Asia/Riyadh" }
+        },
+        {
+          "id": "call1", "status": "confirmed", "summary": "مكالمة مع المورّد",
+          "start": { "dateTime": "2026-10-16T21:30:00Z" },
+          "end": { "dateTime": "2026-10-16T22:00:00Z" }
+        },
+        {
+          "id": "leave1", "status": "confirmed", "summary": "إجازة",
+          "start": { "date": "2026-10-25" }, "end": { "date": "2026-10-28" }
+        },
+        {
+          "id": "day1", "status": "confirmed", "summary": "تسليم المشروع",
+          "start": { "date": "2026-10-22" }, "end": { "date": "2026-10-23" }
+        },
+        {
+          "id": "gone1", "status": "cancelled", "summary": "ملغى",
+          "start": { "date": "2026-10-23" }, "end": { "date": "2026-10-24" }
+        },
+        {
+          "id": "office1", "status": "confirmed", "summary": "Office", "eventType": "workingLocation",
+          "start": { "date": "2026-10-19" }, "end": { "date": "2026-10-20" }
+        },
+        {
+          "id": "untitled1", "status": "confirmed",
+          "start": { "date": "2026-10-19" }, "end": { "date": "2026-10-20" }
+        },
+        {
+          "id": "gym_20261008T150000Z", "status": "confirmed", "summary": "النادي", "recurringEventId": "gym",
+          "start": { "dateTime": "2026-10-08T18:00:00+03:00", "timeZone": "Asia/Riyadh" },
+          "end": { "dateTime": "2026-10-08T19:00:00+03:00", "timeZone": "Asia/Riyadh" }
+        },
+        {
+          "id": "gym_20261015T150000Z", "status": "confirmed", "summary": "النادي", "recurringEventId": "gym",
+          "start": { "dateTime": "2026-10-15T18:00:00+03:00", "timeZone": "Asia/Riyadh" },
+          "end": { "dateTime": "2026-10-15T19:00:00+03:00", "timeZone": "Asia/Riyadh" }
+        },
+        {
+          "id": "gym_20261022T150000Z", "status": "confirmed", "summary": "النادي", "recurringEventId": "gym",
+          "start": { "dateTime": "2026-10-22T18:00:00+03:00", "timeZone": "Asia/Riyadh" },
+          "end": { "dateTime": "2026-10-22T19:00:00+03:00", "timeZone": "Asia/Riyadh" }
+        },
+        {
+          "id": "course_20261014", "status": "confirmed", "summary": "دورة", "recurringEventId": "course",
+          "start": { "date": "2026-10-14" }, "end": { "date": "2026-10-15" }
+        },
+        {
+          "id": "course_20261015", "status": "confirmed", "summary": "دورة", "recurringEventId": "course",
+          "start": { "date": "2026-10-15" }, "end": { "date": "2026-10-16" }
+        },
+        {
+          "id": "course_20261016", "status": "confirmed", "summary": "دورة", "recurringEventId": "course",
+          "start": { "date": "2026-10-16" }, "end": { "date": "2026-10-17" }
+        },
+        {
+          "id": "council_20261101", "status": "confirmed", "summary": "مجلس الحي", "recurringEventId": "council",
+          "start": { "date": "2026-11-01" }, "end": { "date": "2026-11-02" }
+        },
+        {
+          "id": "council_20261206", "status": "confirmed", "summary": "مجلس الحي", "recurringEventId": "council",
+          "start": { "date": "2026-12-06" }, "end": { "date": "2026-12-07" }
+        }
+      ],
+      "series": [
+        {
+          "id": "gym", "status": "confirmed", "summary": "النادي",
+          "description": "أحضر المنشفة",
+          "recurrence": ["RRULE:FREQ=WEEKLY;WKST=SU;BYDAY=TH"],
+          "start": { "dateTime": "2026-09-03T18:00:00+03:00", "timeZone": "Asia/Riyadh" },
+          "end": { "dateTime": "2026-09-03T19:00:00+03:00", "timeZone": "Asia/Riyadh" }
+        },
+        {
+          "id": "course", "status": "confirmed", "summary": "دورة",
+          "recurrence": ["RRULE:FREQ=DAILY;COUNT=3"],
+          "start": { "date": "2026-10-14" }, "end": { "date": "2026-10-15" }
+        },
+        {
+          "id": "council", "status": "confirmed", "summary": "مجلس الحي",
+          "recurrence": ["RRULE:FREQ=MONTHLY;BYDAY=1SU"],
+          "start": { "date": "2026-11-01" }, "end": { "date": "2026-11-02" }
+        }
+      ]
+    }
+  ]
+}

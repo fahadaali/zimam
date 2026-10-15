@@ -5,8 +5,14 @@ import {
   acceptList,
   checkFile,
   checkToken,
+  connectLabel,
   countRows,
   dayOf,
+  firstAvailable,
+  isAvailable,
+  oauthErrorText,
+  oauthReturn,
+  oauthStartPath,
   formatSize,
   importErrorText,
   isFinished,
@@ -125,10 +131,36 @@ test("polling waits longer while queued and backs off after failures", () => {
 test("sources: names, and only the kinds this page can start", () => {
   assert.equal(sourceTitle(csv), "Todoist: ملف مشروع");
   assert.equal(sourceTitle({ id: "trello", label: "Trello" }), "Trello");
+  assert.equal(sourceTitle({ id: "someday", label: "Someday" }), "Someday");
   assert.deepEqual(
-    usableSources([csv, { id: "todoist-api", input: "token" }, { id: "trello", input: "oauth" }]).map((s) => s.id),
-    ["todoist-csv", "todoist-api"],
+    usableSources([csv, { id: "todoist-api", input: "token" }, { id: "trello", input: "oauth" }, { id: "x", input: "carrier-pigeon" }]).map((s) => s.id),
+    ["todoist-csv", "todoist-api", "trello"],
   );
+});
+
+test("OAuth sources: availability, the start request, and the way back", () => {
+  const notion = { id: "notion", label: "Notion", input: "oauth", available: false };
+  const trello = { id: "trello", label: "Trello", input: "oauth", available: true };
+  assert.equal(isAvailable(notion), false);
+  assert.equal(isAvailable(csv), true); // older servers send no `available`
+  assert.equal(firstAvailable([notion, trello, csv]), trello);
+  assert.equal(firstAvailable([notion]), null);
+  assert.equal(connectLabel(trello), "الربط بـ Trello");
+  assert.equal(sourceTitle({ id: "ticktick-api", label: "TickTick" }), "TickTick: الربط بالحساب");
+  assert.equal(
+    oauthStartPath("google-calendar", "https://zimam-web.fahad2ao.workers.dev"),
+    "/v1/imports/oauth/google-calendar/start?return=https%3A%2F%2Fzimam-web.fahad2ao.workers.dev",
+  );
+
+  const id = "0B9C6F8E-6F2C-4A4E-9A51-1D2C3B4A5E6F";
+  assert.deepEqual(oauthReturn(`#/import?job=${id}`), { job: id.toLowerCase(), error: null });
+  assert.deepEqual(oauthReturn("#/import?error=denied"), { job: null, error: "denied" });
+  assert.equal(oauthReturn("#/import"), null);
+  assert.equal(oauthReturn("#/import?job=not-a-job"), null);
+  assert.match(oauthErrorText("denied"), /لم يكتمل الإذن/);
+  assert.match(oauthErrorText("pro_required"), /زمام الاحترافية/);
+  assert.match(oauthErrorText("something-new"), /تعذّر إكمال الربط/);
+  assert.match(importErrorText({ code: "source_unavailable" }), /غير متاح الآن/);
 });
 
 test("job dates show both calendars and the time, with the Arabic comma", () => {

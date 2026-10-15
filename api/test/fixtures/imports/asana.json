@@ -1,0 +1,58 @@
+{
+  "projects": [
+    {
+      "project": { "gid": "1201", "name": "إطلاق الموقع", "archived": false, "default_view": "board" },
+      "sections": [
+        { "gid": "2100", "name": "Untitled section" },
+        { "gid": "2101", "name": "التصميم" },
+        { "gid": "2102", "name": "التطوير" }
+      ],
+      "tasks": [
+        {
+          "gid": "3001", "name": "تصميم الصفحة الرئيسية", "notes": "نسخة الجوال أولاً", "completed": false, "completed_at": null,
+          "due_on": "2026-10-22", "due_at": null, "start_on": "2026-10-19", "start_at": null,
+          "memberships": [{ "project": { "gid": "1201" }, "section": { "gid": "2101" } }],
+          "tags": [{ "name": "تصميم" }], "num_subtasks": 1
+        },
+        {
+          "gid": "3002", "name": "ربط الدفع", "notes": "", "completed": true, "completed_at": "2026-10-12T10:00:00.000Z",
+          "due_on": "2026-10-25", "due_at": "2026-10-25T07:00:00.000Z", "start_on": null, "start_at": null,
+          "memberships": [{ "project": { "gid": "1201" }, "section": { "gid": "2102" } }],
+          "tags": [], "num_subtasks": 0
+        },
+        {
+          "gid": "3003", "name": "مهمة بلا قسم", "completed": false,
+          "memberships": [{ "project": { "gid": "1201" }, "section": { "gid": "2100" } }],
+          "tags": [], "num_subtasks": 0
+        },
+        {
+          "gid": "3004", "name": "قراءة كتاب", "completed": false,
+          "memberships": [{ "project": { "gid": "1201" }, "section": { "gid": "2102" } }, { "project": { "gid": "1202" } }],
+          "tags": [], "num_subtasks": 0
+        }
+      ]
+    },
+    {
+      "project": { "gid": "1202", "name": "شخصي", "archived": false, "default_view": "list" },
+      "sections": [],
+      "tasks": [
+        {
+          "gid": "3004", "name": "قراءة كتاب", "completed": false,
+          "memberships": [{ "project": { "gid": "1201" }, "section": { "gid": "2102" } }, { "project": { "gid": "1202" } }],
+          "tags": [], "num_subtasks": 0
+        },
+        { "gid": "3006", "name": "", "completed": false, "memberships": [{ "project": { "gid": "1202" } }] }
+      ]
+    },
+    {
+      "project": { "gid": "1203", "name": "قديم", "archived": true, "default_view": "list" },
+      "sections": [],
+      "tasks": []
+    }
+  ],
+  "subtasks": {
+    "3001": [
+      { "gid": "3005", "name": "الأيقونات", "completed": false, "due_on": null, "tags": [], "num_subtasks": 0 }
+    ]
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "projects": [
+    { "id": "p-work", "name": "العمل", "color": "#F18181", "closed": false, "viewMode": "kanban", "kind": "TASK", "sortOrder": 1 },
+    { "id": "p-notes", "name": "ملاحظات", "closed": false, "viewMode": "list", "kind": "NOTE", "sortOrder": 2 },
+    { "id": "p-old", "name": "قديم", "closed": true, "viewMode": "list", "kind": "TASK", "sortOrder": 3 }
+  ],
+  "data": {
+    "inbox": {
+      "tasks": [
+        {
+          "id": "t-morning", "projectId": "inbox116", "title": "ورد الصباح", "content": "", "isAllDay": false,
+          "dueDate": "2026-10-14T02:30:00+0000", "startDate": "2026-10-14T02:30:00+0000", "timeZone": "Asia/Riyadh",
+          "repeatFlag": "RRULE:FREQ=DAILY;INTERVAL=1", "priority": 0, "status": 0, "sortOrder": 0
+        }
+      ],
+      "columns": []
+    },
+    "p-work": {
+      "columns": [
+        { "id": "c-todo", "projectId": "p-work", "name": "للعمل", "sortOrder": 0 },
+        { "id": "c-doing", "projectId": "p-work", "name": "قيد العمل", "sortOrder": 1 }
+      ],
+      "tasks": [
+        {
+          "id": "t-report", "projectId": "p-work", "title": "كتابة التقرير", "content": "للإدارة", "isAllDay": true,
+          "startDate": "2026-10-17T21:00:00+0000", "dueDate": "2026-10-19T21:00:00+0000", "timeZone": "Asia/Riyadh",
+          "reminders": ["TRIGGER:P0DT9H0M0S"], "priority": 5, "status": 0, "sortOrder": -1099511627776,
+          "columnId": "c-doing", "tags": ["عمل"],
+          "items": [
+            { "id": "i-intro", "title": "المقدمة", "status": 1, "sortOrder": 0, "completedTime": "2026-10-12T08:00:00+0000" },
+            { "id": "i-end", "title": "الخاتمة", "status": 0, "sortOrder": 1 }
+          ]
+        },
+        {
+          "id": "t-done", "projectId": "p-work", "title": "إرسال الفاتورة", "priority": 3, "status": 2,
+          "completedTime": "2026-10-10T08:00:00+0000", "columnId": "c-todo"
+        },
+        {
+          "id": "t-monthly", "projectId": "p-work", "title": "اجتماع شهري", "isAllDay": false,
+          "dueDate": "2026-10-12T05:00:00+0000", "timeZone": "Asia/Riyadh",
+          "repeatFlag": "RRULE:FREQ=MONTHLY;BYDAY=2MO", "reminders": ["TRIGGER:-PT15M"], "priority": 1, "status": 0
+        }
+      ]
+    }
+  }
+}

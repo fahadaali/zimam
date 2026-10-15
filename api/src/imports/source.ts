@@ -6,12 +6,22 @@ import type { ImportBundle } from "./model";
  *
  * - `file`: the user uploads an export (CSV, JSON). `parse` is pure: text in, bundle out.
  * - `token`: the user pastes a personal API token (Todoist). `load` calls the provider.
- * - `oauth`: the same as `token`, but the token comes from an OAuth flow that the app
- *   runs first (Trello, Asana, Notion, Microsoft To Do: planned, not built). Adding one
- *   means writing its `load` and registering it in `sources/index.ts`; the route,
- *   queue and importer need no change.
+ * - `oauth`: the same as `token`, but the token comes from the provider's OAuth flow, which
+ *   the server runs (`src/imports/oauth.ts`, `src/routes/import-oauth.ts`): its callback puts
+ *   the token in the job's first queue message. Adding one means writing its `load`,
+ *   registering it in `sources/index.ts`, and its provider in `oauth.ts`; the queue and the
+ *   importer need no change.
  */
-export type SourceId = "todoist-csv" | "todoist-api" | "ticktick-csv" | "google-tasks" | "csv";
+export type SourceId =
+  | "todoist-csv"
+  | "todoist-api"
+  | "ticktick-csv"
+  | "google-tasks"
+  | "csv"
+  | OAuthSourceId;
+
+/** Sources whose token comes from an OAuth flow (`src/imports/oauth.ts`). */
+export type OAuthSourceId = "google-calendar" | "microsoft-todo" | "notion" | "trello" | "asana" | "ticktick-api";
 
 export interface ParseContext {
   /** The user's `settings.timeZone`: dates without a zone are read in it. */

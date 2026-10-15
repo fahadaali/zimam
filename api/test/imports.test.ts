@@ -137,6 +137,12 @@ describe("Imports API", () => {
       ["ticktick-csv", "file"],
       ["google-tasks", "file"],
       ["csv", "file"],
+      ["google-calendar", "oauth"],
+      ["microsoft-todo", "oauth"],
+      ["notion", "oauth"],
+      ["trello", "oauth"],
+      ["asana", "oauth"],
+      ["ticktick-api", "oauth"],
     ]);
   });
 
