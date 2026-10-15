@@ -186,6 +186,33 @@ npx wrangler secret put APPLE_PRIVATE_KEY < AuthKey_XXXXXXXXXX.p8   # نص ال�
 
 المفتاح نفسه يخدم التطبيق (`app.zimam.ios`) والويب (`app.zimam.ios.web`) ما دام Services ID مربوطاً بالتطبيق الأساسي كما في خطوة خادم MCP. وللتطوير المحلي ضعهما في `api/.dev.vars` (لا يُرفع إلى المستودع)، والمفتاح في سطر واحد مع `\n` مكان فواصل الأسطر.
 
+### ٦. الروابط العامة (روابط الدعوة تفتح التطبيق)
+
+رابط الدعوة `https://zimam-web.fahad2ao.workers.dev/join/#<code>` يفتح التطبيق مباشرة إن كان مثبتاً، ويفتح صفحة الدعوة في المتصفح إن لم يكن. يحتاج ذلك ثلاثة أشياء، اثنان منها في المستودع:
+
+1. **في حساب المطوّر (خطوتك):** **Identifiers ← App IDs ← `app.zimam.ios`**، فعّل **Associated Domains** واحفظ. يحدّث Xcode ملفات التوقيع في البناء التالي. دون هذه الخطوة يرفض التوقيع الإمكانية `com.apple.developer.associated-domains`.
+2. **في التطبيق:** `apple/project.yml` يضيف `applinks:zimam-web.fahad2ao.workers.dev` إلى إمكانات التطبيق، ثم `xcodegen`. ويفتح `App/InviteLinks.swift` شاشة «الانضمام بدعوة» بالرمز. وزر «فتح في التطبيق» في صفحة الدعوة يستعمل `zimam://join/<code>`، لأن Safari لا يفتح التطبيق من رابط عام إلى الموقع نفسه.
+3. **في الموقع:** `web/public/.well-known/apple-app-site-association` يذكر `72V86SZ2XC.app.zimam.ios` والمسارين `/join` و`/join/*`، وينشر مع الموقع بنوع `application/json`.
+
+للتحقق بعد النشر:
+
+```sh
+curl -sI https://zimam-web.fahad2ao.workers.dev/.well-known/apple-app-site-association   # 200 وContent-Type: application/json
+curl -s https://app-site-association.cdn-apple.com/a/v1/zimam-web.fahad2ao.workers.dev  # ما تراه أبل (يتأخر حتى يوم)
+```
+
+ثم من الملاحظات أو الرسائل على آيفون فيه بناء جديد، اضغط رابط دعوة. أبل تقرأ الملف عند تثبيت التطبيق أو تحديثه، فإن تغيّر الملف فاحذف التطبيق وثبّته من جديد للتجربة. وللتطوير يمكن إضافة `?mode=developer` إلى النطاق في `project.yml` مع تفعيل **Associated Domains Development** في إعدادات المطوّر على الجهاز.
+
+**عند الانتقال إلى `zimam.app`:** تتغيّر أربعة أماكن معاً: `applinks:zimam.app` في `apple/project.yml`، و`ZimamWeb.origin` في `apple/ZimamKit/Sources/ZimamKit/ZimamWeb.swift`، و`INVITE_URL` في `api/src/routes/members.ts`، ويُنشر الملف نفسه على `https://zimam.app/.well-known/apple-app-site-association`. أبقِ النطاق القديم في `project.yml` مدة حتى لا تتعطل الدعوات المرسلة قبل الانتقال (صالحة سبعة أيام)، و`InviteCode` يقرأ الرابطين.
+
+### ٧. سياسة الخصوصية وشروط الاستخدام
+
+الصفحتان `web/public/privacy/` و`web/public/terms/` **مسودتان** كُتبتا من الكود، وفي أعلى كل منهما تنبيه بذلك. قبل الإطلاق:
+
+1. راجعهما مع مستشار قانوني، واملأ ما بين المعقوفين: البريد الإلكتروني للتواصل، واسم المشغّل (شخص أم كيان تجاري)، وموقع تخزين البيانات، ومدة سجلات بوابة الذكاء الاصطناعي، وبنود السن والمسؤولية والنظام الواجب التطبيق. ثم احذف التنبيه وصنف `placeholder`.
+2. في App Store Connect: **App Privacy ← Privacy Policy URL** بالقيمة `https://zimam-web.fahad2ao.workers.dev/privacy/` (لاحقاً `https://zimam.app/privacy/`)، واملأ «تفاصيل الخصوصية» بما تذكره السياسة. وإن اعتمدت شروطاً خاصة بدل اتفاقية أبل القياسية فضع رابط `/terms/` في **License Agreement**.
+3. أي تغيير فيما يجمعه الخادم أو يرسله (حقل جديد، مزوّد جديد) يُحدَّث معه نص السياسة في الطلب نفسه.
+
 ## الدخول بحساب قوقل
 
 يدخل المستخدم بحساب أبل أو قوقل في التطبيق والويب وصفحة ربط كلود وChatGPT. أبل يبقى موجوداً دائماً (البند 4.8 من إرشادات App Store)، ومن دخل بأبل ثم بقوقل ببريد متحقَّق منه نفسه وجد حسابه نفسه (القاعدة وحدودها في `api/DEVELOPMENT.md`، «تسجيل الدخول»).

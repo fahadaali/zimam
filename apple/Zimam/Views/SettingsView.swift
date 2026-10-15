@@ -33,6 +33,7 @@ struct SettingsView: View {
                 notificationsSection
                 importSection
                 accountSection
+                LegalLinksSection()
             }
             .scrollContentBackground(.hidden)
             .background(ZimamColor.surface)

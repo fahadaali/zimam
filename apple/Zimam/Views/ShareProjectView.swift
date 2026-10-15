@@ -348,7 +348,8 @@ private struct CreatedInviteCard: View {
                 .font(ZimamType.caption)
                 .foregroundStyle(ZimamColor.inkMuted)
             HStack(spacing: ZimamSpacing.space2) {
-                ShareLink(item: invite.url, subject: Text("دعوة إلى مشروع في زمام"), message: Text(message)) {
+                // The web join page (ZimamWeb.origin), which also opens the app as a universal link.
+                ShareLink(item: InviteCode.link(for: invite.code), subject: Text("دعوة إلى مشروع في زمام"), message: Text(message)) {
                     Label("مشاركة الدعوة", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(.zimamSecondary)

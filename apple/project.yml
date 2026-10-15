@@ -119,6 +119,10 @@ targets:
           - CFBundleURLName: google
             CFBundleURLSchemes:
               - $(GOOGLE_REVERSED_CLIENT_ID)
+          # «فتح في التطبيق» on the web join page: zimam://join/<code> (App/InviteLinks.swift).
+          - CFBundleURLName: app.zimam.ios.invite
+            CFBundleURLSchemes:
+              - zimam
     entitlements:
       path: Zimam/Resources/Zimam.entitlements
       properties:
@@ -131,6 +135,10 @@ targets:
         # Google Sign-In keeps its tokens in the Keychain; on the Mac it needs the app's own
         # group listed first (GoogleSignIn-iOS README). On iOS this is already the default group.
         keychain-access-groups: [$(AppIdentifierPrefix)app.zimam.ios]
+        # Invite links (https://<site>/join/#<code>) open the app: web/public/.well-known/
+        # apple-app-site-association lists 72V86SZ2XC.app.zimam.ios for /join/*. Needs Associated
+        # Domains on the App ID (docs/setup.md). Becomes applinks:zimam.app with the domain.
+        com.apple.developer.associated-domains: ["applinks:zimam-web.fahad2ao.workers.dev"]
 
   # Home Screen, Lock Screen and Mac desktop widgets: today's tasks from the shared store,
   # completed in place with CompleteTaskIntent.

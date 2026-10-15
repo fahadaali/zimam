@@ -1,0 +1,41 @@
+/* زمام على الويب: the invite view (#/join/<code>, invite-view.js), and the links to the privacy
+   policy and terms under the sign-in card and at the end of every view. Tokens only; logical
+   properties only. */
+
+.signin-invite {
+  padding-block: var(--space-2);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.invite-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.invite-details dd {
+  overflow-wrap: anywhere;
+}
+
+/* «عن زمام»، «سياسة الخصوصية»، «شروط الاستخدام»: quiet, but each link is a 44pt target. */
+.legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--space-3);
+}
+
+.legal-links a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--space-11);
+  color: var(--ink-muted);
+}
+
+.app-legal {
+  margin-block-start: var(--space-11);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--line);
+}

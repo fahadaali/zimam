@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<!-- The code is in the fragment (/join/#<code>), so it never reaches the server; keep it out of search too. -->
+<meta name="robots" content="noindex">
+<title>دعوة إلى مشروع | زمام</title>
+<meta name="description" content="دعوة للانضمام إلى مشروع مشترك في زمام.">
+<meta property="og:title" content="دعوة إلى مشروع في زمام">
+<meta property="og:description" content="افتح الدعوة في تطبيق زمام أو في المتصفح، ثم انضم إلى المشروع.">
+<meta property="og:locale" content="ar_SA">
+<link rel="icon" href="/design/app-icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/design/app-icons/apple-touch-icon-180.png">
+<link rel="stylesheet" href="/design/generated/tokens.css">
+<link rel="stylesheet" href="/design/components/bundle.css">
+<link rel="stylesheet" href="/styles/base.css">
+<link rel="stylesheet" href="/styles/site.css">
+<link rel="stylesheet" href="/styles/pages.css">
+<script type="module" src="/join/join.js"></script>
+</head>
+<body class="zm-root">
+<a class="skip-link visually-hidden" href="#content">تخطَّ إلى المحتوى</a>
+
+<header class="site-header">
+  <div class="site-bar">
+    <a class="site-logo" href="/">
+      <picture>
+        <source srcset="/design/logos/zimam-lockup-ar-on-dark.svg" media="(prefers-color-scheme: dark)">
+        <img src="/design/logos/zimam-lockup-ar.svg" alt="زمام" width="496" height="160">
+      </picture>
+    </a>
+  </div>
+</header>
+
+<main id="content" tabindex="-1">
+  <article class="page">
+    <header class="page-header">
+      <h1 class="display">دعوة إلى مشروع</h1>
+      <p class="body">وصلتك دعوة لتشارك مشروعاً في زمام، مدير المهام العربي. افتحها في التطبيق أو في المتصفح، وسجّل الدخول بحسابك، ثم راجع الدعوة وانضم.</p>
+    </header>
+
+    <!-- join.js fills the code and the two links from the fragment, and shows them. -->
+    <div class="join-code zm-card" id="join-code" hidden>
+      <p class="caption muted" id="join-code-label">رمز الدعوة</p>
+      <code class="body join-code-value" id="join-code-value" dir="ltr" translate="no"></code>
+    </div>
+
+    <div class="join-actions" id="join-actions" hidden>
+      <a class="zm-btn zm-btn-primary zm-btn-link" id="open-app" href="/app/">فتح في التطبيق</a>
+      <a class="zm-btn zm-btn-secondary zm-btn-link" id="open-web" href="/app/">فتح في الويب</a>
+    </div>
+
+    <p class="body" id="join-missing" hidden>لم نجد رمز دعوة في هذا الرابط. تأكد أنك نسخت الرابط كاملاً، أو اطلب من مالك المشروع دعوة جديدة.</p>
+    <noscript><p class="body">افتح تطبيق زمام، واختر «المشاريع» ثم «الانضمام بدعوة»، والصق رابط الدعوة كاملاً.</p></noscript>
+
+    <ul class="join-notes callout muted">
+      <li>إن كان زمام على آيفون أو آيباد أو ماك، يفتح «فتح في التطبيق» شاشة الانضمام فيه مباشرة. وإن لم يفتح، فاختر في التطبيق «المشاريع» ثم «الانضمام بدعوة» والصق الرابط أو الرمز.</li>
+      <li>«فتح في الويب» يفتح زمام في المتصفح، ويعرض الدعوة بعد تسجيل الدخول بحساب أبل أو قوقل.</li>
+      <li>الدعوة لشخص واحد، وتنتهي بعد سبعة أيام من إنشائها. لا تشاركها مع غير من أرسلت إليه.</li>
+    </ul>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <p class="callout muted">زمام، خذ زمام يومك.</p>
+  <nav class="site-footer-links" aria-label="روابط الموقع">
+    <a class="callout" href="/app/">زمام على الويب</a>
+    <a class="callout" href="/privacy/">سياسة الخصوصية</a>
+    <a class="callout" href="/terms/">شروط الاستخدام</a>
+  </nav>
+</footer>
+</body>
+</html>

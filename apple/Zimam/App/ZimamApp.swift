@@ -51,6 +51,8 @@ struct ZimamApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                // The join sheet for an invite link (App/InviteLinks.swift); inside the environment below.
+                .inviteLinkSheet()
                 .environment(session)
                 .environment(sync)
                 .environment(location)
@@ -60,8 +62,15 @@ struct ZimamApp: App {
                 .font(ZimamType.body)
                 .foregroundStyle(ZimamColor.ink)
                 .tint(ZimamColor.brand)
-                // Google's sign-in page returns here through the reversed client ID scheme.
-                .onOpenURL { url in _ = SessionStore.handleOpenURL(url) }
+                // Google's sign-in page returns here through the reversed client ID scheme, and
+                // «فتح في التطبيق» on the web join page through zimam://join/<code>.
+                .onOpenURL { url in
+                    if !SessionStore.handleOpenURL(url) { InviteLinks.shared.open(url) }
+                }
+                // Universal links: https://<site>/join/#<code> (Associated Domains in project.yml).
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    if let url = activity.webpageURL { InviteLinks.shared.open(url) }
+                }
         }
         .modelContainer(container)
     }

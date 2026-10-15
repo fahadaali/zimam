@@ -43,7 +43,7 @@ describe("Invites", () => {
 
     const created = await invite(owner, projectId, "viewer");
     expect(created.status).toBe(201);
-    expect(created.body.url).toBe(`https://zimam.app/join/${created.body.code}`);
+    expect(created.body.url).toBe(`https://zimam-web.fahad2ao.workers.dev/join/#${created.body.code}`);
     expect(created.body.code).toMatch(/^[A-Za-z0-9_-]{40,}$/);
     expect(created.body.expiresAt - Date.now()).toBeGreaterThan(6.9 * 24 * 3600 * 1000);
 

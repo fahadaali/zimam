@@ -1,0 +1,155 @@
+/* زمام — text pages on the site: the privacy policy, the terms of use and the invite page.
+   They share the landing page's header and footer (site.css). Tokens only; logical properties only. */
+
+.page {
+  max-inline-size: var(--measure);
+  padding-block: var(--space-8) var(--space-11);
+}
+
+.page-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block-end: var(--space-6);
+}
+
+/* Draft notice at the top of the legal pages until the owner and a lawyer approve them. */
+.draft-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-block-end: var(--space-6);
+  padding: var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-inline-start: var(--space-1) solid var(--priority-high);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.draft-notice strong {
+  color: var(--priority-high);
+}
+
+/* A placeholder the owner fills before publishing, such as the contact email. */
+.placeholder {
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.toc {
+  margin-block-end: var(--space-8);
+}
+
+.toc ol {
+  display: flex;
+  flex-direction: column;
+  padding-inline-start: var(--space-6);
+}
+
+.toc a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--space-11);
+}
+
+.prose section {
+  padding-block: var(--space-6);
+  border-block-start: 1px solid var(--line);
+  scroll-margin-block-start: var(--space-4);
+}
+
+.prose h2 {
+  margin-block-end: var(--space-3);
+}
+
+.prose h3 {
+  margin-block: var(--space-4) var(--space-2);
+}
+
+.prose p + p,
+.prose p + ul,
+.prose ul + p,
+.prose table + p {
+  margin-block-start: var(--space-3);
+}
+
+.prose ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-inline-start: var(--space-6);
+}
+
+.prose li::marker {
+  color: var(--ink-faint);
+}
+
+.prose strong {
+  font-weight: 600;
+}
+
+/* Tables scroll inside their own box on phones instead of widening the page. */
+.table-wrap {
+  overflow-x: auto;
+  margin-block: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.prose table {
+  inline-size: 100%;
+  min-inline-size: calc(var(--space-11) * 12);
+  border-collapse: collapse;
+}
+
+.prose th,
+.prose td {
+  padding-block: var(--space-2);
+  padding-inline: var(--space-3);
+  text-align: start;
+  vertical-align: top;
+  border-block-end: 1px solid var(--line);
+}
+
+.prose tr:last-child td {
+  border-block-end: 0;
+}
+
+.prose th {
+  background: var(--surface-sunken);
+}
+
+.updated {
+  margin-block-start: var(--space-6);
+}
+
+/* ——— The invite page (/join/) ——— */
+
+.join-code {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-block: var(--space-6);
+}
+
+.join-code-value {
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+.join-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block-end: var(--space-6);
+}
+
+.join-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-inline-start: var(--space-6);
+}

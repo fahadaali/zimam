@@ -10,7 +10,11 @@
 | الملف | ما فيه |
 | --- | --- |
 | `public/index.html` | صفحة التعريف: الشعار، «خذ زمام يومك»، ما يميّز زمام، المنصات، وربط كلود وChatGPT |
-| `public/app/` | تطبيق الويب على `/app/`: صفحة واحدة تتبدّل عروضها برابط `#` (`#/today`، `#/upcoming`، `#/projects`، `#/projects/<id>`، `#/inbox`، `#/search?q=`، `#/import`) |
+| `public/privacy/`، `public/terms/` | سياسة الخصوصية وشروط الاستخدام (**مسودتان** للمراجعة، والمعقوفات `[ ]` يملؤها المالك)، بأنماط `styles/pages.css`. روابطهما في تذييل كل صفحة، وتحت بطاقة الدخول وفي آخر كل عرض في تطبيق الويب، وفي إعدادات التطبيق |
+| `public/join/` | صفحة الدعوة `/join/#<code>`: الرمز بعد `#` فلا يصل إلى الخادم، و`join.js` يقرؤه ويعرض «فتح في التطبيق» (`zimam://join/<code>`) و«فتح في الويب» (`/app/#/join/<code>`). الصيغة القديمة `/join/<code>` تصل إلى صفحة 404 فيحوّلها `join/redirect.js` |
+| `public/.well-known/apple-app-site-association` | الروابط العامة: روابط `/join` تفتح التطبيق `72V86SZ2XC.app.zimam.ios` إن كان مثبتاً، ونوعه `application/json` من `_headers` |
+| `public/app/` | تطبيق الويب على `/app/`: صفحة واحدة تتبدّل عروضها برابط `#` (`#/today`، `#/upcoming`، `#/projects`، `#/projects/<id>`، `#/inbox`، `#/search?q=`، `#/import`، `#/join/<code>`) |
+| `public/app/invite-view.js` | عرض الدعوة (`#/join/<code>`): يعرضها بعد الدخول (`GET /v1/invites/:code`) ثم ينضم (`POST /v1/invites/:code/accept`) ويفتح المشروع. يحفظ الرمز في `sessionStorage` حتى يعود الدخول بقوقل في التبويب نفسه. قراءة الرمز وروابطه في `lib/invites.js` بقواعد `InviteCode` في ZimamKit نفسها، واختبارها `test/invites.test.mjs` |
 | `public/app/main.js` | تسجيل الدخول، والعروض، وإضافة المهمة وإنجازها وحذفها |
 | `public/app/import-view.js` | عرض «استيراد المهام» (`#/import`، من رابط «استيراد» في الترويسة): اختيار المصدر، ورفع الملف أو لصق رمز Todoist مرة واحدة، ومتابعة `GET /v1/imports/:id` حتى ينتهي، والسجل. أنماطه في `import.css`، ومنطقه الخالص في `lib/imports.js` |
 | `public/app/lib/` | وحدات ES: التواريخ (`dates.js`)، والصلاة (`prayer.js`)، والأرقام، والمهام، والـ nonce، والواجهة البرمجية، والمكوّنات |

@@ -65,7 +65,8 @@ public struct ProjectInvite: Codable, Equatable, Sendable, Identifiable {
 public struct CreatedInvite: Codable, Equatable, Sendable {
     public var id: UUID
     public var code: String
-    /// `https://zimam.app/join/<code>`.
+    /// The link the API built. The app shares `InviteCode.link(for: code)`, which follows
+    /// `ZimamWeb.origin`.
     public var url: URL
     public var expiresAt: Milliseconds
 
@@ -101,22 +102,60 @@ public struct TaskComment: Codable, Equatable, Sendable, Identifiable {
     public var createdDate: Date { Date(timeIntervalSince1970: TimeInterval(createdAt) / 1000) }
 }
 
-/// Reads an invite code from what the user pasted: the code itself, or the
-/// `https://zimam.app/join/<code>` link, with or without spaces around it.
+/// Invite codes and links. The link is `https://<site>/join/#<code>`: the code rides in the
+/// fragment, so it never reaches a server log or a `Referer` header, and the static join page
+/// (web/public/join/) reads it in the browser. Older forms are still read: the path form
+/// `/join/<code>` the API returned before (zimam.app), `?code=`, and `zimam://join/<code>`.
+/// web/public/app/lib/invites.js reads them by the same rules.
 public enum InviteCode {
+    /// The link shared for a new invite.
+    public static func link(for code: String) -> URL {
+        URL(string: "\(ZimamWeb.origin.absoluteString)/join/#\(code)")!
+    }
+
+    /// Whether a URL that opened the app is an invite: a universal link to `/join` on a Zimam
+    /// host, or `zimam://join/…`. Other URLs (Google's sign-in return) are left alone.
+    public static func isInviteLink(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        if scheme == ZimamWeb.appScheme { return url.host?.lowercased() == "join" }
+        guard scheme == "https", let host = url.host?.lowercased(), ZimamWeb.inviteHosts.contains(host) else { return false }
+        return url.path == "/join" || url.path.hasPrefix("/join/")
+    }
+
+    /// Reads an invite code from what the user pasted or opened: the code itself, any of the
+    /// link forms above, or a message that ends with the code, with or without spaces around it.
     public static func extract(from text: String) -> String? {
-        var candidate = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let range = candidate.range(of: "/join/") {
-            candidate = String(candidate[range.upperBound...])
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let range = trimmed.range(of: "/join") {
+            return fromLink(trimmed[range.upperBound...])
         }
-        // Drop any query or fragment, and a trailing slash.
-        if let end = candidate.firstIndex(where: { $0 == "?" || $0 == "#" || $0 == "/" }) {
-            candidate = String(candidate[..<end])
+        if isCode(trimmed) { return trimmed }
+        // «…والصق هذا الرمز: <code>»: the last word of a pasted message.
+        if let last = trimmed.split(whereSeparator: { $0.isWhitespace }).last, isCode(String(last)) {
+            return String(last)
         }
-        // Codes are base64url: letters, digits, "-" and "_".
+        return nil
+    }
+
+    /// What follows `/join` in a link: `/<code>`, `/#<code>`, `#<code>` or `/?code=<code>`.
+    /// Anything after the code (a query, a fragment, a slash or more text) is dropped.
+    private static func fromLink(_ tail: Substring) -> String? {
+        var rest = tail
+        while let first = rest.first, first == "/" || first == "#" || first == "?" {
+            rest.removeFirst()
+        }
+        if rest.hasPrefix("code=") { rest.removeFirst(5) }
+        if let end = rest.firstIndex(where: { "?#/&".contains($0) || $0.isWhitespace }) {
+            rest = rest[..<end]
+        }
+        let candidate = String(rest)
+        return isCode(candidate) ? candidate : nil
+    }
+
+    /// Codes are base64url: letters, digits, "-" and "_".
+    private static func isCode(_ candidate: String) -> Bool {
         let allowed = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
-        guard candidate.count >= 8, candidate.count <= 128, candidate.allSatisfy(allowed.contains) else { return nil }
-        return candidate
+        return candidate.count >= 8 && candidate.count <= 128 && candidate.allSatisfy(allowed.contains)
     }
 }
 

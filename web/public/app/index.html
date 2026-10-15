@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="/styles/base.css">
 <link rel="stylesheet" href="/app/app.css">
 <link rel="stylesheet" href="/app/import.css">
+<link rel="stylesheet" href="/app/invite.css">
 <link rel="modulepreload" href="/app/lib/dates.js">
 <script type="module" src="/app/main.js"></script>
 <!-- Sign in with Apple JS (popup mode): the only third-party script, allowed by the CSP in _headers.
@@ -33,6 +34,8 @@
     </picture>
     <h1 class="title" id="signin-title">سجّل الدخول إلى زمام</h1>
     <p class="callout muted">استعمل حساب أبل أو قوقل نفسه الذي تستعمله في تطبيق زمام، فتجد مهامك ومشاريعك هنا.</p>
+    <!-- Shown when an invite (#/join/<code>) waits for sign-in (invite-view.js). -->
+    <p class="callout signin-invite" id="signin-invite" hidden>سجّل الدخول لترى الدعوة التي وصلتك وتنضم إلى المشروع.</p>
     <p class="callout signin-error" id="signin-error" role="alert"></p>
     <!-- Our own buttons, drawn to Apple's and Google's branding rules: Apple's logo on black (white in
          the dark theme), Google's colour G on white (dark grey in the dark theme). Same size and corners. -->
@@ -48,6 +51,10 @@
       </button>
     </div>
     <a class="callout signin-home" href="/">عن زمام</a>
+    <nav class="legal-links caption" aria-label="الخصوصية والشروط">
+      <a href="/privacy/">سياسة الخصوصية</a>
+      <a href="/terms/">شروط الاستخدام</a>
+    </nav>
   </div>
 </section>
 
@@ -80,6 +87,11 @@
   <main class="app-main" id="main" tabindex="-1">
     <p class="callout app-error" id="app-error" role="alert"></p>
     <div id="view"></div>
+    <nav class="legal-links app-legal caption" aria-label="عن زمام">
+      <a href="/">عن زمام</a>
+      <a href="/privacy/">سياسة الخصوصية</a>
+      <a href="/terms/">شروط الاستخدام</a>
+    </nav>
   </main>
 </div>
 
