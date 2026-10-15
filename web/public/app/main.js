@@ -247,12 +247,15 @@ els.signinButton.addEventListener("click", async () => {
   }
   const attempt = pendingNonce;
   prepareNonce();
+  // The API exchanges Apple's code with this same URI, so it must be in its APPLE_WEB_REDIRECT_URI
+  // or APPLE_REDIRECT_URIS (and a Return URL of the Services ID).
+  const redirectURI = `${location.origin}/app`;
   let result;
   try {
     apple.init({
       clientId: APPLE_CLIENT_ID,
       scope: "",
-      redirectURI: `${location.origin}/app`,
+      redirectURI,
       state: attempt.state,
       nonce: attempt.hashed,
       usePopup: true,
@@ -271,7 +274,8 @@ els.signinButton.addEventListener("click", async () => {
   }
   setSigningIn(true);
   try {
-    const { token } = await api.signIn(idToken, attempt.raw);
+    const code = result.authorization.code;
+    const { token } = await api.signIn(idToken, attempt.raw, code ? { authorizationCode: code, redirectUri: redirectURI } : {});
     session.set(token);
     await start();
   } catch (error) {

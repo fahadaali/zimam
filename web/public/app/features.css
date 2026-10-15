@@ -632,8 +632,9 @@ body.is-dragging .zm-task-open {
   border-radius: var(--radius-md);
 }
 
+/* The inline start keeps room for the circle's 44px hit area (base.css), which the list clips. */
 .week-tasks .zm-task {
-  padding-inline: var(--space-2);
+  padding-inline: var(--space-3) var(--space-2);
 }
 
 .week-empty {

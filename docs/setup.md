@@ -56,7 +56,7 @@
    - Return URL: `https://zimam-mcp.fahad2ao.workers.dev/authorize`
 4. **الربط في كلود:** Settings ← Connectors ← Add custom connector، بالرابط `https://zimam-mcp.fahad2ao.workers.dev/mcp`. وفي ChatGPT: فعّل وضع المطوّر (Developer mode) من الإعدادات، ثم أضف موصلاً بنفس الرابط.
 
-بعد حجز النطاق يصير الرابط `https://mcp.zimam.app/mcp`: غيّر `MCP_ORIGIN` في `mcp/wrangler.jsonc`، وأضف النطاق الجديد في Services ID.
+بعد حجز النطاق يصير الرابط `https://mcp.zimam.app/mcp`: غيّر `MCP_ORIGIN` في `mcp/wrangler.jsonc`، وأضف النطاق الجديد في Services ID، ورابط العودة الجديد (`https://mcp.zimam.app/authorize`) إلى `APPLE_REDIRECT_URIS` في `api/wrangler.jsonc` ليُحفظ رمز Apple الذي يُلغى عند حذف الحساب.
 
 ### ٦. الموقع وتطبيق الويب
 
@@ -73,6 +73,8 @@
 2. **Sign in with Apple للويب:** في Services ID `app.zimam.ios.web` أضف:
    - Domain: `zimam-web.fahad2ao.workers.dev`
    - Return URL: `https://zimam-web.fahad2ao.workers.dev/app`
+
+   هذا الرابط هو `APPLE_WEB_REDIRECT_URI` في `api/wrangler.jsonc`: يستبدل الخادم به رمز Apple من الموقع (انظر «رمز Sign in with Apple» في `api/DEVELOPMENT.md`). إن تغيّر النطاق فغيّره في الموضعين.
 
 التفاصيل في `web/README.md`.
 
@@ -284,6 +286,8 @@ https://zimam.fahad2ao.workers.dev/v1/subscriptions/apple/notifications
 ```
 
 واختر **Version 2**. الخادم لا يصدّق محتوى الإشعار، بل يسأل Apple عن المعاملة نفسها. وعند الانتقال إلى `api.zimam.app` غيّر الرابطين.
+
+**فترة السماح (اختياري، يُنصح به):** **Apps ← زمام ← Monetization ← Subscriptions ← Billing Grace Period**: فعّلها واختر مدتها، للمشتركين كلهم وللبيئتين. حين يفشل الدفع يبقى المشترك على «زمام الاحترافية» حتى نهايتها، ويقرؤها الخادم من Apple (عمود `grace_expires_at`، `api/migrations/0014_subscription_grace.sql`).
 
 #### ٥. التجربة
 

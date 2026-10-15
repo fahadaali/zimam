@@ -76,6 +76,7 @@ npx wrangler deploy --dry-run
 
   وعند الانتقال إلى النطاق: `zimam.app` و`https://zimam.app/app`.
 - يولّد المتصفح nonce عشوائياً، ويرسل لأبل تجزئته SHA-256، ثم يرسل الـ nonce الخام مع رمز الهوية إلى `POST /v1/auth/apple` مع `device: "web"`، فيتحقق الخادم أن الرمز صدر لهذا الدخول نفسه. ويُتحقق كذلك من قيمة `state`.
+- ويرسل معهما `authorizationCode` الذي يعطيه أبل، و`redirectUri` الذي طُلب به (`${location.origin}/app`)، فيحفظ الخادم رمز أبل ليلغيه عند حذف الحساب. الرابط يجب أن يكون في `APPLE_WEB_REDIRECT_URI` أو `APPLE_REDIRECT_URIS` في `api/wrangler.jsonc`، وإلا أُهمل الرمز وتم الدخول.
 - أصل الموقع مضاف إلى `ALLOWED_ORIGINS` في `api/wrangler.jsonc`، فإن تغيّر النطاق فأضفه هناك.
 
 ## تسجيل الدخول بحساب قوقل

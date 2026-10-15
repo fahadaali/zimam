@@ -123,6 +123,7 @@ ${loopback}
   <input type="hidden" name="handle" value="${escape(handle)}">
   <input type="hidden" name="decision" value="deny">
   <input type="hidden" name="id_token" value="">
+  <input type="hidden" name="code" value="">
   <input type="hidden" name="provider" value="apple">
   <fieldset>
     <label><input type="checkbox" checked disabled> الاطلاع على المهام والمشاريع وجدول اليوم</label>
@@ -157,9 +158,10 @@ ${loopback}
   const hideError = () => {
     errorBox.style.display = "none";
   };
-  const approve = (provider, idToken) => {
+  const approve = (provider, idToken, code) => {
     form.elements.provider.value = provider;
     form.elements.id_token.value = idToken;
+    form.elements.code.value = code || "";
     form.elements.decision.value = "approve";
     form.submit();
   };
@@ -174,7 +176,8 @@ ${loopback}
     hideError();
     try {
       const result = await AppleID.auth.signIn();
-      approve("apple", result.authorization.id_token);
+      // The code lets the API keep Apple's refresh token, revoked when the account is deleted.
+      approve("apple", result.authorization.id_token, result.authorization.code);
     } catch (error) {
       if (error && (error.error === "popup_closed_by_user" || error.error === "user_cancelled_authorize")) return;
       showError("تعذّر تسجيل الدخول بحساب أبل. حاول مرة أخرى.");

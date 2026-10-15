@@ -93,6 +93,8 @@ struct GanttRow: View {
     private var barHeight: CGFloat { max(height - ZimamSpacing.space3, ZimamSpacing.space6) }
     /// The width of a drag handle at either end of a bar.
     private var handleWidth: CGFloat { ZimamSpacing.space3 }
+    /// The touch target of a drag handle, wider (and taller) than the handle it holds.
+    private var handleTarget: CGFloat { ZimamSpacing.space11 }
 
     /// On the iPhone and iPad a bar drags once selected, so a swipe across the chart still
     /// scrolls it; with a pointer it drags straight away.
@@ -203,7 +205,14 @@ struct GanttRow: View {
                 .fill(ZimamColor.onTimelineBar)
                 .frame(width: ZimamLayout.focusRingWidth, height: barHeight / 2)
                 .frame(width: handleWidth, height: barHeight)
+                // The handle stays thin; its touch target is 44pt. The target grows past the bar's
+                // end (outward), so the middle of a short bar still moves the whole bar, and evenly
+                // above and below. The negative padding keeps the overlay's own size, as the
+                // selection ring does, and follows the layout direction.
+                .frame(width: handleTarget, height: max(barHeight, handleTarget),
+                       alignment: part == .start ? .trailing : .leading)
                 .contentShape(Rectangle())
+                .padding(part == .start ? .leading : .trailing, handleWidth - handleTarget)
                 .gesture(drag(part))
                 .accessibilityHidden(true)
         }

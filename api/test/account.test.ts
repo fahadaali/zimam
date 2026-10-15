@@ -1,8 +1,13 @@
+import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { decodeProtectedHeader, exportPKCS8, generateKeyPair, jwtVerify, UnsecuredJWT } from "jose";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppleTokenClient, AppleTokenError, appleTokensFromEnv } from "../src/auth/apple-tokens";
-import { appleToken, call, fakeApple, pullAll, push, signIn, uuid } from "./helpers";
+import { AppleTokenClient, AppleTokenError, appleRedirectUris, appleTokensFromEnv } from "../src/auth/apple-tokens";
+import { ZimamService } from "../src/service";
+import { appleToken, call, fakeApple, pullAll, push, signIn, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
+
+const WEB_REDIRECT = "https://zimam-web.fahad2ao.workers.dev/app";
+const MCP_REDIRECT = "https://zimam-mcp.fahad2ao.workers.dev/authorize";
 
 type User = Awaited<ReturnType<typeof signIn>>;
 
@@ -37,10 +42,10 @@ const deleteMe = (user: User) => call("DELETE", "/v1/me", { token: user.token })
 
 const userRow = (id: string) => env.DB.prepare(`SELECT * FROM users WHERE id = ?`).bind(id).first<Record<string, unknown>>();
 
-/** Signs in through the app with an authorization code, as SessionStore does. */
-async function signInWithCode(sub: string, code: string, audience = "app.zimam.ios") {
+/** Signs in through the app with an authorization code, as SessionStore does (the web adds its redirect URI). */
+async function signInWithCode(sub: string, code: string, audience = "app.zimam.ios", redirectUri?: string) {
   const res = await call("POST", "/v1/auth/apple", {
-    body: { identityToken: await appleToken(sub, { audience }), authorizationCode: code },
+    body: { identityToken: await appleToken(sub, { audience }), authorizationCode: code, redirectUri },
   });
   expect(res.status).toBe(200);
   return { token: res.body.token as string, userId: res.body.user.id as string };
@@ -243,6 +248,53 @@ describe("Sign in with Apple tokens", () => {
     expect(fakeApple.revoked).toEqual([{ refreshToken: "web-refresh", clientId: "app.zimam.ios.web" }]);
   });
 
+  it("exchanges a web code with the redirect URI the page used, when it is allowed", async () => {
+    const sub = `apple-${uuid()}`;
+    fakeApple.codes.set("site-code", { refreshToken: "site-refresh", sub });
+    const user = await signInWithCode(sub, "site-code", "app.zimam.ios.web", WEB_REDIRECT);
+    expect(fakeApple.exchanged).toEqual([{ code: "site-code", clientId: "app.zimam.ios.web", redirectUri: WEB_REDIRECT }]);
+    expect(await userRow(user.userId)).toMatchObject({ apple_refresh_token: "site-refresh", apple_client_id: "app.zimam.ios.web" });
+
+    // A redirect URI outside the allowlist never reaches Apple; signing in still works.
+    fakeApple.codes.set("odd-code", { refreshToken: "odd-refresh", sub });
+    const odd = await signInWithCode(sub, "odd-code", "app.zimam.ios.web", "https://evil.example/app");
+    expect(odd.userId).toBe(user.userId);
+    expect(fakeApple.exchanged).toHaveLength(1);
+    expect(await userRow(user.userId)).toMatchObject({ apple_refresh_token: "site-refresh" });
+
+    const bad = await call("POST", "/v1/auth/apple", {
+      body: { identityToken: await appleToken(sub, { audience: "app.zimam.ios.web" }), authorizationCode: "x", redirectUri: "not a url" },
+    });
+    expect(bad.status).toBe(400);
+  });
+
+  it("keeps the MCP consent page's code through ZimamService, with its own redirect URI", async () => {
+    const tokens = ZimamService.appleTokens;
+    const keys = ZimamService.keys;
+    ZimamService.appleTokens = () => fakeApple;
+    ZimamService.keys = { apple: testAppleKeys, google: testGoogleKeys };
+    try {
+      const service = new ZimamService(createExecutionContext(), env);
+      const sub = `apple-${uuid()}`;
+      fakeApple.codes.set("mcp-code", { refreshToken: "mcp-refresh", sub });
+      const idToken = await appleToken(sub, { audience: "app.zimam.ios.web", nonce: "handle-9" });
+      const signedIn = await service.signInWithApple(idToken, "handle-9", { authorizationCode: "mcp-code", redirectUri: MCP_REDIRECT });
+      expect(signedIn.ok).toBe(true);
+      if (!signedIn.ok) return;
+      expect(fakeApple.exchanged).toEqual([{ code: "mcp-code", clientId: "app.zimam.ios.web", redirectUri: MCP_REDIRECT }]);
+      expect(await userRow(signedIn.value.userId)).toMatchObject({ apple_refresh_token: "mcp-refresh" });
+
+      // Without a code, or with a redirect URI that is not allowed, it signs in and keeps nothing new.
+      expect((await service.signInWithApple(idToken, "handle-9")).ok).toBe(true);
+      fakeApple.codes.set("stray", { refreshToken: "stray-refresh", sub });
+      expect((await service.signInWithApple(idToken, "handle-9", { authorizationCode: "stray", redirectUri: "https://zimam-mcp.fahad2ao.workers.dev/other" })).ok).toBe(true);
+      expect(fakeApple.exchanged).toHaveLength(1);
+    } finally {
+      ZimamService.appleTokens = tokens;
+      ZimamService.keys = keys;
+    }
+  });
+
   it("still signs in when the code is rejected or belongs to someone else", async () => {
     const sub = `apple-${uuid()}`;
     const rejected = await signInWithCode(sub, "unknown-code");
@@ -304,6 +356,8 @@ describe("Apple token client", () => {
       code: "the-code",
       grant_type: "authorization_code",
     });
+    // The app's codes have no redirect URI.
+    expect(request!.form.has("redirect_uri")).toBe(false);
     const secret = request!.form.get("client_secret")!;
     expect(decodeProtectedHeader(secret)).toMatchObject({ alg: "ES256", kid: "KEY123" });
     const { payload } = await jwtVerify(secret, publicKey, { issuer: "72V86SZ2XC", audience: "https://appleid.apple.com" });
@@ -324,6 +378,19 @@ describe("Apple token client", () => {
       token_type_hint: "refresh_token",
     });
     await expect(apple.exchangeCode("used", "app.zimam.ios")).rejects.toThrow(AppleTokenError);
+  });
+
+  it("sends a web code's redirect URI, and allows the configured ones", async () => {
+    const { apple, requests } = await client([Response.json({ refresh_token: "r2" })]);
+    expect(await apple.exchangeCode("web", "app.zimam.ios.web", WEB_REDIRECT)).toEqual({ refreshToken: "r2", sub: null });
+    expect(requests[0]!.form.get("redirect_uri")).toBe(WEB_REDIRECT);
+    expect(appleRedirectUris(env)).toEqual([WEB_REDIRECT, MCP_REDIRECT]);
+    expect(appleRedirectUris({ APPLE_WEB_REDIRECT_URI: " https://a.test/app ", APPLE_REDIRECT_URIS: "https://b.test/x, ,https://c.test/y" })).toEqual([
+      "https://a.test/app",
+      "https://b.test/x",
+      "https://c.test/y",
+    ]);
+    expect(appleRedirectUris({})).toEqual([]);
   });
 
   it("is off until the key secrets are set", () => {

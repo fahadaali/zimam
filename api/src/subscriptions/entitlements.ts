@@ -2,7 +2,7 @@ import { createMiddleware } from "hono/factory";
 import type { Env } from "../env";
 import { fail } from "../http";
 import type { AppEnv } from "../types";
-import type { AppStoreEnvironment, AppStoreTransaction } from "./appstore";
+import type { AppStoreEnvironment, AppStoreRenewal, AppStoreTransaction } from "./appstore";
 
 /**
  * «زمام الاحترافية»: who is pro, and the gate in front of pro features (the assistant,
@@ -22,7 +22,7 @@ export const PRO_REQUIRED = {
 
 export interface Plan {
   plan: "free" | "pro";
-  /** When the pro period ends (ms); null for free and for PRO_USERS. */
+  /** When the pro period ends (ms), the end of the billing grace period while in it; null for free and for PRO_USERS. */
   expiresAt: number | null;
   productId: string | null;
   /** Where pro comes from: an App Store subscription, or the PRO_USERS override. */
@@ -58,17 +58,23 @@ async function isOverride(env: Env, userId: string): Promise<boolean> {
   return results.some((r) => emails.includes(r.email));
 }
 
-/** The user's plan now: an unexpired, unrevoked subscription, or PRO_USERS. */
+/**
+ * When an entitlement row stops giving pro: its expiry, or the end of its billing grace period
+ * when Apple is still retrying the payment (migrations/0014_subscription_grace.sql).
+ */
+const PRO_UNTIL = `MAX(COALESCE(expires_at, 0), COALESCE(grace_expires_at, 0))`;
+
+/** The user's plan now: an unexpired (or in its grace period), unrevoked subscription, or PRO_USERS. */
 export async function currentPlan(env: Env, userId: string, now = Date.now()): Promise<Plan> {
   const enforced = isEnforced(env);
   const row = await env.DB.prepare(
-    `SELECT product_id, expires_at, environment FROM entitlements
-     WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY expires_at DESC LIMIT 1`,
+    `SELECT product_id, ${PRO_UNTIL} AS pro_until, environment FROM entitlements
+     WHERE user_id = ? AND revoked_at IS NULL AND ${PRO_UNTIL} > ? ORDER BY pro_until DESC LIMIT 1`,
   )
     .bind(userId, now)
-    .first<{ product_id: string; expires_at: number; environment: AppStoreEnvironment }>();
+    .first<{ product_id: string; pro_until: number; environment: AppStoreEnvironment }>();
   if (row) {
-    return { plan: "pro", expiresAt: row.expires_at, productId: row.product_id, source: "apple", environment: row.environment, enforced };
+    return { plan: "pro", expiresAt: row.pro_until, productId: row.product_id, source: "apple", environment: row.environment, enforced };
   }
   if (await isOverride(env, userId)) {
     return { plan: "pro", expiresAt: null, productId: null, source: "override", environment: null, enforced };
@@ -154,9 +160,21 @@ export async function ownerForNotification(db: D1Database, transaction: AppStore
   return token && (await userState(db, token)) === "active" ? token : null;
 }
 
-function statusOf(transaction: AppStoreTransaction, now: number): "active" | "expired" | "revoked" {
+/**
+ * The end of the billing grace period, when Apple says the subscription is in it: Apple is
+ * retrying the payment and the grace period has a date. Pro lasts until then.
+ */
+export function graceEnd(transaction: AppStoreTransaction, renewal: AppStoreRenewal | null | undefined): number | null {
+  if (!renewal || transaction.revocationDate) return null;
+  if (renewal.originalTransactionId !== transaction.originalTransactionId) return null;
+  if (!renewal.isInBillingRetryPeriod || !renewal.gracePeriodExpiresDate) return null;
+  return renewal.gracePeriodExpiresDate;
+}
+
+function statusOf(transaction: AppStoreTransaction, grace: number | null, now: number): "active" | "expired" | "revoked" {
   if (transaction.revocationDate) return "revoked";
-  return transaction.expiresDate && transaction.expiresDate > now ? "active" : "expired";
+  const until = Math.max(transaction.expiresDate ?? 0, grace ?? 0);
+  return until > now ? "active" : "expired";
 }
 
 /**
@@ -164,6 +182,10 @@ function statusOf(transaction: AppStoreTransaction, now: number): "active" | "ex
  * transaction of the subscription: an older one (a restore sending an earlier renewal)
  * does not move the row back, but the same transaction again (a refund) updates it.
  * The old half of an upgrade within the group is skipped; its successor carries on.
+ *
+ * `renewal`: the subscription's renewal state, read when `needsRenewal` says so. Its billing
+ * grace period, retry and expiration intent are saved with the row; without it they are
+ * cleared (an active or refunded transaction needs none).
  */
 export async function applyTransaction(
   db: D1Database,
@@ -171,18 +193,23 @@ export async function applyTransaction(
   transaction: AppStoreTransaction,
   environment: AppStoreEnvironment,
   now = Date.now(),
+  renewal?: AppStoreRenewal | null,
 ): Promise<void> {
   if (transaction.isUpgraded) return;
+  const grace = graceEnd(transaction, renewal);
+  const sameSubscription = renewal?.originalTransactionId === transaction.originalTransactionId;
   await db
     .prepare(
       `INSERT INTO entitlements (original_transaction_id, user_id, product_id, transaction_id, purchased_at,
-         expires_at, environment, status, revoked_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+         expires_at, environment, status, revoked_at, updated_at, grace_expires_at, billing_retry, expiration_intent)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
        ON CONFLICT (original_transaction_id) DO UPDATE SET
          product_id = excluded.product_id, transaction_id = excluded.transaction_id,
          purchased_at = excluded.purchased_at, expires_at = excluded.expires_at,
          environment = excluded.environment, status = excluded.status,
-         revoked_at = excluded.revoked_at, updated_at = excluded.updated_at
+         revoked_at = excluded.revoked_at, updated_at = excluded.updated_at,
+         grace_expires_at = excluded.grace_expires_at, billing_retry = excluded.billing_retry,
+         expiration_intent = excluded.expiration_intent
        WHERE entitlements.user_id = excluded.user_id
          AND (excluded.purchased_at >= entitlements.purchased_at OR excluded.transaction_id = entitlements.transaction_id)`,
     )
@@ -194,9 +221,12 @@ export async function applyTransaction(
       transaction.purchaseDate ?? 0,
       transaction.expiresDate ?? null,
       environment,
-      statusOf(transaction, now),
+      statusOf(transaction, grace, now),
       transaction.revocationDate ?? null,
       now,
+      grace,
+      sameSubscription && renewal?.isInBillingRetryPeriod ? 1 : 0,
+      sameSubscription ? (renewal?.expirationIntent ?? null) : null,
     )
     .run();
 }

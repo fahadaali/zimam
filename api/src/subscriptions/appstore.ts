@@ -2,8 +2,9 @@ import { decodeJwt, importPKCS8, SignJWT } from "jose";
 import type { Env } from "../env";
 
 /**
- * The App Store Server API, as the subscriptions need it: one transaction by id.
- * Passed through `Deps.appStore` so tests use a fake.
+ * The App Store Server API, as the subscriptions need it: one transaction by id, and a
+ * subscription's renewal state (for the billing grace period). Passed through
+ * `Deps.appStore` so tests use a fake.
  *
  * Why decoding is enough: the transaction is fetched by the server from Apple, over TLS,
  * with a token signed by our In-App Purchase key. Nothing in it came from a client. So
@@ -38,9 +39,31 @@ export interface AppStoreTransaction {
   type?: string;
 }
 
+/**
+ * A subscription's state from Get All Subscription Statuses, with the fields of its
+ * JWSRenewalInfoDecodedPayload that Zimam reads. Dates are ms since 1970.
+ */
+export interface AppStoreRenewal {
+  originalTransactionId: string;
+  /** 1 active, 2 expired, 3 in billing retry, 4 in the billing grace period, 5 revoked. */
+  status: number;
+  /** While in the billing grace period: when it ends. Pro lasts until then. */
+  gracePeriodExpiresDate?: number;
+  /** Apple is still trying to charge for the renewal (the grace period is the start of this). */
+  isInBillingRetryPeriod?: boolean;
+  /** Why it expired: 1 cancelled, 2 billing error, 3 price increase refused, 4 product unavailable, 5 other. */
+  expirationIntent?: number;
+  autoRenewStatus?: number;
+}
+
 export interface AppStore {
   /** The transaction as Apple has it in `environment`, or null when Apple does not know it there. */
   getTransaction(transactionId: string, environment: AppStoreEnvironment): Promise<AppStoreTransaction | null>;
+  /**
+   * The renewal state of the subscription `originalTransactionId` started (GET
+   * /inApps/v1/subscriptions/{id}), or null when Apple does not know it in `environment`.
+   */
+  getRenewal(originalTransactionId: string, environment: AppStoreEnvironment): Promise<AppStoreRenewal | null>;
 }
 
 /** Apple could not be reached or refused our key: the caller answers 503 and Apple's retries (or the app's) try again. */
@@ -61,6 +84,20 @@ export async function findTransaction(
     if (transaction) return { transaction, environment };
   }
   return null;
+}
+
+/** Notifications after which the renewal state is read again, whatever the transaction says. */
+const RENEWAL_NOTIFICATIONS = new Set(["DID_FAIL_TO_RENEW", "GRACE_PERIOD_EXPIRED"]);
+
+/**
+ * Whether the renewal state is needed to know if the user is still pro: an expired (not
+ * revoked) subscription may be in the billing grace period, and a failed renewal or the end
+ * of the grace period changes it. An active or refunded one is answered by its transaction.
+ */
+export function needsRenewal(transaction: AppStoreTransaction, now: number, notificationType?: string): boolean {
+  if (transaction.revocationDate || transaction.isUpgraded) return false;
+  if (notificationType && RENEWAL_NOTIFICATIONS.has(notificationType)) return true;
+  return !transaction.expiresDate || transaction.expiresDate <= now;
 }
 
 /** Reads the payload of a JWS from Apple (signedTransactionInfo, signedPayload) without verifying it. */
@@ -110,10 +147,43 @@ export class AppStoreClient implements AppStore {
   }
 
   async getTransaction(transactionId: string, environment: AppStoreEnvironment): Promise<AppStoreTransaction | null> {
-    const url = `${HOSTS[environment]}/inApps/v1/transactions/${encodeURIComponent(transactionId)}`;
+    const body = await this.get(environment, `/inApps/v1/transactions/${encodeURIComponent(transactionId)}`);
+    if (body === null) return null;
+    const signed = (body as { signedTransactionInfo?: unknown }).signedTransactionInfo;
+    const transaction = typeof signed === "string" ? decodeAppleJws<AppStoreTransaction>(signed) : null;
+    if (!transaction || typeof transaction.transactionId !== "string") {
+      throw new AppStoreError(`App Store ${environment} returned no transaction`);
+    }
+    return transaction;
+  }
+
+  async getRenewal(originalTransactionId: string, environment: AppStoreEnvironment): Promise<AppStoreRenewal | null> {
+    const body = await this.get(environment, `/inApps/v1/subscriptions/${encodeURIComponent(originalTransactionId)}`);
+    if (body === null) return null;
+    // StatusResponse: data[] by subscription group, each with lastTransactions[] by subscription.
+    type Item = { originalTransactionId?: unknown; status?: unknown; signedRenewalInfo?: unknown };
+    const groups = (body as { data?: { lastTransactions?: Item[] }[] }).data;
+    const items = Array.isArray(groups) ? groups.flatMap((g) => (Array.isArray(g?.lastTransactions) ? g.lastTransactions : [])) : [];
+    const item = items.find((i) => i?.originalTransactionId === originalTransactionId);
+    if (!item) return null;
+    const info = typeof item.signedRenewalInfo === "string" ? decodeAppleJws<Partial<AppStoreRenewal>>(item.signedRenewalInfo) : null;
+    return {
+      originalTransactionId,
+      status: typeof item.status === "number" ? item.status : 0,
+      gracePeriodExpiresDate: typeof info?.gracePeriodExpiresDate === "number" ? info.gracePeriodExpiresDate : undefined,
+      isInBillingRetryPeriod: info?.isInBillingRetryPeriod === true,
+      expirationIntent: typeof info?.expirationIntent === "number" ? info.expirationIntent : undefined,
+      autoRenewStatus: typeof info?.autoRenewStatus === "number" ? info.autoRenewStatus : undefined,
+    };
+  }
+
+  /** A GET with our token: the JSON body, or null for 404 (not found) and 400 (not a valid id). */
+  private async get(environment: AppStoreEnvironment, path: string): Promise<unknown> {
     let response: Response;
     try {
-      response = await this.fetcher(url, { headers: { Authorization: `Bearer ${await this.bearer()}`, Accept: "application/json" } });
+      response = await this.fetcher(`${HOSTS[environment]}${path}`, {
+        headers: { Authorization: `Bearer ${await this.bearer()}`, Accept: "application/json" },
+      });
     } catch (error) {
       throw new AppStoreError(`App Store ${environment}: ${error instanceof Error ? error.name : "network error"}`);
     }
@@ -128,14 +198,10 @@ export class AppStoreClient implements AppStore {
       } catch {}
       throw new AppStoreError(`App Store ${environment} failed: ${reason}`);
     }
-    let signed: unknown;
     try {
-      signed = (JSON.parse(text) as { signedTransactionInfo?: unknown }).signedTransactionInfo;
-    } catch {}
-    const transaction = typeof signed === "string" ? decodeAppleJws<AppStoreTransaction>(signed) : null;
-    if (!transaction || typeof transaction.transactionId !== "string") {
-      throw new AppStoreError(`App Store ${environment} returned no transaction`);
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new AppStoreError(`App Store ${environment} returned an unreadable answer`);
     }
-    return transaction;
   }
 }

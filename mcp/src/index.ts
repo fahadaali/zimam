@@ -53,7 +53,10 @@ async function authorize(request: Request, env: Env, backend: ZimamBackend): Pro
 
     const idToken = String(form.get("id_token") ?? "");
     const google = form.get("provider") === "google";
-    const signIn = google ? await backend.signInWithGoogle(idToken, handle) : await backend.signInWithApple(idToken, handle);
+    // Apple's code is exchanged with the redirect URI the consent page gave Sign in with Apple JS.
+    const authorizationCode = String(form.get("code") ?? "").slice(0, 1000);
+    const code = authorizationCode ? { authorizationCode, redirectUri: `${env.MCP_ORIGIN}/authorize` } : undefined;
+    const signIn = google ? await backend.signInWithGoogle(idToken, handle) : await backend.signInWithApple(idToken, handle, code);
     if (!signIn.ok) {
       const account = google ? "قوقل" : "أبل";
       return html(messagePage("تعذّر تسجيل الدخول", `لم نتمكن من التحقق من حساب ${account}. ارجع إلى التطبيق وابدأ الربط من جديد.`), 401);

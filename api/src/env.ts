@@ -12,6 +12,10 @@ declare global {
       APPLE_KEY_ID?: string;
       /** Secret (`wrangler secret put`): the Sign in with Apple key, the .p8 file's PEM text. */
       APPLE_PRIVATE_KEY?: string;
+      /** The web app's Sign in with Apple redirect URI (its /app page); a web code is exchanged with it. Not a secret. */
+      APPLE_WEB_REDIRECT_URI?: string;
+      /** Comma-separated other redirect URIs a client may say it used (the MCP consent page's /authorize). */
+      APPLE_REDIRECT_URIS?: string;
       /**
        * Comma-separated Google OAuth client IDs whose ID tokens sign in (iOS, web). Not secrets.
        * Empty turns Sign in with Google off (503 `google_unavailable`).
