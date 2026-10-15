@@ -102,18 +102,102 @@ export function oauthStartPath(sourceId, origin) {
   return `/v1/imports/oauth/${encodeURIComponent(sourceId)}/start?return=${encodeURIComponent(origin)}`;
 }
 
+/** POST: starts the import a provider's callback left waiting, once the user agreed. */
+export const OAUTH_CONFIRM_PATH = "/v1/imports/oauth/confirm";
+
+/** How long the server keeps a returned flow waiting (PENDING_TTL_MS in api/src/imports/oauth.ts). */
+export const PENDING_TTL_MS = 10 * 60_000;
+
+/** sessionStorage: a provider's return kept through sign-in (Google's whole-tab flow loses the hash). */
+export const PENDING_IMPORT_KEY = "zimam.pendingImport";
+
+const isPendingId = (text) => typeof text === "string" && /^[A-Za-z0-9_-]{20,200}$/.test(text);
+const isSourceId = (text) => typeof text === "string" && /^[a-z0-9-]{1,40}$/.test(text);
+const isToken = (text) => typeof text === "string" && text.length > 0 && text.length <= 500;
+
 /**
- * What the OAuth callback sent back in the route: `#/import?job=<id>` once the import is queued,
- * `#/import?error=<code>` when it is not. Null when the route carries neither.
+ * What the OAuth callback sent back in the route, all of it after `#`:
+ * `#/import?pending=<id>&source=<id>` (and `&token=<…>` from Trello's page) when the provider
+ * agreed and the import waits for the user's confirmation, `#/import?error=<code>` when it did
+ * not. Null when the route carries neither. Nothing has started yet in either case.
  */
 export function oauthReturn(hash = "") {
   const query = String(hash).split("?")[1] ?? "";
   const params = new URLSearchParams(query);
-  const job = params.get("job");
-  if (job && /^[0-9a-f-]{36}$/i.test(job)) return { job: job.toLowerCase(), error: null };
+  const pending = params.get("pending");
+  if (isPendingId(pending)) {
+    const source = params.get("source");
+    const token = params.get("token");
+    return { pending, source: isSourceId(source) ? source : null, token: isToken(token) ? token : null, error: null };
+  }
   const error = params.get("error");
-  if (error) return { job: null, error };
+  if (error) return { pending: null, source: null, token: null, error };
   return null;
+}
+
+/** What sessionStorage keeps of a return through sign-in: the same fields, and when. */
+export function storedPending(back, now = Date.now()) {
+  return JSON.stringify({ pending: back.pending, source: back.source ?? null, token: back.token ?? null, at: now });
+}
+
+/** A kept return, if it is well formed and the server still waits for it; null otherwise. */
+export function readStoredPending(text, now = Date.now()) {
+  let value;
+  try {
+    value = JSON.parse(text ?? "");
+  } catch {
+    return null;
+  }
+  if (!value || !isPendingId(value.pending) || typeof value.at !== "number" || now - value.at > PENDING_TTL_MS || value.at > now) return null;
+  return {
+    pending: value.pending,
+    source: isSourceId(value.source) ? value.source : null,
+    token: isToken(value.token) ? value.token : null,
+    error: null,
+  };
+}
+
+const PROVIDER_NAMES = {
+  "google-calendar": "Google Calendar",
+  "microsoft-todo": "Microsoft To Do",
+  notion: "Notion",
+  trello: "Trello",
+  asana: "Asana",
+  "ticktick-api": "TickTick",
+};
+
+/** The signed-in account as the confirmation names it: «فهد، fahad@example.com», or either alone. */
+export function accountLabel(me) {
+  const parts = [me?.name, me?.email].map((s) => (typeof s === "string" ? s.trim() : "")).filter(Boolean);
+  return parts.length ? parts.join("، ") : null;
+}
+
+/**
+ * The question before an OAuth import starts: «استيراد بيانات Notion إلى حسابك فهد؟». It names
+ * the account the data will go to, so data never lands in an account the person does not
+ * recognise (a provider link someone else started).
+ */
+export function confirmQuestion(sourceId, account) {
+  const name = PROVIDER_NAMES[sourceId];
+  const what = name ? `بيانات ${name}` : "البيانات";
+  return account ? `استيراد ${what} إلى حسابك ${account}؟` : `استيراد ${what} إلى حسابك؟`;
+}
+
+export const CONFIRM_NOTE = "تأكّد أن هذا حسابك. إن لم تبدأ هذا الاستيراد بنفسك من زمام فاختر «إلغاء».";
+
+/** Arabic text for a refused POST /v1/imports/oauth/confirm. */
+export function confirmErrorText(error) {
+  switch (error?.code) {
+    case "not_found":
+      return "انتهت صلاحية الطلب أو لا يخص حسابك. ابدأ الاستيراد مرة أخرى من حسابك في زمام.";
+    case "expired":
+      return "انتهت صلاحية طلب الاستيراد أو استُعمل من قبل. ابدأ الاستيراد مرة أخرى.";
+    case "invalid_token":
+    case "exchange_failed":
+      return oauthErrorText("exchange_failed");
+    default:
+      return importErrorText(error, { input: "oauth" });
+  }
 }
 
 const OAUTH_ERRORS = {

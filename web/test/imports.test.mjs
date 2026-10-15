@@ -1,11 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  CONFIRM_NOTE,
   DEFAULT_MAX_BYTES,
+  OAUTH_CONFIRM_PATH,
+  PENDING_TTL_MS,
   acceptList,
+  accountLabel,
   checkFile,
   checkToken,
+  confirmErrorText,
+  confirmQuestion,
   connectLabel,
+  readStoredPending,
+  storedPending,
   countRows,
   dayOf,
   firstAvailable,
@@ -152,15 +160,50 @@ test("OAuth sources: availability, the start request, and the way back", () => {
     "/v1/imports/oauth/google-calendar/start?return=https%3A%2F%2Fzimam-web.fahad2ao.workers.dev",
   );
 
-  const id = "0B9C6F8E-6F2C-4A4E-9A51-1D2C3B4A5E6F";
-  assert.deepEqual(oauthReturn(`#/import?job=${id}`), { job: id.toLowerCase(), error: null });
-  assert.deepEqual(oauthReturn("#/import?error=denied"), { job: null, error: "denied" });
+  const id = "Zk3_q-8vXc1Lr0aT9yUeWb2NpHs4MdFg7jK6oQiAxYz";
+  assert.deepEqual(oauthReturn(`#/import?pending=${id}&source=notion`), { pending: id, source: "notion", token: null, error: null });
+  // Trello's token, carried in the fragment by its callback page.
+  assert.deepEqual(oauthReturn(`#/import?pending=${id}&source=trello&token=ATTA0123`), { pending: id, source: "trello", token: "ATTA0123", error: null });
+  assert.deepEqual(oauthReturn(`#/import?pending=${id}&source=<b>`), { pending: id, source: null, token: null, error: null });
+  assert.deepEqual(oauthReturn("#/import?error=denied"), { pending: null, source: null, token: null, error: "denied" });
   assert.equal(oauthReturn("#/import"), null);
-  assert.equal(oauthReturn("#/import?job=not-a-job"), null);
+  assert.equal(oauthReturn("#/import?pending=short"), null);
+  // A job id in the address starts nothing: only the confirm does.
+  assert.equal(oauthReturn("#/import?job=0b9c6f8e-6f2c-4a4e-9a51-1d2c3b4a5e6f"), null);
   assert.match(oauthErrorText("denied"), /لم يكتمل الإذن/);
   assert.match(oauthErrorText("pro_required"), /زمام الاحترافية/);
   assert.match(oauthErrorText("something-new"), /تعذّر إكمال الربط/);
   assert.match(importErrorText({ code: "source_unavailable" }), /غير متاح الآن/);
+});
+
+test("OAuth return: asks which account receives the data before confirming", () => {
+  assert.equal(OAUTH_CONFIRM_PATH, "/v1/imports/oauth/confirm");
+  const account = accountLabel({ name: "فهد", email: "fahad@example.com" });
+  assert.equal(account, "فهد، fahad@example.com");
+  assert.equal(accountLabel({ name: " ", email: null }), null);
+  assert.equal(accountLabel(null), null);
+  assert.equal(confirmQuestion("notion", account), "استيراد بيانات Notion إلى حسابك فهد، fahad@example.com؟");
+  assert.equal(confirmQuestion("ticktick-api", "a@b.c"), "استيراد بيانات TickTick إلى حسابك a@b.c؟");
+  assert.equal(confirmQuestion(null, null), "استيراد البيانات إلى حسابك؟");
+  assert.match(CONFIRM_NOTE, /«إلغاء»/);
+
+  // Another account's flow, or one swept after expiry: the server's 404.
+  assert.match(confirmErrorText({ code: "not_found", status: 404 }), /لا يخص حسابك/);
+  assert.match(confirmErrorText({ code: "expired", status: 410 }), /استُعمل من قبل/);
+  assert.match(confirmErrorText({ code: "exchange_failed", status: 502 }), /تعذّر إكمال الربط/);
+  assert.match(confirmErrorText({ code: "import_in_progress", status: 409 }), /استيراد آخر/);
+});
+
+test("OAuth return: kept through sign-in for ten minutes at most", () => {
+  const now = Date.UTC(2026, 9, 15, 12);
+  const back = { pending: "Zk3_q-8vXc1Lr0aT9yUeWb2NpHs4MdFg7jK6oQiAxYz", source: "trello", token: "ATTA0123", error: null };
+  const text = storedPending(back, now);
+  assert.deepEqual(readStoredPending(text, now + 60_000), back);
+  assert.equal(readStoredPending(text, now + PENDING_TTL_MS + 1), null);
+  assert.equal(readStoredPending(text, now - 1), null);
+  assert.equal(readStoredPending(null, now), null);
+  assert.equal(readStoredPending("{not json", now), null);
+  assert.equal(readStoredPending(JSON.stringify({ pending: "x", at: now }), now), null);
 });
 
 test("job dates show both calendars and the time, with the Arabic comma", () => {

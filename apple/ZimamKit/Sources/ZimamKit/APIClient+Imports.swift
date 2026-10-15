@@ -53,6 +53,24 @@ public extension APIClient {
         return url
     }
 
+    /// `POST /v1/imports/oauth/confirm`: starts the import a provider's callback left waiting
+    /// (`ImportCallback.pending`), once the user has agreed to import into this account. `token`
+    /// is Trello's, from the callback's fragment; sent once, kept nowhere. 202 with the queued job;
+    /// refused with `not_found` (404: expired and swept, or another account's), `expired` (410),
+    /// `invalid_token` (400), `pro_required` (403), `import_in_progress` (409),
+    /// `exchange_failed` (502) or `import_unavailable` (503).
+    func confirmOAuthImport(pending: String, token: String?) async throws -> ImportJob {
+        struct Body: Encodable {
+            let pending: String
+            let token: String?
+        }
+        var request = URLRequest(url: baseURL.appendingPathComponent("v1/imports/oauth/confirm"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(Body(pending: pending, token: token))
+        return try Self.decodeJob(try await perform(request))
+    }
+
     /// `GET /v1/imports`: the latest twenty, newest first.
     func imports() async throws -> [ImportJob] {
         struct Response: Decodable { let jobs: [ImportJob] }

@@ -130,6 +130,7 @@ export async function deleteAccount(db: D1Database, access: Access, mutator: Mut
       // Their files in R2 go when the queue next sees the job missing, or by the bucket's lifecycle rule.
       `DELETE FROM import_jobs WHERE user_id = ?1`,
       `DELETE FROM import_oauth_states WHERE user_id = ?1`,
+      `DELETE FROM import_oauth_pending WHERE user_id = ?1`,
       // The subscription itself stays with Apple until the user cancels it in their Apple account.
       `DELETE FROM entitlements WHERE user_id = ?1`,
       `DELETE FROM sessions WHERE user_id = ?1`,

@@ -1,11 +1,11 @@
 import SwiftUI
 import ZimamKit
 
-/// `zimam://import-callback?job=<id>` (or `?error=<code>`), where the server's OAuth callback for an
-/// import returns (api/DEVELOPMENT.md, «الاستيراد بإذن OAuth»). `ImportSourceView` normally
-/// receives it from ASWebAuthenticationSession itself; this handles the link when the system
-/// opens the app with it instead (the session was gone), and shows the job, or why it did not start,
-/// in a sheet once someone is signed in.
+/// `zimam://import-callback?pending=<id>&source=<id>` (or `?error=<code>`), where the server's OAuth
+/// callback for an import returns (api/DEVELOPMENT.md, «الاستيراد بإذن OAuth»). `ImportSourceView`
+/// normally receives it from ASWebAuthenticationSession itself; this handles the link when the system
+/// opens the app with it instead (the session was gone). Once someone is signed in, a sheet asks
+/// whether to import into that account and only then starts it, or says why it did not start.
 @MainActor
 @Observable
 final class ImportLinks {
@@ -30,7 +30,7 @@ final class ImportLinks {
 }
 
 extension View {
-    /// Presents the import an opened callback link names, once the user is signed in.
+    /// Presents the import an opened callback link waits for, once the user is signed in.
     func importLinkSheet() -> some View {
         modifier(ImportLinkSheet())
     }
@@ -44,10 +44,10 @@ private struct ImportLinkSheet: ViewModifier {
         let current = session.isSignedIn ? links.pending : nil
         content.sheet(item: Binding(get: { current }, set: { links.pending = $0 })) { pending in
             NavigationStack {
-                ImportCallbackView(callback: pending.callback)
+                ImportCallbackView(callback: pending.callback, close: { links.pending = nil })
                     .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("تم") { links.pending = nil }
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("إغلاق") { links.pending = nil }
                         }
                     }
             }
@@ -57,39 +57,24 @@ private struct ImportLinkSheet: ViewModifier {
     }
 }
 
-/// The job the callback named (loaded, then followed), or the reason it did not start.
+/// The question before the import starts, then the job it started (followed); or the reason the
+/// provider's page did not finish.
 private struct ImportCallbackView: View {
     let callback: ImportCallback
+    let close: () -> Void
 
     @Environment(SessionStore.self) private var session
     @State private var job: ImportJob?
-    @State private var loadFailed = false
+    @State private var isConfirming = false
+    @State private var errorMessage: String?
 
     var body: some View {
         switch callback {
-        case .job(let id):
+        case .pending(let pending):
             if let job {
                 ImportJobView(job: job)
             } else {
-                Form {
-                    if loadFailed {
-                        Text("بدأ الاستيراد، وتعذّر عرض حالته الآن. تجده في «الإعدادات» ثم «استيراد المهام».")
-                            .font(ZimamType.callout)
-                    } else {
-                        ProgressView()
-                            .frame(maxWidth: .infinity, minHeight: ZimamSpacing.space11)
-                    }
-                }
-                .scrollContentBackground(.hidden)
-                .background(ZimamColor.surface)
-                .navigationTitle("الاستيراد")
-                .task(id: id) {
-                    do {
-                        job = try await session.api.importJob(id: id)
-                    } catch {
-                        loadFailed = true
-                    }
-                }
+                confirmForm(pending)
             }
         case .failure(let code):
             Form {
@@ -100,6 +85,64 @@ private struct ImportCallbackView: View {
             .scrollContentBackground(.hidden)
             .background(ZimamColor.surface)
             .navigationTitle("الاستيراد")
+        }
+    }
+
+    /// «استيراد بيانات Notion إلى حسابك فهد؟» with «استيراد» and «إلغاء». Someone else's flow
+    /// (a provider link they sent) is refused by the server with 404, so nothing is imported.
+    private func confirmForm(_ pending: ImportCallback.Pending) -> some View {
+        Form {
+            Section {
+                Text(ImportText.confirmQuestion(source: pending.source,
+                                                account: ImportText.accountLabel(name: session.user?.name, email: session.user?.email)))
+                    .font(ZimamType.headline)
+                Text(ImportText.confirmNote)
+                    .font(ZimamType.callout)
+                    .foregroundStyle(ZimamColor.inkMuted)
+            }
+
+            Section {
+                Button {
+                    Task { await confirm(pending) }
+                } label: {
+                    HStack(spacing: ZimamSpacing.space2) {
+                        if isConfirming { ProgressView() }
+                        Text(isConfirming ? "جارٍ البدء…" : "استيراد")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.zimamPrimary)
+                .disabled(isConfirming)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+
+                Button("إلغاء", role: .cancel) { close() }
+                    .frame(maxWidth: .infinity, minHeight: ZimamSpacing.space11)
+                    .disabled(isConfirming)
+            }
+
+            if let errorMessage {
+                Section {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle")
+                        .font(ZimamType.callout)
+                        .foregroundStyle(ZimamColor.priorityHigh)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(ZimamColor.surface)
+        .navigationTitle("الاستيراد")
+    }
+
+    private func confirm(_ pending: ImportCallback.Pending) async {
+        guard !isConfirming else { return }
+        errorMessage = nil
+        isConfirming = true
+        defer { isConfirming = false }
+        do {
+            job = try await session.api.confirmOAuthImport(pending: pending.id, token: pending.token)
+        } catch {
+            errorMessage = ImportText.confirmMessage(for: error)
         }
     }
 }

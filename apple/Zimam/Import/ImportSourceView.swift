@@ -5,7 +5,8 @@ import ZimamKit
 
 /// One server source: how to export from the other app, then a file to upload, a token to
 /// paste, or the provider's OAuth page (ASWebAuthenticationSession, returning to
-/// `zimam://import-callback`). Once the server takes the job, the screen follows it (`ImportJobView`).
+/// `zimam://import-callback?pending=…`, then asking «استيراد بيانات … إلى حسابك …؟» before the
+/// server starts anything). Once the server takes the job, the screen follows it (`ImportJobView`).
 struct ImportSourceView: View {
     let source: ImportSource
     let maxFileBytes: Int
@@ -25,6 +26,8 @@ struct ImportSourceView: View {
     /// The server answered `pro_required` (only when it enforces plans): offer the paywall.
     @State private var needsPro = false
     @State private var showingPaywall = false
+    /// Back from the provider: the import waits for the user's «استيراد» in the alert.
+    @State private var confirming: ImportCallback.Pending?
 
     init(source: ImportSource, maxFileBytes: Int, onStarted: @escaping (ImportJob) -> Void = { _ in }) {
         self.source = source
@@ -81,6 +84,15 @@ struct ImportSourceView: View {
             }
         }
         .sheet(isPresented: $showingPaywall) { PaywallView() }
+        // Names the account the data goes to before anything starts (api/DEVELOPMENT.md,
+        // «الاستيراد بإذن OAuth»): «إلغاء» leaves the server's pending record to expire.
+        .alert(Text(confirmQuestion), isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
+               presenting: confirming) { pending in
+            Button("استيراد") { Task { await confirm(pending) } }
+            Button("إلغاء", role: .cancel) { confirming = nil }
+        } message: { _ in
+            Text(ImportText.confirmNote)
+        }
         .scrollContentBackground(.hidden)
         .background(ZimamColor.surface)
         .navigationTitle(ImportText.title(forSource: source.id, label: source.label))
@@ -166,6 +178,11 @@ struct ImportSourceView: View {
 
     private var trimmedToken: String { token.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+    private var confirmQuestion: String {
+        ImportText.confirmQuestion(source: confirming?.source ?? source.id,
+                                   account: ImportText.accountLabel(name: session.user?.name, email: session.user?.email))
+    }
+
     private var extensionsText: String {
         source.extensions.map { $0.replacingOccurrences(of: ".", with: "").uppercased() }.joined(separator: "، ")
     }
@@ -236,8 +253,9 @@ struct ImportSourceView: View {
         }
     }
 
-    /// Opens the provider's page; its consent ends at the server's callback, which queues the import
-    /// and returns to `zimam://import-callback?job=…` (or `?error=…`).
+    /// Opens the provider's page; its consent ends at the server's callback, which keeps the
+    /// authorization for ten minutes and returns to `zimam://import-callback?pending=…` (or
+    /// `?error=…`). Nothing starts until the user confirms in the alert (`confirm`).
     private func connect() async {
         guard !isStarting else { return }
         errorMessage = nil
@@ -260,12 +278,8 @@ struct ImportSourceView: View {
             return
         }
         switch ImportCallback(url: callback) {
-        case .job(let id)?:
-            do {
-                started(try await session.api.importJob(id: id))
-            } catch {
-                errorMessage = "بدأ الاستيراد، وتعذّر عرض حالته الآن. تجده في «آخر عمليات الاستيراد»."
-            }
+        case .pending(let pending)?:
+            confirming = pending
         case .failure(let code)?:
             needsPro = code == "pro_required"
             errorMessage = ImportText.oauthMessage(code)
@@ -274,6 +288,27 @@ struct ImportSourceView: View {
             }
         case nil:
             errorMessage = ImportText.oauthMessage("")
+        }
+    }
+
+    /// «استيراد» in the alert: the server checks the flow is this account's, exchanges the
+    /// authorization, and queues the import (`POST /v1/imports/oauth/confirm`).
+    private func confirm(_ pending: ImportCallback.Pending) async {
+        guard !isStarting else { return }
+        confirming = nil
+        errorMessage = nil
+        runningJob = nil
+        needsPro = false
+        isStarting = true
+        defer { isStarting = false }
+        do {
+            started(try await session.api.confirmOAuthImport(pending: pending.id, token: pending.token))
+        } catch {
+            needsPro = APIError.requiresPro(error)
+            errorMessage = ImportText.confirmMessage(for: error)
+            if (error as? APIError)?.code == "import_in_progress" {
+                runningJob = try? await session.api.imports().first { !$0.isFinished }
+            }
         }
     }
 

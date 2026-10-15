@@ -80,7 +80,7 @@ struct ZimamApp: App {
                 // widgets through zimam://task/<id>, zimam://day/<day>, zimam://today and
                 // zimam://calendar (App/AppLinks.swift), and «فتح في التطبيق» on the web join page
                 // through zimam://join/<code>. An import's OAuth flow returns through
-                // zimam://import-callback?job=<id> (Import/ImportLinks.swift).
+                // zimam://import-callback?pending=<id> (Import/ImportLinks.swift).
                 .onOpenURL { url in
                     if SessionStore.handleOpenURL(url) { return }
                     if AppLinks.open(url) { return }
