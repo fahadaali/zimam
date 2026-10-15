@@ -188,6 +188,20 @@ export class Mutator {
            WHERE deleted_at IS NULL AND task_id IN (SELECT id FROM tasks WHERE project_id = ?1)`,
         )
         .bind(id, at),
+      // Attachments on the project's tasks; their files leave R2 on the next purge (src/attachments.ts).
+      this.db
+        .prepare(
+          `INSERT INTO changes (entity, entity_id, project_id, user_id, at)
+           SELECT 'attachment', id, ?1, NULL, ?2 FROM attachments
+           WHERE deleted_at IS NULL AND task_id IN (SELECT id FROM tasks WHERE project_id = ?1)`,
+        )
+        .bind(id, now),
+      this.db
+        .prepare(
+          `UPDATE attachments SET deleted_at = ?2, updated_at = ?2
+           WHERE deleted_at IS NULL AND task_id IN (SELECT id FROM tasks WHERE project_id = ?1)`,
+        )
+        .bind(id, at),
       ...(["task", "section"] as const).flatMap((entity) => [
         this.db
           .prepare(
@@ -350,9 +364,28 @@ export class Mutator {
              SELECT 'comment', id, ?2, ?3, ?4 FROM comments WHERE (task_id = ?1 OR task_id IN sub) AND deleted_at IS NULL`,
           )
           .bind(t.id, newScope.projectId, newScope.userId, now),
+        // Attachments follow their task: the old audience drops them, the new one gets them.
+        this.logAttachmentsOfTree(t.id, this.taskScope(existing), now),
+        this.db
+          .prepare(
+            `${DESCENDANTS} UPDATE attachments SET project_id = ?2, updated_at = MAX(updated_at, ?3)
+             WHERE (task_id = ?1 OR task_id IN sub) AND deleted_at IS NULL`,
+          )
+          .bind(t.id, t.projectId, now),
+        this.logAttachmentsOfTree(t.id, newScope, now),
       );
     }
     await this.db.batch(statements);
+  }
+
+  /** Change rows for the live attachments of a task and its subtasks, addressed to `scope`. */
+  private logAttachmentsOfTree(taskId: string, scope: Scope, at: number) {
+    return this.db
+      .prepare(
+        `${DESCENDANTS} INSERT INTO changes (entity, entity_id, project_id, user_id, at)
+         SELECT 'attachment', id, ?2, ?3, ?4 FROM attachments WHERE (task_id = ?1 OR task_id IN sub) AND deleted_at IS NULL`,
+      )
+      .bind(taskId, scope.projectId, scope.userId, at);
   }
 
   private async deleteTask(task: Row, at: number) {
@@ -368,6 +401,17 @@ export class Mutator {
         .bind(task.id, now),
       this.db
         .prepare(`${tree} UPDATE reminders SET deleted_at = ?2, updated_at = ?2 WHERE task_id IN tree AND deleted_at IS NULL`)
+        .bind(task.id, at),
+      // Attachments, logged to their task's audience; their files leave R2 on the next purge.
+      this.db
+        .prepare(
+          `${tree} INSERT INTO changes (entity, entity_id, project_id, user_id, at)
+           SELECT 'attachment', a.id, t.project_id, CASE WHEN t.project_id IS NULL THEN t.owner_id END, ?2
+           FROM attachments a JOIN tasks t ON t.id = a.task_id WHERE a.task_id IN tree AND a.deleted_at IS NULL`,
+        )
+        .bind(task.id, now),
+      this.db
+        .prepare(`${tree} UPDATE attachments SET deleted_at = ?2, updated_at = ?2 WHERE task_id IN tree AND deleted_at IS NULL`)
         .bind(task.id, at),
       this.db
         .prepare(

@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="/app/import.css">
 <link rel="stylesheet" href="/app/invite.css">
 <link rel="stylesheet" href="/app/features.css">
+<link rel="stylesheet" href="/app/attachments.css">
 <link rel="modulepreload" href="/app/lib/dates.js">
 <script type="module" src="/app/main.js"></script>
 <!-- Sign in with Apple JS (popup mode): the only third-party script, allowed by the CSP in _headers.
@@ -173,6 +174,8 @@
   <div class="sheet-form">
     <h2 class="title task-dialog-title" id="task-dialog-title"></h2>
     <dl class="details" id="task-details"></dl>
+    <!-- Filled by attachments-view.js when the dialog opens. -->
+    <section class="task-attachments" id="task-attachments" aria-labelledby="task-attachments-title"></section>
     <p class="callout field-error" id="task-error" role="alert"></p>
     <div class="sheet-actions" id="task-actions">
       <button type="button" class="zm-btn zm-btn-secondary" id="task-delete">حذف المهمة</button>

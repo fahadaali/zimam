@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AiError, ANTHROPIC_MODEL, AnthropicProvider, DeepSeekProvider, providerFromEnv } from "../src/ai/provider";
-import { monthOf, resetDate } from "../src/ai/quota";
+import { DEFAULT_MONTHLY_LIMIT, monthOf, planMonthlyLimit, resetDate } from "../src/ai/quota";
 import { addDays, dayIn, dayOfHijri, hijriParts } from "../src/data/dates";
 import type { Env } from "../src/env";
 import { call, fakeAi, signIn, uuid } from "./helpers";
@@ -169,6 +169,29 @@ describe("monthly quota", () => {
     await env.DB.prepare(`INSERT INTO ai_usage (user_id, month, requests) VALUES (?, '2020-01', 1000)`).bind(other.userId).run();
     fakeAi.answer(suggestion());
     expect((await call("POST", "/v1/assistant/parse", { token: other.token, body: { text: "مهمة" } })).status).toBe(200);
+  });
+
+  it("gives everyone the pro limit while plans are not enforced", async () => {
+    const { token } = await signIn();
+    const vars = { AI_MONTHLY_LIMIT_FREE: "0", AI_MONTHLY_LIMIT_PRO: "1", SUBSCRIPTIONS_ENFORCED: "false" };
+    fakeAi.answer(suggestion());
+    expect((await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" }, env: vars })).status).toBe(200);
+    const res = await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" }, env: vars });
+    expect(res.status).toBe(429);
+    expect(res.body.error).toMatchObject({ code: "ai_quota_exceeded", limit: 1, plan: "pro" });
+  });
+
+  it("reads the limit by plan, falling back to AI_MONTHLY_LIMIT, then to 300", () => {
+    expect(env.AI_MONTHLY_LIMIT_FREE).toBe("20");
+    expect(env.AI_MONTHLY_LIMIT_PRO).toBe("300");
+    const vars = { AI_MONTHLY_LIMIT: "50", AI_MONTHLY_LIMIT_FREE: "20", AI_MONTHLY_LIMIT_PRO: "400" };
+    expect(planMonthlyLimit(vars, "free")).toBe(20);
+    expect(planMonthlyLimit(vars, "pro")).toBe(400);
+    expect(planMonthlyLimit({ AI_MONTHLY_LIMIT: "50" }, "free")).toBe(50);
+    expect(planMonthlyLimit({ AI_MONTHLY_LIMIT: "50", AI_MONTHLY_LIMIT_PRO: " " }, "pro")).toBe(50);
+    expect(planMonthlyLimit({ AI_MONTHLY_LIMIT: "50", AI_MONTHLY_LIMIT_FREE: "-1" }, "free")).toBe(50);
+    expect(planMonthlyLimit({ AI_MONTHLY_LIMIT: "" }, "pro")).toBe(DEFAULT_MONTHLY_LIMIT);
+    expect(planMonthlyLimit({ AI_MONTHLY_LIMIT: "50", AI_MONTHLY_LIMIT_FREE: "0" }, "free")).toBe(0);
   });
 });
 

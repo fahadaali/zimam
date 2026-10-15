@@ -234,6 +234,8 @@ final class SessionStore {
         // Forgets the Google account on this device, so the next Google sign-in asks again.
         GIDSignIn.sharedInstance.signOut()
         Keychain.delete(Self.tokenAccount)
+        // Attachment lists and files opened under this account (TaskAttachmentsSection.swift).
+        AttachmentCache.clearAll()
         user = nil
         Self.saveCachedUser(nil)
         isSignedIn = false

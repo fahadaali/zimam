@@ -1,5 +1,6 @@
 import { providerFromEnv } from "./ai/provider";
 import { createApp } from "./app";
+import { purgeAttachments } from "./attachments";
 import { appleKeys } from "./auth/apple";
 import { appleTokensFromEnv } from "./auth/apple-tokens";
 import { googleKeys } from "./auth/google";
@@ -25,9 +26,13 @@ const app = createApp(deps);
 
 export default {
   fetch: app.fetch,
-  /** Every 5 minutes: reminder pushes beyond the app's local window (src/push/reminders.ts). */
+  /**
+   * Every 5 minutes: reminder pushes beyond the app's local window (src/push/reminders.ts),
+   * and removing deleted attachments' files from R2 (src/attachments.ts).
+   */
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(sendDueReminders(env.DB, deps.push?.(env) ?? null, controller.scheduledTime));
+    ctx.waitUntil(purgeAttachments(env.DB, env.ATTACHMENTS));
   },
   /**
    * zimam-imports and its dead-letter queue (src/imports/queue.ts). Imports write outside

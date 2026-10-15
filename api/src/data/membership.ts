@@ -39,6 +39,7 @@ export async function loadMember(db: D1Database, projectId: string, userId: stri
  * who joins or leaves has a cursor past the project's own change rows; pull
  * re-checks visibility, so these arrive as upserts for a new member and as
  * deletes for a removed one. Project first, so clients see it before its tasks.
+ * Attachments go to clients that pull them (`include=attachment`).
  */
 function projectChangesForUser(db: D1Database, projectId: string, userId: string, now: number): D1PreparedStatement[] {
   const insert = `INSERT INTO changes (entity, entity_id, project_id, user_id, at)`;
@@ -48,6 +49,8 @@ function projectChangesForUser(db: D1Database, projectId: string, userId: string
     `${insert} SELECT 'task', id, NULL, ?2, ?3 FROM tasks WHERE project_id = ?1 AND deleted_at IS NULL`,
     `${insert} SELECT 'comment', c.id, NULL, ?2, ?3 FROM comments c JOIN tasks t ON t.id = c.task_id
        WHERE t.project_id = ?1 AND t.deleted_at IS NULL AND c.deleted_at IS NULL`,
+    `${insert} SELECT 'attachment', a.id, NULL, ?2, ?3 FROM attachments a JOIN tasks t ON t.id = a.task_id
+       WHERE t.project_id = ?1 AND t.deleted_at IS NULL AND a.deleted_at IS NULL`,
   ].map((sql) => db.prepare(sql).bind(projectId, userId, now));
 }
 

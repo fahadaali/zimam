@@ -82,6 +82,8 @@ private struct TaskDetailForm: View {
             RecurrenceSection(task: task, store: store)
             SubtasksSection(task: task, subtasks: subtasks, store: store)
             RemindersSection(task: task, reminders: reminders, store: store)
+            // Files live on the server and download when opened (TaskAttachmentsSection.swift).
+            TaskAttachmentsSection(task: task)
             // Comments are for the members of a shared project; they live on the server.
             if let projectId = task.projectId {
                 TaskCommentsSection(task: task, projectId: projectId)
