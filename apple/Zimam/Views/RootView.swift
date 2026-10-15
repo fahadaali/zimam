@@ -62,6 +62,9 @@ struct MainView: View {
             Tab("القادم", systemImage: "calendar") {
                 NavigationStack { UpcomingView().taskDetailDestination() }
             }
+            Tab("التقويم", systemImage: "calendar.badge.clock") {
+                NavigationStack { CalendarView().taskDetailDestination() }
+            }
             Tab("المشاريع", systemImage: "folder") {
                 NavigationStack { ProjectsView().taskDetailDestination() }
             }

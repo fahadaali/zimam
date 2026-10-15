@@ -82,6 +82,13 @@ struct Store {
         touch(task)
     }
 
+    /// Moves a task to another day ("2026-10-15"), from the calendar's drag and drop or «نقل إلى…».
+    /// Its time or prayer anchor stays: a task «بعد العصر» is after Asr on the new day too.
+    func reschedule(_ task: TaskItem, toDay day: String) {
+        guard task.dueDate != day else { return }
+        update(task) { item in item.dueDate = day }
+    }
+
     /// Completes or reopens a task. Completing a recurring task adds its next
     /// occurrence as a new task; the completed one stays done.
     func toggleDone(_ task: TaskItem) {

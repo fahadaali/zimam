@@ -39,9 +39,11 @@ struct AddTaskView: View {
     @State private var dueTime: String?
     @FocusState private var titleFocused: Bool
 
-    init(due: Due = .unscheduled, projectId: UUID? = nil) {
+    /// `date` is the day `.pickedDate` starts on (the calendar passes its selected day).
+    init(due: Due = .unscheduled, projectId: UUID? = nil, date: Date = Date()) {
         _due = State(initialValue: due)
         _projectId = State(initialValue: projectId)
+        _pickedDate = State(initialValue: date)
     }
 
     private var trimmedTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
