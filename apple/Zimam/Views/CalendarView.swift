@@ -52,6 +52,12 @@ struct CalendarView: View {
                         .accessibilityHint("يعود إلى اليوم في التقويم")
                 }
             }
+            // A day opened from a widget (App/AppLinks.swift).
+            .onChange(of: PlaceOpener.shared.pendingDay, initial: true) { _, day in
+                guard let day else { return }
+                selectedDay = day
+                PlaceOpener.shared.pending = nil
+            }
     }
 
     // MARK: Layout

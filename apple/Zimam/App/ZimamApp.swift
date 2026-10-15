@@ -74,10 +74,14 @@ struct ZimamApp: App {
                 .font(ZimamType.body)
                 .foregroundStyle(ZimamColor.ink)
                 .tint(ZimamColor.brand)
-                // Google's sign-in page returns here through the reversed client ID scheme, and
-                // «فتح في التطبيق» on the web join page through zimam://join/<code>.
+                // Google's sign-in page returns here through the reversed client ID scheme, the
+                // widgets through zimam://task/<id>, zimam://day/<day>, zimam://today and
+                // zimam://calendar (App/AppLinks.swift), and «فتح في التطبيق» on the web join page
+                // through zimam://join/<code>.
                 .onOpenURL { url in
-                    if !SessionStore.handleOpenURL(url) { InviteLinks.shared.open(url) }
+                    if SessionStore.handleOpenURL(url) { return }
+                    if AppLinks.open(url) { return }
+                    InviteLinks.shared.open(url)
                 }
                 // Universal links: https://<site>/join/#<code> (Associated Domains in project.yml).
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in

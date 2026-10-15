@@ -5,6 +5,12 @@ import WidgetKit
 struct ZimamWidgetBundle: WidgetBundle {
     var body: some Widget {
         TodayWidget()
+        // The home-screen family: the year, the month, the week, what is next, and the matrix.
+        YearProgressWidget()
+        MonthWidget()
+        WeekWidget()
+        UpcomingWidget()
+        MatrixWidget()
         #if os(iOS)
         // The Lock Screen (LockScreenWidget.swift) and «المهمة الجارية» (FocusLiveActivity.swift).
         LockScreenWidget()
