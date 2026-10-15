@@ -2,6 +2,7 @@ import { providerFromEnv } from "./ai/provider";
 import { createApp } from "./app";
 import { appleKeys } from "./auth/apple";
 import { appleTokensFromEnv } from "./auth/apple-tokens";
+import { googleKeys } from "./auth/google";
 import type { Env } from "./env";
 import { importsFromEnv } from "./imports/jobs";
 import { handleImportBatch } from "./imports/queue";
@@ -12,6 +13,7 @@ import type { Deps } from "./types";
 
 const deps: Deps = {
   appleKeys,
+  googleKeys,
   ai: (env) => providerFromEnv(env),
   appleTokens: (env) => appleTokensFromEnv(env),
   push: (env) => apnsFromEnv(env),

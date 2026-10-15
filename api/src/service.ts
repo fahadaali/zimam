@@ -1,6 +1,7 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { Assistant, type AgendaRequest, type TaskFields, type TaskFilter } from "./assistant";
+import { Assistant, type AgendaRequest, type SignInKeys, type TaskFields, type TaskFilter } from "./assistant";
 import { appleKeys } from "./auth/apple";
+import { googleKeys } from "./auth/google";
 import type { Env } from "./env";
 import { channelRealtime, latestSeq, notifyChangesSince } from "./realtime/notify";
 
@@ -9,8 +10,11 @@ import { channelRealtime, latestSeq, notifyChangesSince } from "./realtime/notif
  * never from the internet. The MCP worker passes the user id from the OAuth grant it validated.
  */
 export class ZimamService extends WorkerEntrypoint<Env> {
+  /** Apple's and Google's signing keys; tests replace them with local key sets. */
+  static keys: SignInKeys = { apple: appleKeys, google: googleKeys };
+
   private get assistant() {
-    return new Assistant(this.env, appleKeys);
+    return new Assistant(this.env, ZimamService.keys);
   }
 
   /** Runs a write, then (after returning) tells everyone who can see what it changed to pull. */
@@ -27,6 +31,10 @@ export class ZimamService extends WorkerEntrypoint<Env> {
 
   signInWithApple(identityToken: string, nonce: string) {
     return this.assistant.signInWithApple(identityToken, nonce);
+  }
+
+  signInWithGoogle(idToken: string, nonce: string) {
+    return this.assistant.signInWithGoogle(idToken, nonce);
   }
 
   listTasks(userId: string, filter: TaskFilter) {

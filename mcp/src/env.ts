@@ -11,6 +11,8 @@ declare global {
       /** Public origin of this worker, e.g. https://mcp.zimam.app. */
       MCP_ORIGIN: string;
       APPLE_WEB_CLIENT_ID: string;
+      /** Google OAuth web client ID for the consent page; empty hides Sign in with Google. */
+      GOOGLE_WEB_CLIENT_ID: string;
     }
   }
 }

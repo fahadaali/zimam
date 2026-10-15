@@ -186,6 +186,44 @@ npx wrangler secret put APPLE_PRIVATE_KEY < AuthKey_XXXXXXXXXX.p8   # نص ال�
 
 المفتاح نفسه يخدم التطبيق (`app.zimam.ios`) والويب (`app.zimam.ios.web`) ما دام Services ID مربوطاً بالتطبيق الأساسي كما في خطوة خادم MCP. وللتطوير المحلي ضعهما في `api/.dev.vars` (لا يُرفع إلى المستودع)، والمفتاح في سطر واحد مع `\n` مكان فواصل الأسطر.
 
+## الدخول بحساب قوقل
+
+يدخل المستخدم بحساب أبل أو قوقل في التطبيق والويب وصفحة ربط كلود وChatGPT. أبل يبقى موجوداً دائماً (البند 4.8 من إرشادات App Store)، ومن دخل بأبل ثم بقوقل ببريد متحقَّق منه نفسه وجد حسابه نفسه (القاعدة وحدودها في `api/DEVELOPMENT.md`، «تسجيل الدخول»).
+
+> **الحالة:** أُنجزت الخطوات أدناه، والمعرّفان مضبوطان في المستودع. تبقى هنا مرجعاً إن أُعيد إنشاء المشروع أو تغيّر نطاق.
+
+### ١. مشروع Google Cloud
+
+1. أنشئ مشروعاً من [console.cloud.google.com/projectcreate](https://console.cloud.google.com/projectcreate) باسم `zimam`.
+2. **Google Auth Platform ← Branding:** اسم التطبيق `زمام`، وبريد الدعم، وشعار زمام إن أردت (الشعار يتطلب مراجعة Google، فاتركه إن لم يلزم).
+3. **Audience:** اختر **External**، ثم **Publish app** لينتقل إلى **In production**. ما دام في وضع الاختبار لا يدخل إلا المستخدمون المضافون يدوياً.
+4. **Data Access:** لا تضف أي نطاق. زمام يطلب `openid` و`email` و`profile` فقط، وهي لا تحتاج تحققاً من Google.
+
+### ٢. عملاء OAuth
+
+من [console.cloud.google.com/auth/clients](https://console.cloud.google.com/auth/clients) ← **Create client**:
+
+| النوع | الإعداد | المعرّف |
+| --- | --- | --- |
+| iOS | Bundle ID: `app.zimam.ios` (يخدم الآيفون والآيباد والماك) | `404741015373-r3p4od9ko0qd99hocpg3r7gv1arju4ge.apps.googleusercontent.com` |
+| Web application | Authorized JavaScript origins: `https://zimam-web.fahad2ao.workers.dev` و`https://zimam-mcp.fahad2ao.workers.dev` (لا حاجة لـ Redirect URIs) | `404741015373-ukucah8482ofiuvd9lb4cn4pgqvnfm75.apps.googleusercontent.com` |
+
+معرّف العميل ليس سراً، ولا يوجد سر عميل لهذين النوعين في هذا الاستعمال (الخادم يتحقق من رمز الهوية بمفاتيح Google العامة). إن أنشأ Google سراً لعميل الويب فلا ترسله ولا تضعه في أي مكان.
+
+### ٣. أين وُضع المعرّفان
+
+| المكان | القيمة |
+| --- | --- |
+| `api/wrangler.jsonc` ← `GOOGLE_CLIENT_IDS` | معرّف iOS ثم معرّف الويب، بفاصلة |
+| `mcp/wrangler.jsonc` ← `GOOGLE_WEB_CLIENT_ID` | معرّف الويب |
+| `web/public/app/main.js` ← `GOOGLE_CLIENT_ID` | معرّف الويب |
+| `apple/project.yml` ← `GOOGLE_IOS_CLIENT_ID` و`GOOGLE_REVERSED_CLIENT_ID` | معرّف iOS، وصيغته المعكوسة `com.googleusercontent.apps.404741015373-r3p4od9ko0qd99hocpg3r7gv1arju4ge` (نوع الرابط الذي يرجع إليه Google) |
+
+- تفريغ أي قيمة يخفي زر قوقل في مكانها، وتفريغ `GOOGLE_CLIENT_IDS` يوقف `POST /v1/auth/google` (503).
+- جدول `identities` (`api/migrations/0008_identities.sql`) يطبّقه أمر النشر في Workers Builds تلقائياً، وينقل إليه كل حسابات أبل الحالية.
+- عند الانتقال إلى `zimam.app`: أضف `https://zimam.app` و`https://mcp.zimam.app` إلى Authorized JavaScript origins لعميل الويب.
+- بعد تعديل `project.yml` شغّل `xcodegen`. أول بناء ينزّل حزمة GoogleSignIn-iOS (الإصدار 9.2.0 فما فوق ضمن 9.x).
+
 ## طريقة العمل بعد الربط
 
 - Claude في الجلسة السحابية يكتب الخادم والموقع وخادم MCP ويختبرها، ويكتب كود Swift ويرفعه.

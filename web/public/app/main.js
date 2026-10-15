@@ -1,8 +1,9 @@
-// زمام على الويب: sign in with Apple, then Today, Upcoming, Projects and Search over the REST API.
+// زمام على الويب: sign in with Apple or Google, then Today, Upcoming, Projects and Search over the REST API.
 // Plain DOM and ES modules; views are chosen by the URL hash (#/today, #/projects/<id>, …).
 import { api, apiBase, errorText, session, whenSignedOut } from "./lib/api.js";
 import { Button, ButtonLink, PrayerChip, ProjectCard, TaskRow, h, setRowDone } from "./lib/components.js";
 import { addDays, dayHeading, dualDate, dueChip, isIsoDate, localIsoDate, relativeDay, weekdayName } from "./lib/dates.js";
+import { googleButtonOptions, googleEnabled, googleInitOptions, whenGoogleLoaded } from "./lib/google.js";
 import { randomNonce, sha256Hex } from "./lib/nonce.js";
 import { arabicNumber, parseDigits } from "./lib/numbers.js";
 import { prayerPhrase } from "./lib/prayer.js";
@@ -10,6 +11,8 @@ import { createRealtime, realtimeUrl } from "./lib/realtime.js";
 import { PRIORITY_WORDS, groupByDay, isOpen, priorityKey, progressText, splitToday, taskCount } from "./lib/tasks.js";
 
 const APPLE_CLIENT_ID = "app.zimam.ios.web";
+// Google OAuth web client ID (public). Empty hides the Google button. Keep it in the API's GOOGLE_CLIENT_IDS.
+const GOOGLE_CLIENT_ID = "404741015373-ukucah8482ofiuvd9lb4cn4pgqvnfm75.apps.googleusercontent.com";
 const LEAVE_AFTER = 1000; // a completed task stays a second so it can be undone
 const FADE = 250;
 const LIVE_DEBOUNCE = 800; // folds a burst of changes into one reload
@@ -21,6 +24,7 @@ const els = {
   signin: $("signin"),
   signinButton: $("signin-button"),
   signinError: $("signin-error"),
+  googleSignin: $("google-signin"),
   shell: $("shell"),
   view: $("view"),
   main: $("main"),
@@ -74,6 +78,49 @@ function showSignIn(message = "") {
   els.signinError.textContent = message;
   document.title = "تسجيل الدخول | زمام";
   prepareNonce();
+  prepareGoogle();
+}
+
+// ——— Sign in with Google ———
+
+// Google's button carries the nonce it was set up with, so each sign-in screen (and each
+// attempt) sets it up again with a fresh one.
+let googleAttempt = null;
+async function prepareGoogle() {
+  if (!googleEnabled(GOOGLE_CLIENT_ID)) return;
+  const raw = randomNonce();
+  const attempt = { raw, hashed: await sha256Hex(raw) };
+  googleAttempt = attempt;
+  whenGoogleLoaded((id) => {
+    if (googleAttempt !== attempt || els.signin.hidden) return;
+    id.initialize(googleInitOptions(GOOGLE_CLIENT_ID, attempt.hashed, (response) => signInWithGoogle(attempt, response)));
+    els.googleSignin.hidden = false;
+    els.googleSignin.replaceChildren();
+    id.renderButton(
+      els.googleSignin,
+      googleButtonOptions({ dark: matchMedia("(prefers-color-scheme: dark)").matches, width: els.googleSignin.clientWidth }),
+    );
+  });
+}
+
+async function signInWithGoogle(attempt, response) {
+  els.signinError.textContent = "";
+  const idToken = response?.credential;
+  if (!idToken) {
+    els.signinError.textContent = "تعذّر تسجيل الدخول بحساب قوقل. حاول مرة أخرى.";
+    return;
+  }
+  els.signinButton.disabled = true;
+  try {
+    const { token } = await api.signInWithGoogle(idToken, attempt.raw);
+    session.set(token);
+    await start();
+  } catch (error) {
+    els.signinError.textContent = errorText(error);
+    prepareGoogle();
+  } finally {
+    els.signinButton.disabled = false;
+  }
 }
 
 // Apple's popup must open inside the click, so the nonce is ready before it.

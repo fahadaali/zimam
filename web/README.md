@@ -63,10 +63,17 @@ npx wrangler deploy --dry-run
 - يولّد المتصفح nonce عشوائياً، ويرسل لأبل تجزئته SHA-256، ثم يرسل الـ nonce الخام مع رمز الهوية إلى `POST /v1/auth/apple` مع `device: "web"`، فيتحقق الخادم أن الرمز صدر لهذا الدخول نفسه. ويُتحقق كذلك من قيمة `state`.
 - أصل الموقع مضاف إلى `ALLOWED_ORIGINS` في `api/wrangler.jsonc`، فإن تغيّر النطاق فأضفه هناك.
 
+## تسجيل الدخول بحساب قوقل
+
+- Google Identity Services (`https://accounts.google.com/gsi/client`): زر Google المرسوم بأداته نفسها (شروط علامته التجارية)، بالعربية («المتابعة باستخدام Google»)، تحت زر أبل. المنطق في `public/app/lib/google.js` واختباره في `test/google.test.mjs`.
+- معرّف عميل الويب في الثابت `GOOGLE_CLIENT_ID` أعلى `public/app/main.js` (ليس سراً)، وهو أيضاً في `GOOGLE_CLIENT_IDS` في `api/wrangler.jsonc`. إن فرغ الثابت اختفى الزر. وفي Google Cloud يجب أن يكون أصل الموقع ضمن **Authorized JavaScript origins** لهذا العميل.
+- كما في أبل: nonce عشوائي جديد لكل شاشة دخول ولكل محاولة، يُعطى Google تجزئته SHA-256، ويُرسل الخام مع رمز الهوية إلى `POST /v1/auth/google` مع `device: "web"`.
+- إن طابق بريدُ Google المتحقَّق منه حساباً دخل بأبل دخل المستخدم الحساب نفسه (القاعدة في `api/DEVELOPMENT.md`).
+
 ### رمز الجلسة
 
 يُحفظ رمز الجلسة في `localStorage` ويُرسل `Authorization: Bearer`. اختير على `sessionStorage` لأن كليهما يقرؤه أي سكربت يعمل في الأصل نفسه، فلا يزيد `sessionStorage` الأمان، بل يفرض تسجيل الدخول في كل تبويب. الحماية الفعلية:
 
-- سياسة محتوى صارمة في `_headers`: لا سكربت مضمَّن ولا من طرف ثالث إلا سكربت أبل، ولا أنماط مضمَّنة، و`frame-ancestors 'none'`، و`connect-src` للواجهة البرمجية فقط. Trusted Types في وضع الإبلاغ فقط حتى يُتأكد من عمل سكربت أبل معها.
+- سياسة محتوى صارمة في `_headers`: لا سكربت مضمَّن ولا من طرف ثالث إلا سكربت أبل وسكربت Google (`https://accounts.google.com/gsi/client`، مع إطار زرّه وطلباته `https://accounts.google.com` وأنماطه `https://accounts.google.com/gsi/style`)، ولا أنماط مضمَّنة، و`frame-ancestors 'none'`، و`connect-src` للواجهة البرمجية ولأبل وGoogle فقط. Trusted Types في وضع الإبلاغ فقط حتى يُتأكد من عمل سكربتي أبل وGoogle معها.
 - الواجهة تُبنى بـ `textContent` و`createElement` فقط، ولا `innerHTML` في الكود.
 - الرمز معتم ويُلغى من الخادم: «تسجيل الخروج» يحذفه من الخادم ومن المتصفح، وأي رد 401 يمسحه ويعيد إلى شاشة الدخول.

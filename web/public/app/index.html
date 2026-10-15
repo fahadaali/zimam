@@ -14,8 +14,9 @@
 <link rel="stylesheet" href="/app/app.css">
 <link rel="modulepreload" href="/app/lib/dates.js">
 <script type="module" src="/app/main.js"></script>
-<!-- Sign in with Apple JS (popup mode). The only third-party script; allowed by the CSP in _headers. -->
+<!-- Sign in with Apple JS (popup mode) and Google Identity Services: the only third-party scripts, allowed by the CSP in _headers. -->
 <script src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/ar_SA/appleid.auth.js" defer></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
 </head>
 <body class="zm-root">
 <a class="skip-link visually-hidden" href="#main">تخطَّ إلى المحتوى</a>
@@ -30,9 +31,11 @@
       <img class="signin-logo" src="/design/logos/zimam-lockup-ar.svg" alt="زمام" width="496" height="160">
     </picture>
     <h1 class="title" id="signin-title">سجّل الدخول إلى زمام</h1>
-    <p class="callout muted">استعمل حساب أبل نفسه الذي تستعمله في تطبيق زمام، فتجد مهامك ومشاريعك هنا.</p>
+    <p class="callout muted">استعمل حساب أبل أو قوقل نفسه الذي تستعمله في تطبيق زمام، فتجد مهامك ومشاريعك هنا.</p>
     <p class="callout signin-error" id="signin-error" role="alert"></p>
     <button type="button" class="zm-btn zm-btn-primary signin-button" id="signin-button">تسجيل الدخول بحساب أبل</button>
+    <!-- Google draws its own «continue with Google» button here (lib/google.js); hidden without a client ID. -->
+    <div class="signin-google" id="google-signin" role="group" aria-label="المتابعة بحساب قوقل" hidden></div>
     <a class="callout signin-home" href="/">عن زمام</a>
   </div>
 </section>

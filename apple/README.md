@@ -14,13 +14,14 @@ open Zimam.xcodeproj
 - المرجع هو `project.yml`. يُعاد تشغيل `xcodegen` بعد أي تعديل عليه، ويُرفع `Zimam.xcodeproj` المولَّد معه حتى يجده Xcode Cloud. لا يُعدَّل المشروع من Xcode مباشرة لأن التوليد التالي يمسح التعديل.
 - ضع معرّف فريقك (Team ID) في `DEVELOPMENT_TEAM` داخل `project.yml`، لا في Xcode.
 - عنوان الخادم في `ZIMAM_API_URL` داخل `project.yml`.
+- الدخول بحساب قوقل: معرّف عميل iOS في `GOOGLE_IOS_CLIENT_ID` وصيغته المعكوسة في `GOOGLE_REVERSED_CLIENT_ID` داخل `project.yml`، ومنهما `GIDClientID` ونوع الرابط (URL scheme) في Info.plist. إن فرغ `GOOGLE_IOS_CLIENT_ID` اختفى زر قوقل. زر قوقل يتبع شروط علامة Google (ألوانها وشعارها `GoogleLogo` من حزمة GoogleSignIn-iOS)، وهو الاستثناء الوحيد من رموز التصميم.
 
 ## الهيكل
 
 | المجلد | ما فيه |
 | --- | --- |
 | `ZimamKit/` | حزمة Swift مستقلة عن الواجهة: التاريخ الهجري (أم القرى) مع الميلادي، وأوقات الصلاة (مكتبة Adhan)، والتكرار (`Recurrence`)، ومخطِّط الإشعارات (`ReminderPlanner`)، والبحث العربي، وعميل الواجهة البرمجية وأشكال بيانات المزامنة. اختباراتها: `cd apple/ZimamKit && swift test` |
-| `Zimam/App/` | نقطة البداية، وتسجيل الدخول بحساب أبل، وجدولة الإشعارات (`NotificationScheduler`)، وتسجيل الجهاز لإشعارات الخادم (`PushRegistration`)، والموقع لأوقات الصلاة (`LocationProvider`)، وتسليم الجلسة للساعة (`WatchLink`) |
+| `Zimam/App/` | نقطة البداية، وتسجيل الدخول بحساب أبل أو قوقل (`SessionStore`، وحزمة GoogleSignIn-iOS للتطبيق وحده)، وجدولة الإشعارات (`NotificationScheduler`)، وتسجيل الجهاز لإشعارات الخادم (`PushRegistration`)، والموقع لأوقات الصلاة (`LocationProvider`)، وتسليم الجلسة للساعة (`WatchLink`) |
 | `Zimam/Sync/` | محرك المزامنة: يرسل التعديلات المحلية ثم يستقبل تغييرات الخادم |
 | `Zimam/Intents/` | أوامر سيري والاختصارات: إضافة مهمة، ومهام اليوم، وعبارات `ZimamShortcuts` |
 | `Zimam/Components/` | مكافئات مكوّنات `design/components/`: سطر المهمة، وبطاقة المشروع، والزر |

@@ -11,6 +11,8 @@ import type { Realtime } from "./realtime/notify";
 export interface Deps {
   /** Sign in with Apple signing keys; tests pass a local key set. */
   appleKeys: JWTVerifyGetKey;
+  /** Google's ID token signing keys; tests pass a local key set. */
+  googleKeys: JWTVerifyGetKey;
   /** The in-app assistant's model provider, built from the Worker's vars and secrets; tests pass a fake. */
   ai: (env: Env) => AiProvider;
   /**

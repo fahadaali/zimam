@@ -1,7 +1,8 @@
 import type { JWTVerifyGetKey } from "jose";
 import { z } from "zod";
 import { verifyAppleToken } from "./auth/apple";
-import { appleAudiences, upsertAppleUser } from "./auth/users";
+import { googleAudiences, verifyGoogleToken } from "./auth/google";
+import { appleAudiences, signInUser } from "./auth/users";
 import { Access } from "./data/access";
 import { addDays, dayIn, dualText, gregorianText, hijriText, weekdayText } from "./data/dates";
 import { Mutator } from "./data/mutations";
@@ -109,10 +110,16 @@ function issues(error: z.ZodError): string {
   return error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ");
 }
 
+/** The providers' token signing keys; tests pass local key sets. */
+export interface SignInKeys {
+  apple: JWTVerifyGetKey;
+  google: JWTVerifyGetKey;
+}
+
 export class Assistant {
   constructor(
     private readonly env: Env,
-    private readonly appleKeys: JWTVerifyGetKey,
+    private readonly keys: SignInKeys,
   ) {}
 
   private get db() {
@@ -121,13 +128,31 @@ export class Assistant {
 
   /** Verifies a Sign in with Apple identity token from the web and returns the Zimam user. */
   async signInWithApple(identityToken: string, nonce: string): Promise<Outcome<{ userId: string; name: string | null }>> {
+    let identity;
     try {
-      const identity = await verifyAppleToken(identityToken, this.appleKeys, appleAudiences(this.env.APPLE_AUDIENCES), nonce);
-      const user = await upsertAppleUser(this.db, identity, null);
-      return ok({ userId: user.id as string, name: (user.name as string | null) ?? null });
+      identity = await verifyAppleToken(identityToken, this.keys.apple, appleAudiences(this.env.APPLE_AUDIENCES), nonce);
     } catch {
       return fail("invalid_token", "Apple identity token was rejected");
     }
+    const user = await signInUser(this.db, { provider: "apple", ...identity }, null);
+    return ok({ userId: user.id as string, name: (user.name as string | null) ?? null });
+  }
+
+  /**
+   * Verifies a Google ID token from the web (its nonce claim is the SHA-256 of `nonce`) and
+   * returns the Zimam user, joining an existing account by verified email as the API does.
+   */
+  async signInWithGoogle(idToken: string, nonce: string): Promise<Outcome<{ userId: string; name: string | null }>> {
+    const audiences = googleAudiences(this.env.GOOGLE_CLIENT_IDS);
+    if (audiences.length === 0) return fail("google_unavailable", "Sign in with Google is not configured");
+    let identity;
+    try {
+      identity = await verifyGoogleToken(idToken, this.keys.google, audiences, nonce);
+    } catch {
+      return fail("invalid_token", "Google ID token was rejected");
+    }
+    const user = await signInUser(this.db, { provider: "google", ...identity }, identity.name);
+    return ok({ userId: user.id as string, name: (user.name as string | null) ?? null });
   }
 
   async listTasks(userId: string, filter: TaskFilter): Promise<Outcome<AssistantTask[]>> {

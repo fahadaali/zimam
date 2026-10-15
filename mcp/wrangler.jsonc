@@ -20,6 +20,9 @@
   "vars": {
     "MCP_ORIGIN": "https://zimam-mcp.fahad2ao.workers.dev",
     // Sign in with Apple Services ID for the web.
-    "APPLE_WEB_CLIENT_ID": "app.zimam.ios.web"
+    "APPLE_WEB_CLIENT_ID": "app.zimam.ios.web",
+    // Google OAuth web client ID (public, not a secret); must be in the API's GOOGLE_CLIENT_IDS.
+    // Empty hides «المتابعة بحساب قوقل» on the consent page.
+    "GOOGLE_WEB_CLIENT_ID": "404741015373-ukucah8482ofiuvd9lb4cn4pgqvnfm75.apps.googleusercontent.com"
   }
 }

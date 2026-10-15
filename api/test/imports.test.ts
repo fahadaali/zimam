@@ -10,7 +10,7 @@ import googleTasksJson from "./fixtures/imports/google-tasks.json?raw";
 import tickTickBackup from "./fixtures/imports/ticktick-backup.csv?raw";
 import todoistApiJson from "./fixtures/imports/todoist-api.json?raw";
 import todoistTemplate from "./fixtures/imports/todoist-template.csv?raw";
-import { call, fakeAi, pullAll, push, signIn, testAppleKeys } from "./helpers";
+import { call, fakeAi, pullAll, push, signIn, testAppleKeys, testGoogleKeys } from "./helpers";
 
 // MARK: Fakes
 
@@ -28,7 +28,7 @@ const importDeps = (): ImportDeps => ({
   fetch: async (input, init) => todoist(new URL(input instanceof Request ? input.url : String(input)), init),
 });
 
-const app = createApp({ appleKeys: testAppleKeys, ai: () => fakeAi, appleTokens: () => null, imports: importDeps });
+const app = createApp({ appleKeys: testAppleKeys, googleKeys: testGoogleKeys, ai: () => fakeAi, appleTokens: () => null, imports: importDeps });
 
 beforeEach(() => {
   sent = [];

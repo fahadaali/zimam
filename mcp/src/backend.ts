@@ -75,6 +75,8 @@ export interface TaskFields {
 
 export interface ZimamBackend {
   signInWithApple(identityToken: string, nonce: string): Promise<Outcome<{ userId: string; name: string | null }>>;
+  /** Verifies a Google ID token whose nonce claim is the SHA-256 (hex) of `nonce`. */
+  signInWithGoogle(idToken: string, nonce: string): Promise<Outcome<{ userId: string; name: string | null }>>;
   listTasks(userId: string, filter: TaskFilter): Promise<Outcome<AssistantTask[]>>;
   createTask(userId: string, fields: TaskFields): Promise<Outcome<AssistantTask>>;
   updateTask(userId: string, id: string, fields: TaskFields): Promise<Outcome<AssistantTask>>;

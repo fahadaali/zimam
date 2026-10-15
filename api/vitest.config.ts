@@ -8,7 +8,13 @@ export default defineConfig({
       const migrations = await readD1Migrations(path.join(import.meta.dirname, "migrations"));
       return {
         wrangler: { configPath: "./wrangler.jsonc" },
-        miniflare: { bindings: { TEST_MIGRATIONS: migrations } },
+        miniflare: {
+          bindings: {
+            TEST_MIGRATIONS: migrations,
+            // Tests sign Google tokens for their own clients (test/helpers.ts), never the real ones.
+            GOOGLE_CLIENT_IDS: "test-ios.apps.googleusercontent.com,test-web.apps.googleusercontent.com",
+          },
+        },
       };
     }),
   ],
