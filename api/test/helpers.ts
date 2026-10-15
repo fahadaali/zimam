@@ -122,6 +122,8 @@ interface GoogleTokenOptions {
   issuer?: string;
   email?: string;
   emailVerified?: boolean;
+  /** Google Workspace domain claim. */
+  hd?: string;
   name?: string;
   nonce?: string;
   expiresIn?: string;
@@ -135,6 +137,7 @@ export async function googleToken(sub: string, o: GoogleTokenOptions = {}) {
     claims.email = o.email;
     claims.email_verified = o.emailVerified ?? true;
   }
+  if (o.hd) claims.hd = o.hd;
   if (o.name) claims.name = o.name;
   if (o.nonce) claims.nonce = await sha256Hex(o.nonce);
   return new SignJWT(claims)

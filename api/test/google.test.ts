@@ -14,7 +14,7 @@ import {
   uuid,
 } from "./helpers";
 
-const email = () => `person-${uuid()}@example.com`;
+const email = () => `person-${uuid()}@gmail.com`;
 
 async function google(sub: string, options: Parameters<typeof googleToken>[1] = {}, extra: Record<string, unknown> = {}) {
   return call("POST", "/v1/auth/google", { body: { idToken: await googleToken(sub, options), ...extra } });
@@ -149,6 +149,18 @@ describe("Merging Apple and Google accounts by verified email", () => {
     const first = await google(`g-${uuid()}`, { email: address });
     const viaApple = await apple(`a-${uuid()}`, { email: address, emailVerified: false });
     expect(userId(viaApple)).not.toBe(userId(first));
+  });
+
+  it("merges a Google address only when Google is authoritative for it", async () => {
+    const outside = `person-${uuid()}@example.com`;
+    const first = await apple(`a-${uuid()}`, { email: outside });
+    const viaGoogle = await google(`g-${uuid()}`, { email: outside });
+    expect(userId(viaGoogle)).not.toBe(userId(first));
+
+    const workspace = `person-${uuid()}@example.org`;
+    const second = await apple(`a-${uuid()}`, { email: workspace });
+    const viaWorkspace = await google(`g-${uuid()}`, { email: workspace, hd: "example.org" });
+    expect(userId(viaWorkspace)).toBe(userId(second));
   });
 
   it("never merges on an Apple private relay address", async () => {

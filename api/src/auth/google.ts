@@ -10,7 +10,11 @@ export const googleKeys: JWTVerifyGetKey = createRemoteJWKSet(new URL("https://w
 export interface GoogleIdentity {
   sub: string;
   email: string | null;
-  /** Google's `email_verified`: the address was confirmed by Google. */
+  /**
+   * Whether Google is authoritative for the address, so it may merge accounts: verified,
+   * and either a Gmail address or a Google Workspace account (the `hd` claim). Google
+   * verifies other addresses only once, when they are added, and ownership can change.
+   */
   emailVerified: boolean;
   name: string | null;
 }
@@ -35,7 +39,9 @@ export async function verifyGoogleToken(
   if (typeof payload.sub !== "string" || payload.sub === "") throw new Error("Token has no subject");
   if (nonce !== undefined && payload.nonce !== (await sha256Hex(nonce))) throw new Error("Nonce mismatch");
   const email = typeof payload.email === "string" && payload.email !== "" ? payload.email : null;
-  const emailVerified = email !== null && (payload.email_verified === true || payload.email_verified === "true");
+  const verified = payload.email_verified === true || payload.email_verified === "true";
+  const authoritative = typeof payload.hd === "string" && payload.hd !== "" || /@(gmail|googlemail)\.com$/i.test(email ?? "");
+  const emailVerified = email !== null && verified && authoritative;
   const name = typeof payload.name === "string" && payload.name.trim() !== "" ? payload.name.trim().slice(0, 200) : null;
   return { sub: payload.sub, email, emailVerified, name };
 }
