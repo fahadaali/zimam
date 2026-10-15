@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="/app/invite.css">
 <link rel="stylesheet" href="/app/features.css">
 <link rel="stylesheet" href="/app/attachments.css">
+<link rel="stylesheet" href="/app/plan.css">
 <link rel="modulepreload" href="/app/lib/dates.js">
 <script type="module" src="/app/main.js"></script>
 <!-- Sign in with Apple JS (popup mode): the only third-party script, allowed by the CSP in _headers.
@@ -83,7 +84,20 @@
       <li><a class="callout" href="#/upcoming" data-route="upcoming">القادم</a></li>
       <li><a class="callout" href="#/calendar" data-route="calendar">التقويم</a></li>
       <li><a class="callout" href="#/projects" data-route="projects">المشاريع</a></li>
-      <li><a class="callout" href="#/search" data-route="search">البحث</a></li>
+      <li class="nav-wide"><a class="callout" href="#/search" data-route="search">البحث</a></li>
+      <li class="nav-wide"><a class="callout" href="#/timeline" data-route="timeline">المخطط</a></li>
+      <li class="nav-wide"><a class="callout" href="#/matrix" data-route="matrix">المصفوفة</a></li>
+      <!-- Phones: the last three tabs move into «المزيد» (a popover, so no script is needed). -->
+      <li class="nav-more">
+        <button type="button" class="callout nav-more-button" popovertarget="nav-more-menu" aria-haspopup="true">المزيد</button>
+        <div class="nav-more-menu" id="nav-more-menu" popover>
+          <ul role="list" aria-label="المزيد">
+            <li><a class="callout" href="#/search" data-route="search">البحث</a></li>
+            <li><a class="callout" href="#/timeline" data-route="timeline">المخطط الزمني</a></li>
+            <li><a class="callout" href="#/matrix" data-route="matrix">المصفوفة</a></li>
+          </ul>
+        </div>
+      </li>
     </ul>
   </nav>
 
@@ -115,6 +129,14 @@
       <label class="headline" for="add-date">التاريخ</label>
       <input class="input body" id="add-date" name="dueDate" type="date" aria-describedby="add-date-preview">
       <p class="caption muted" id="add-date-preview" aria-live="polite"></p>
+    </div>
+
+    <!-- A start date makes the task span the days up to its date (duration-view.js). -->
+    <div class="field">
+      <label class="headline" for="add-start">تاريخ البداية <span class="caption muted">(اختياري)</span></label>
+      <input class="input body" id="add-start" name="startDate" type="date" aria-describedby="add-start-preview add-start-error">
+      <p class="caption muted" id="add-start-preview" aria-live="polite"></p>
+      <p class="caption field-error" id="add-start-error"></p>
     </div>
 
     <fieldset class="field group">

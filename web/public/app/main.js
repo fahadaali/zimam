@@ -32,6 +32,10 @@ import { boardApi } from "./lib/feature-api.js";
 import { canEdit } from "./lib/sharing.js";
 import { openShare } from "./share-view.js";
 import { showTaskExtras } from "./task-extras.js";
+// Start dates, the timeline (Gantt) and the priority matrix.
+import { addStartField } from "./duration-view.js";
+import { viewMatrix } from "./matrix-view.js";
+import { projectTimeline, viewTimeline } from "./timeline-view.js";
 
 const APPLE_CLIENT_ID = "app.zimam.ios.web";
 // Google OAuth web client ID (public). Empty hides the Google button. Keep it in the API's GOOGLE_CLIENT_IDS.
@@ -83,6 +87,7 @@ function featureContext() {
     showError,
     errorText,
     taskItem,
+    openTask: (task) => openTask(task, null),
     canEditTask: (task) => canEdit(roleFor(task)),
     render: () => render({ focus: false }),
     refreshProjects,
@@ -373,13 +378,16 @@ function parseRoute() {
   if (parts[0] === "search") return { name: "search", q: params.get("q") ?? "" };
   if (parts[0] === "import") return { name: "import" };
   if (parts[0] === "calendar") return { name: "calendar" };
+  if (parts[0] === "timeline") return { name: "timeline" };
+  if (parts[0] === "matrix") return { name: "matrix" };
   if (parts[0] === "join") return { name: "join", code: parts[1] ?? "" };
   return { name: "today" };
 }
 
-const NAV = { today: "today", upcoming: "upcoming", calendar: "calendar", projects: "projects", project: "projects", inbox: "projects", search: "search", import: "import" };
+const NAV = { today: "today", upcoming: "upcoming", calendar: "calendar", projects: "projects", project: "projects", inbox: "projects", search: "search", import: "import", timeline: "timeline", matrix: "matrix" };
 
 function updateNav(route) {
+  $("nav-more-menu")?.hidePopover?.(); // «المزيد» on phones closes once a view is chosen
   for (const link of document.querySelectorAll("a[data-route]")) {
     if (link.dataset.route === NAV[route.name]) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
@@ -398,6 +406,8 @@ const VIEWS = {
   inbox: viewInbox,
   search: viewSearch,
   calendar: () => viewCalendar(featureContext()),
+  timeline: () => viewTimeline(featureContext()),
+  matrix: () => viewMatrix(featureContext()),
   import: () => viewImport({ primary: primary(), today: state.today, announce, onImported: refreshProjects }),
   join: ({ code }) =>
     viewJoin({
@@ -608,6 +618,11 @@ async function projectTasksView(title, subtitle, projectId, project = null) {
     out.push(boardView({ project: { ...project, role: detail.role ?? project.role }, sections: detail.sections ?? [], tasks: top }, featureContext()));
     return out;
   }
+  if (project && layoutOf(project) === "timeline") {
+    const detail = await boardApi.project(project.id);
+    out.push(projectTimeline({ project, sections: detail.sections ?? [], tasks: top }, featureContext()));
+    return out;
+  }
   out.push(open.length ? taskList(open, { showProject: false, label: "المهام المفتوحة" }) : emptyState("لا مهام مفتوحة هنا."));
   if (done.length) {
     out.push(
@@ -754,6 +769,7 @@ $("task-delete-confirm").addEventListener("click", async (event) => {
     taskDialog.el.close();
     announce("حُذفت المهمة.");
     if (taskDialog.li) removeItem(taskDialog.li);
+    else render({ focus: false }); // opened from a bar (calendar, timeline): redraw without it
     refreshProjects();
   } catch (error) {
     if (error.status !== 401) taskDialog.error.textContent = errorText(error);
@@ -780,6 +796,12 @@ const addDialog = {
   error: $("add-error"),
   submit: $("add-submit"),
 };
+
+/** «تاريخ البداية» under the date (duration-view.js). */
+const addStart = addStartField(
+  { start: $("add-start"), due: $("add-date"), preview: $("add-start-preview"), error: $("add-start-error") },
+  () => ({ primary: primary(), today: state.today }),
+);
 
 function readMinutes() {
   const text = addDialog.minutes.value.trim();
@@ -834,6 +856,7 @@ function openAdd() {
   addDialog.date.value = route.name === "upcoming" ? addDays(state.today, 1) : route.name === "project" || route.name === "inbox" ? "" : state.today;
   if (route.name === "calendar" && isIsoDate(calendarSelectedDay())) addDialog.date.value = calendarSelectedDay();
   resetAddAssistant();
+  addStart.reset();
   fillProjects();
   updateDatePreview();
   updatePrayerPreview();
@@ -872,11 +895,13 @@ addDialog.form.addEventListener("submit", async (event) => {
   const prayer = addDialog.prayer.value || null;
   const offset = readOffset();
   if (prayer && Number.isNaN(offset)) return invalid(addDialog.minutes, "اكتب عدد الدقائق من ٠ إلى ٧٢٠.", addDialog.minutesError);
+  if (!addStart.check()) return;
 
   const priority = Number(addDialog.form.elements.priority.value) || 0;
   const body = withAssistantExtras({
     title,
     dueDate: isIsoDate(addDialog.date.value) ? addDialog.date.value : null,
+    ...addStart.fields(), // `startDate` only when one is set
     duePrayer: prayer,
     duePrayerOffset: prayer ? offset : null,
     priority,

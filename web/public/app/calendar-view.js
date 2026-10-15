@@ -4,13 +4,25 @@
 // there keeping its time or prayer anchor (only `dueDate` changes); «نقل إلى…» does the same from
 // the keyboard with a date field. Arrow keys move through the month grid (right is back a day in
 // Arabic), Page Up and Page Down through months.
+// A task with a start date spans its days (lib/spans.js): a bar across the day cells of each week
+// it touches, in month and week alike, starting at the inline start (the right in Arabic). In the
+// month the bars only repeat, for the eye, what the selected day's list says (a spanning task is
+// listed under each of its days); in the week they are buttons that open the task. Moving a
+// spanning task to another day moves its whole span (its due date becomes that day).
 // Plain DOM through h() and textContent; nothing here parses HTML.
 import { Button, h } from "./lib/components.js";
 import { addDays, dayHeading, dualDate, isIsoDate, relativeDay, weekdayName } from "./lib/dates.js";
 import { boardApi } from "./lib/feature-api.js";
-import { addMonths, keyMove, monthDays, monthTitle, rangeTitle, tasksByDay, weekDays, weekdayHeaders } from "./lib/calendar.js";
+import { addMonths, keyMove, monthDays, monthTitle, rangeTitle, weekDays, weekdayHeaders } from "./lib/calendar.js";
 import { arabicNumber } from "./lib/numbers.js";
+import { isMultiDay, rowBars, shiftTo, singleDayByDay, spanText, taskSpan, tasksByOccupiedDay } from "./lib/spans.js";
 import { taskCount } from "./lib/tasks.js";
+import { priorityClass } from "./timeline-view.js";
+
+/** How far past the shown days to fetch, for spans that start in view and end after it. */
+const SPAN_LOOKAHEAD = 92;
+/** Bars drawn under each week of the month; more show as «+n» under their days. */
+const MONTH_LANES = 3;
 
 /** Kept across renders (and live reloads) for this page's life. */
 const view = { mode: "month", kind: null, selected: null };
@@ -30,15 +42,23 @@ export async function viewCalendar(ctx) {
   const root = h("div", { className: "calendar" });
   const weekStart = ctx.me?.settings?.weekStart ?? 0;
   view.selected ??= ctx.today;
-  let data = { from: null, to: null, byDay: {}, tasks: [] };
+  let data = { from: null, to: null, byDay: {}, single: {}, tasks: [] };
   let painting = 0;
 
   const kind = () => view.kind ?? ctx.primary;
   const days = () => (view.mode === "month" ? monthDays(view.selected, { kind: kind(), weekStart }) : weekDays(view.selected, { kind: kind(), weekStart }));
 
+  /** Every day's tasks (a spanning task under each of its days), and the one-day tasks by day. */
+  function index() {
+    data.byDay = tasksByOccupiedDay(data.tasks, data.from, data.to);
+    data.single = singleDayByDay(data.tasks);
+  }
+
   async function load(from, to) {
-    const { tasks } = await boardApi.tasks({ status: "open", dueFrom: from, dueTo: to });
-    data = { from, to, tasks, byDay: tasksByDay(tasks) };
+    // Due up to SPAN_LOOKAHEAD days later, for tasks that start in view; those that do not touch it are left out.
+    const { tasks } = await boardApi.tasks({ status: "open", dueFrom: from, dueTo: addDays(to, SPAN_LOOKAHEAD) });
+    data = { from, to, tasks: tasks.filter((t) => { const s = taskSpan(t); return s && s.start <= to; }) };
+    index();
   }
 
   async function paint(focus) {
@@ -126,7 +146,10 @@ export async function viewCalendar(ctx) {
     );
     const body = h("tbody");
     for (let row = 0; row < shown.length / 7; row++) {
-      body.append(h("tr", null, shown.slice(row * 7, row * 7 + 7).map((cell) => h("td", null, dayCell(cell)))));
+      const week = shown.slice(row * 7, row * 7 + 7);
+      body.append(h("tr", null, week.map((cell) => h("td", null, dayCell(cell)))));
+      const lanes = weekLanes(week.map((c) => c.day), { maxLanes: MONTH_LANES, buttons: false });
+      if (lanes) body.append(h("tr", { className: "cal-lanes", "aria-hidden": "true" }, h("td", { colspan: "7" }, lanes)));
     }
     table.append(body);
     table.addEventListener("keydown", (event) => {
@@ -144,7 +167,9 @@ export async function viewCalendar(ctx) {
     const selected = cell.day === view.selected;
     const isToday = cell.day === ctx.today;
     const label = `${weekdayName(cell.day)}، ${dualDate(cell.day, { primary: kind(), today: ctx.today })}، ${tasks.length ? taskCount(tasks.length) : "بلا مهام"}`;
-    const dots = h("span", { className: "cal-dots", "aria-hidden": "true" }, tasks.slice(0, 3).map(() => h("span", { className: "cal-dot" })), tasks.length > 3 ? h("span", { className: "cal-more" }, "+") : null);
+    // Dots for one-day tasks; spanning ones are the bars under the week.
+    const single = data.single[cell.day] ?? [];
+    const dots = h("span", { className: "cal-dots", "aria-hidden": "true" }, single.slice(0, 3).map(() => h("span", { className: "cal-dot" })), single.length > 3 ? h("span", { className: "cal-more" }, "+") : null);
     const button = h(
       "button",
       {
@@ -183,10 +208,49 @@ export async function viewCalendar(ctx) {
 
   // ——— The week ———
 
+  /**
+   * The spanning bars of one week, laid on a seven-column grid in the week's order (the first day
+   * at the inline start), or null when no task spans these days. `buttons`: real buttons that open
+   * the task (the week view), or pointer-only shapes beside the accessible day list (the month).
+   */
+  function weekLanes(row, { maxLanes = Infinity, buttons, firstRow = 1 }) {
+    const { bars, lanes, hidden } = rowBars(row, data.tasks, { maxLanes });
+    if (bars.length === 0 && !hidden.some(Boolean)) return null;
+    const grid = h("div", { className: "span-lanes" });
+    for (const bar of bars) {
+      const span = taskSpan(bar.task);
+      const classes = ["span-bar", "cal-bar", priorityClass(bar.task).trim(), bar.continuesBefore ? "continues-before" : null, bar.continuesAfter ? "continues-after" : null].filter(Boolean).join(" ");
+      const el = buttons
+        ? h("button", { type: "button", className: classes, "aria-label": `${bar.task.title}، ${spanText(span, { primary: kind(), today: ctx.today })}` })
+        : h("div", { className: classes, title: `${bar.task.title}، ${spanText(span, { primary: kind(), today: ctx.today })}` });
+      el.append(h("span", { className: "span-bar-title caption" }, bar.task.title));
+      el.style.setProperty("--col", String(bar.column + 1));
+      el.style.setProperty("--len", String(bar.length));
+      el.style.setProperty("--lane", String(bar.lane + firstRow));
+      el.addEventListener("click", () => ctx.openTask?.(bar.task));
+      grid.append(el);
+    }
+    hidden.forEach((count, column) => {
+      if (!count) return;
+      const more = h("span", { className: "span-more caption" }, `+${arabicNumber(count)}`);
+      more.style.setProperty("--col", String(column + 1));
+      more.style.setProperty("--len", "1");
+      more.style.setProperty("--lane", String(lanes + firstRow));
+      grid.append(more);
+    });
+    return grid;
+  }
+
   function weekColumns(shown) {
+    const strip = weekLanes(
+      shown.map((c) => c.day),
+      { buttons: true, firstRow: 2 },
+    );
     const list = h("ol", { className: "week", role: "list" });
     for (const cell of shown) {
-      const tasks = data.byDay[cell.day] ?? [];
+      // One-day tasks under each day; spanning ones are the bars above the week.
+      const tasks = data.single[cell.day] ?? [];
+      const covered = (data.byDay[cell.day] ?? []).length > 0;
       const word = relativeDay(cell.day, ctx.today);
       const titleId = `week-${cell.day}`;
       const head = h(
@@ -201,11 +265,20 @@ export async function viewCalendar(ctx) {
       });
       const items = h("ul", { className: "task-list week-tasks", role: "list", "aria-labelledby": titleId });
       for (const task of tasks) items.append(calendarItem(task, true));
-      const day = h("li", { className: "week-day" }, head, tasks.length ? items : h("p", { className: "caption muted week-empty" }, "لا مهام"));
+      const day = h("li", { className: "week-day" }, head, tasks.length ? items : covered ? null : h("p", { className: "caption muted week-empty" }, "لا مهام"));
       dropDay(day, cell.day);
       list.append(day);
     }
-    return list;
+    if (!strip) return list;
+    // Day labels over the bars, so the strip reads on its own on phones, where the days stack.
+    const labels = shown.map((cell, i) => {
+      const label = h("span", { className: `span-day caption${cell.day === ctx.today ? " is-today" : ""}`, "aria-hidden": "true" }, `${weekdayHeaders(weekStart)[i].short} ${arabicNumber(cell.primaryDay)}`);
+      label.style.setProperty("--col", String(i + 1));
+      return label;
+    });
+    strip.prepend(...labels);
+    strip.classList.add("week-spans");
+    return h("div", { className: "week-wrap" }, h("section", { className: "week-spans-section", "aria-label": "مهام تمتد أياماً" }, strip), list);
   }
 
   // ——— Tasks: drag to another day, or «نقل إلى…» ———
@@ -213,6 +286,8 @@ export async function viewCalendar(ctx) {
   function calendarItem(task, compact = false) {
     const li = ctx.taskItem(task, { showDate: false, showProject: !compact, leaveWhenDone: true });
     if (compact) li.firstElementChild?.classList.add("zm-task-compact");
+    // A spanning task in the selected day's list says which days it spans.
+    if (isMultiDay(task)) li.append(h("p", { className: "caption muted span-note" }, spanText(taskSpan(task), { primary: kind(), today: ctx.today })));
     if (!ctx.canEditTask(task)) return li;
     li.draggable = true;
     li.addEventListener("dragstart", (event) => {
@@ -243,6 +318,7 @@ export async function viewCalendar(ctx) {
       { className: "column-form", hidden: true, novalidate: true },
       h("label", { className: "caption muted", for: fieldId }, "اليوم الجديد"),
       input,
+      isMultiDay(task) ? h("p", { className: "caption muted" }, "تنتقل المدة كلها، وينتهي آخرها في هذا اليوم.") : null,
       preview,
       h("div", { className: "sheet-actions" }, Button({ variant: "secondary", type: "submit" }, "نقل"), cancel),
     );
@@ -295,23 +371,28 @@ export async function viewCalendar(ctx) {
     });
   }
 
-  /** Moves a task to `day`; only its date changes, so its time or prayer anchor stays. */
+  /**
+   * Moves a task to `day`; only its dates change, so its time or prayer anchor stays. A spanning
+   * task moves whole: its start date shifts by as many days as its due date (lib/spans.js shiftTo).
+   */
   async function reschedule(id, day, follow) {
     const task = data.tasks.find((t) => t.id === id);
     if (!task || task.dueDate === day) return;
-    const previous = task.dueDate;
-    task.dueDate = day;
-    data.byDay = tasksByDay(data.tasks);
+    const patch = shiftTo(task, day);
+    const previous = { dueDate: task.dueDate, startDate: task.startDate ?? null };
+    Object.assign(task, patch);
+    index();
     if (follow) view.selected = day;
     ctx.markLocalChange();
     const where = dualDate(day, { primary: kind(), today: ctx.today });
     await paint(follow ? `[data-day="${day}"]` : null);
     try {
-      Object.assign(task, await boardApi.patchTask(id, { dueDate: day }));
+      Object.assign(task, await boardApi.patchTask(id, patch));
+      index();
       ctx.announce(`نُقلت إلى ${where}.`);
     } catch (error) {
-      task.dueDate = previous;
-      data.byDay = tasksByDay(data.tasks);
+      Object.assign(task, previous);
+      index();
       if (error.status !== 401) ctx.showError(error);
       paint();
     }
