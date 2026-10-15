@@ -82,6 +82,15 @@ export async function hasProAccess(env: Env, userId: string): Promise<boolean> {
   return (await currentPlan(env, userId)).plan === "pro";
 }
 
+/**
+ * The plan whose limits apply (assistant requests, attachment storage): the user's plan when
+ * enforced, and pro for everyone during the personal trial.
+ */
+export async function limitsPlan(env: Env, userId: string): Promise<Plan["plan"]> {
+  if (!isEnforced(env)) return "pro";
+  return (await currentPlan(env, userId)).plan;
+}
+
 /** Hono middleware after `requireUser`: 403 `pro_required` for a free user when enforced. */
 export const requirePro = createMiddleware<AppEnv>(async (c, next) => {
   if (!(await hasProAccess(c.env, c.var.userId))) return fail(c, 403, PRO_REQUIRED.code, PRO_REQUIRED.message);

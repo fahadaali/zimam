@@ -28,6 +28,14 @@
     "AI_PROVIDER": "deepseek",
     "AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/302d00b357e2c90ed474d13642708b30/zimam",
     "AI_MONTHLY_LIMIT": "300",
+    // Monthly assistant requests by plan (src/ai/quota.ts). Free applies only when
+    // SUBSCRIPTIONS_ENFORCED is "true"; "0" keeps the assistant pro-only (403 pro_required).
+    "AI_MONTHLY_LIMIT_FREE": "20",
+    "AI_MONTHLY_LIMIT_PRO": "300",
+    // Attachment storage per uploader, in MB, by plan (src/attachments.ts). Pro is everyone's
+    // while SUBSCRIPTIONS_ENFORCED is not "true".
+    "ATTACHMENT_QUOTA_MB_FREE": "1024",
+    "ATTACHMENT_QUOTA_MB_PRO": "10240",
     // Reminder pushes over APNs. The key is a secret: `npx wrangler secret put APNS_KEY_ID`
     // and `npx wrangler secret put APNS_PRIVATE_KEY`. Never put them here.
     "APNS_TEAM_ID": "72V86SZ2XC",
@@ -65,5 +73,10 @@
       { "queue": "zimam-imports-dlq", "max_batch_size": 10, "max_retries": 3 }
     ]
   },
-  "r2_buckets": [{ "binding": "IMPORT_FILES", "bucket_name": "zimam-imports" }]
+  // Task attachments (src/attachments.ts). The bucket must exist before deploying, or the deploy
+  // fails: `npx wrangler r2 bucket create zimam-attachments` (docs/setup.md, «المرفقات»).
+  "r2_buckets": [
+    { "binding": "IMPORT_FILES", "bucket_name": "zimam-imports" },
+    { "binding": "ATTACHMENTS", "bucket_name": "zimam-attachments" }
+  ]
 }

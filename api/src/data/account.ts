@@ -19,8 +19,9 @@ interface OwnedProject {
  *   leaves it like any removed member.
  * - The user leaves every other project the same way (`removeMemberStatements`):
  *   tasks assigned to them become unassigned, and their reminders go.
- * - Inbox tasks, reminders and the comments they wrote are deleted everywhere.
- *   Tasks they created in projects that live on stay with those projects.
+ * - Inbox tasks, reminders, the comments they wrote and the files they attached are
+ *   deleted everywhere (the files leave R2 on the next purge). Tasks they created in
+ *   projects that live on stay with those projects.
  * - Their App Store entitlements are deleted; the subscription itself is Apple's, and
  *   the user cancels it in their Apple account settings.
  * - Invites they created are revoked, every session ends, and their sign-in
@@ -85,6 +86,9 @@ export async function deleteAccount(db: D1Database, access: Access, mutator: Mut
   /** Comments the user wrote anywhere, and every comment on their tasks. */
   const theirComments = (c = "comments") =>
     `(${c}.author_id = ?1 OR ${c}.task_id IN (SELECT id FROM tasks WHERE ${theirTasks}))`;
+  /** Files the user uploaded anywhere, and every file on their tasks. */
+  const theirAttachments = (a = "attachments") =>
+    `(${a}.user_id = ?1 OR ${a}.task_id IN (SELECT id FROM tasks WHERE ${theirTasks}))`;
 
   await db.batch(
     [
@@ -101,6 +105,12 @@ export async function deleteAccount(db: D1Database, access: Access, mutator: Mut
        SELECT 'comment', c.id, t.project_id, CASE WHEN t.project_id IS NULL THEN t.owner_id END, ?2
        FROM comments c JOIN tasks t ON t.id = c.task_id WHERE c.deleted_at IS NULL AND ${theirComments("c")}`,
       `UPDATE comments SET deleted_at = ?2, updated_at = ?2 WHERE deleted_at IS NULL AND ${theirComments()}`,
+      // Attachments, logged to the audience of their task. Their files leave R2 right after (DELETE /v1/me)
+      // or on the next cron run (src/attachments.ts).
+      `INSERT INTO changes (entity, entity_id, project_id, user_id, at)
+       SELECT 'attachment', a.id, t.project_id, CASE WHEN t.project_id IS NULL THEN t.owner_id END, ?2
+       FROM attachments a JOIN tasks t ON t.id = a.task_id WHERE a.deleted_at IS NULL AND ${theirAttachments("a")}`,
+      `UPDATE attachments SET deleted_at = ?2, updated_at = ?2 WHERE deleted_at IS NULL AND ${theirAttachments()}`,
       // Anything still assigned to them (removal already cleared their projects).
       `INSERT INTO changes (entity, entity_id, project_id, user_id, at)
        SELECT 'task', id, project_id, CASE WHEN project_id IS NULL THEN owner_id END, ?2 FROM tasks
@@ -113,6 +123,7 @@ export async function deleteAccount(db: D1Database, access: Access, mutator: Mut
       `UPDATE projects SET name = '' WHERE owner_id = ?1 AND deleted_at IS NOT NULL`,
       `UPDATE reminders SET location = NULL WHERE user_id = ?1`,
       `UPDATE comments SET body = '' WHERE deleted_at IS NOT NULL AND ${theirComments()}`,
+      `UPDATE attachments SET file_name = '' WHERE deleted_at IS NOT NULL AND ${theirAttachments()}`,
       `UPDATE invites SET revoked_at = ?2 WHERE created_by = ?1 AND accepted_at IS NULL AND revoked_at IS NULL`,
       `DELETE FROM project_members WHERE user_id = ?1`,
       `DELETE FROM external_refs WHERE user_id = ?1`,

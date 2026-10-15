@@ -23,8 +23,12 @@ declare global {
       AI_PROVIDER: string;
       /** Cloudflare AI Gateway base URL, without the provider path. */
       AI_GATEWAY_URL: string;
-      /** Assistant requests allowed per user per calendar month (UTC). */
+      /** Assistant requests allowed per user per calendar month (UTC), when no plan limit is set. */
       AI_MONTHLY_LIMIT: string;
+      /** The monthly limit for a free user when SUBSCRIPTIONS_ENFORCED is "true"; "0" keeps the assistant pro-only. */
+      AI_MONTHLY_LIMIT_FREE?: string;
+      /** The monthly limit for pro, and for everyone while SUBSCRIPTIONS_ENFORCED is not "true". */
+      AI_MONTHLY_LIMIT_PRO?: string;
       /** Optional model override for the chosen provider. */
       AI_MODEL?: string;
       /** Secret (`wrangler secret put`). */
@@ -45,6 +49,12 @@ declare global {
       IMPORTS: Queue;
       /** R2 bucket zimam-imports: uploaded exports and parsed imports, deleted when the job ends. */
       IMPORT_FILES: R2Bucket;
+      /** R2 bucket zimam-attachments: task attachments (src/attachments.ts). */
+      ATTACHMENTS: R2Bucket;
+      /** Attachment storage per uploader in MB for a free user when SUBSCRIPTIONS_ENFORCED is "true" (default 1024). */
+      ATTACHMENT_QUOTA_MB_FREE?: string;
+      /** Attachment storage per uploader in MB for pro, and for everyone while not enforced (default 10240). */
+      ATTACHMENT_QUOTA_MB_PRO?: string;
       /** The app's bundle id: App Store transactions must be for it. Not a secret. */
       APPSTORE_BUNDLE_ID: string;
       /** Secret (`wrangler secret put`): the In-App Purchase key's id (App Store Server API). */

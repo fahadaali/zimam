@@ -108,6 +108,26 @@ export async function request(method, path, body) {
   return data;
 }
 
+/** A signed-in GET that answers a file (an attachment): its Blob, or the same ApiError as `request`. */
+export async function requestBlob(path) {
+  const headers = {};
+  const token = currentToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  let response;
+  try {
+    response = await fetch(apiBase() + path, { headers, credentials: "omit" });
+  } catch {
+    throw new ApiError(0, "network", "Network error");
+  }
+  if (response.ok) return response.blob();
+  const data = await response.json().catch(() => null);
+  if (response.status === 401) {
+    session.clear();
+    onUnauthorized();
+  }
+  throw new ApiError(response.status, data?.error?.code ?? (response.status === 401 ? "unauthorized" : "internal"), data?.error?.message ?? "");
+}
+
 const query = (params) => {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) if (value != null && value !== "") search.set(key, value);

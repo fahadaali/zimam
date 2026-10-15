@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AiRequest } from "../ai/provider";
 import { breakdownRequest, parseRequest, type SummaryTask, summaryRequest } from "../ai/prompts";
-import { checkQuota, monthlyLimit, recordUsage } from "../ai/quota";
+import { checkQuota, planMonthlyLimit, recordUsage } from "../ai/quota";
 import { validateSubtasks, validateSuggestion, validateSummary } from "../ai/validate";
 import { Assistant, type AssistantTask } from "../assistant";
 import { dayIn, timeIn } from "../data/dates";
@@ -11,7 +11,7 @@ import { listProjects } from "../data/queries";
 import { type Row, userOut } from "../data/rows";
 import { Id, PRAYERS } from "../data/schemas";
 import { fail, readJson } from "../http";
-import { requirePro } from "../subscriptions/entitlements";
+import { limitsPlan, PRO_REQUIRED } from "../subscriptions/entitlements";
 import type { AppEnv } from "../types";
 import { loadVisible } from "./resources";
 
@@ -21,8 +21,13 @@ import { loadVisible } from "./resources";
  */
 export const assistant = new Hono<AppEnv>();
 
-// «زمام الاحترافية» when SUBSCRIPTIONS_ENFORCED is "true" (403 pro_required); open to all otherwise.
-assistant.use("*", requirePro);
+// «زمام الاحترافية» when SUBSCRIPTIONS_ENFORCED is "true": a free user gets AI_MONTHLY_LIMIT_FREE
+// requests a month (runAi), or 403 pro_required when that is 0. Open to all with the pro limit otherwise.
+assistant.use("*", async (c, next) => {
+  const plan = await limitsPlan(c.env, c.var.userId);
+  if (plan === "free" && planMonthlyLimit(c.env, plan) === 0) return fail(c, 403, PRO_REQUIRED.code, PRO_REQUIRED.message);
+  await next();
+});
 
 type Ctx = Context<AppEnv>;
 type Run<T> = { ok: true; value: T } | { ok: false; response: Response };
@@ -37,13 +42,16 @@ function issues(error: z.ZodError): string {
  */
 async function runAi<T>(c: Ctx, request: AiRequest, validate: (json: unknown) => T | null): Promise<Run<T>> {
   const now = new Date();
-  const quota = await checkQuota(c.env.DB, c.var.userId, monthlyLimit(c.env.AI_MONTHLY_LIMIT), now);
+  const plan = await limitsPlan(c.env, c.var.userId);
+  const quota = await checkQuota(c.env.DB, c.var.userId, planMonthlyLimit(c.env, plan), now);
   if (!quota.allowed) {
     const error = {
       code: "ai_quota_exceeded",
       message: `Monthly assistant limit of ${quota.limit} requests reached`,
       limit: quota.limit,
       resetsOn: quota.resetsOn,
+      // "free": the app can offer «زمام الاحترافية» for more.
+      plan,
     };
     return { ok: false, response: c.json({ error }, 429) };
   }

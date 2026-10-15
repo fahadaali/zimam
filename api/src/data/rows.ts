@@ -1,13 +1,14 @@
-import { DEFAULT_SETTINGS, Settings, type EntityName } from "./schemas";
+import { type ChangeEntity, DEFAULT_SETTINGS, Settings } from "./schemas";
 
 export type Row = Record<string, unknown>;
 
-export const TABLES: Record<EntityName, string> = {
+export const TABLES: Record<ChangeEntity, string> = {
   project: "projects",
   section: "sections",
   task: "tasks",
   reminder: "reminders",
   comment: "comments",
+  attachment: "attachments",
 };
 
 const str = (v: unknown) => v as string;
@@ -92,12 +93,28 @@ export function commentOut(r: Row) {
   };
 }
 
-export const OUT: Record<EntityName, (r: Row) => Record<string, unknown>> = {
+/** An attachment's metadata; the file itself is GET /v1/attachments/:id. */
+export function attachmentOut(r: Row) {
+  return {
+    id: str(r.id),
+    taskId: str(r.task_id),
+    projectId: strOrNull(r.project_id),
+    uploaderId: str(r.user_id),
+    fileName: str(r.file_name),
+    contentType: str(r.content_type),
+    size: num(r.size),
+    createdAt: num(r.created_at),
+    updatedAt: num(r.updated_at),
+  };
+}
+
+export const OUT: Record<ChangeEntity, (r: Row) => Record<string, unknown>> = {
   project: projectOut,
   section: sectionOut,
   task: taskOut,
   reminder: reminderOut,
   comment: commentOut,
+  attachment: attachmentOut,
 };
 
 export function userOut(r: Row) {

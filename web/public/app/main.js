@@ -21,6 +21,7 @@ import { arabicNumber, parseDigits } from "./lib/numbers.js";
 import { prayerPhrase } from "./lib/prayer.js";
 import { createRealtime, realtimeUrl } from "./lib/realtime.js";
 import { viewImport } from "./import-view.js";
+import { showAttachments } from "./attachments-view.js";
 import { rememberPendingJoin, takePendingJoin, viewJoin } from "./invite-view.js";
 import { PRIORITY_WORDS, groupByDay, isOpen, priorityKey, progressText, splitToday, taskCount } from "./lib/tasks.js";
 // Features in their own modules: the assistant, the board, the calendar and sharing.
@@ -729,6 +730,7 @@ function openTask(task, li) {
   rows.push(...detail("الحالة", isOpen(task) ? "مفتوحة" : "منجزة"));
   if (task.notes) rows.push(...detail("الملاحظات", h("span", { className: "notes" }, task.notes)));
   taskDialog.details.replaceChildren(...rows);
+  showAttachments($("task-attachments"), task, { announce });
   taskDialog.el.showModal();
   showTaskExtras(task, { ...featureContext(), role: roleFor(task) });
 }

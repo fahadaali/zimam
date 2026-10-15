@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { purgeAttachments } from "../attachments";
 import { revokeAppleAuthorization } from "../auth/account";
 import { deleteAccount } from "../data/account";
 import { type Row, userOut } from "../data/rows";
@@ -48,6 +49,8 @@ me.delete("/", async (c) => {
   const user = await loadUser(c.env.DB, c.var.userId);
   if (!user) return fail(c, 404, "not_found", "User not found");
   await deleteAccount(c.env.DB, c.var.access, c.var.mutator, c.var.userId);
+  // Their attachments' files leave R2 now; anything left over goes with the next cron run.
+  await purgeAttachments(c.env.DB, c.env.ATTACHMENTS);
   await revokeAppleAuthorization(() => c.var.deps.appleTokens(c.env), user);
   closeSockets(c, c.var.userId);
   return c.body(null, 204);

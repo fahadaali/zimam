@@ -98,6 +98,23 @@ npx wrangler r2 bucket lifecycle add zimam-imports expire-leftovers --expire-day
 - إن أردت أن ينشئها Claude من الجلسة السحابية (الخطوة ٤)، فأضف إلى رمز API صلاحيتي **Queues: Edit** و**Workers R2 Storage: Edit**.
 - الطوابير متاحة في الخطة المجانية، لكن D1 فيها يسمح بـ ٥٠ استعلاماً فقط لكل تشغيل، والمستهلك يكتب ٥٠ عنصراً في التشغيل الواحد (`CHUNK_SIZE` في `api/src/imports/jobs.ts`) بنحو ١٠٠–٢٥٠ استعلاماً، وهذا يناسب خطة Workers المدفوعة (١٠٠٠ استعلام). على الخطة المجانية خفّض `CHUNK_SIZE` إلى ٥.
 
+### ٨. المرفقات: مخزن R2 (قبل دمج فرع المرفقات)
+
+> **تحذير: أنشئ المخزن `zimam-attachments` قبل دمج فرع المرفقات إلى `main`.** الخادم يربطه في `api/wrangler.jsonc` (`ATTACHMENTS`)، فإن لم يكن موجوداً **فشل النشر كله** (لا المرفقات وحدها)، وبقي الخادم على نسخته السابقة حتى يُنشأ المخزن ويُعاد النشر.
+
+من داخل `api/` (أو من لوحة كلاودفلير: **Storage & Databases ← R2 ← Create bucket** بالاسم نفسه):
+
+```sh
+cd api
+npx wrangler r2 bucket create zimam-attachments
+```
+
+- **لا تضف قاعدة حذف تلقائي (lifecycle) لهذا المخزن**، بخلاف مخزن الاستيراد: المرفقات ملفات المستخدمين الدائمة. الخادم يحذف ملف المرفق حين يُحذف هو أو مهمته أو مشروعه أو الحساب (فوراً أو مع الـ Cron كل ٥ دقائق).
+- المخزن خاص، ولا يحتاج نطاقاً عاماً ولا إعداد CORS: الملفات تمر عبر الخادم بعد التحقق من الصلاحية.
+- جدول `attachments` (`api/migrations/0010_attachments.sql`) يطبّقه أمر النشر في Workers Builds تلقائياً.
+- الحصة لكل مستخدم من `ATTACHMENT_QUOTA_MB_FREE` و`ATTACHMENT_QUOTA_MB_PRO` في `wrangler.jsonc` (١ غيغابايت للمجانية و١٠ للاحترافية، والاحترافية للجميع ما دام `SUBSCRIPTIONS_ENFORCED` ليس `"true"`). التفاصيل في `api/DEVELOPMENT.md` («المرفقات»).
+- إن أردت أن ينشئه Claude من الجلسة السحابية (الخطوة ٤)، فرمز API يحتاج صلاحية **Workers R2 Storage: Edit**.
+
 ## أبل وXcode
 
 ### ١. حساب المطوّر

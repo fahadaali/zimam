@@ -3,6 +3,15 @@ import { z } from "zod";
 export const ENTITIES = ["project", "section", "task", "reminder", "comment"] as const;
 export type EntityName = (typeof ENTITIES)[number];
 
+/**
+ * Entities in the change log: the synced ones, and attachments, which their own routes write
+ * (src/routes/attachments.ts). Clients pull attachments only when they ask (`include=attachment`),
+ * because apps built before them cannot decode an entity they do not know.
+ */
+export const CHANGE_ENTITIES = [...ENTITIES, "attachment"] as const;
+export type ChangeEntity = (typeof CHANGE_ENTITIES)[number];
+export const OPT_IN_ENTITIES: readonly ChangeEntity[] = ["attachment"];
+
 export const PRAYERS = ["fajr", "dhuhr", "asr", "maghrib", "isha"] as const;
 
 /** Swift sends uppercase UUIDs; the server stores them lowercase. */

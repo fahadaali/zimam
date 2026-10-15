@@ -1,3 +1,5 @@
+import type { Env } from "../env";
+import type { Plan } from "../subscriptions/entitlements";
 import type { AiUsage } from "./provider";
 
 /** Monthly assistant quota. Months are calendar months in UTC. */
@@ -13,9 +15,28 @@ export function resetDate(now: Date): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
 }
 
+/** A whole number of requests, or null when the value is missing or not one. */
+function parseLimit(value: string | undefined): number | null {
+  const text = value?.trim() ?? "";
+  if (!/^\d+$/.test(text)) return null;
+  const n = Number.parseInt(text, 10);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
 export function monthlyLimit(value: string | undefined): number {
-  const n = Number.parseInt(value ?? "", 10);
-  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_MONTHLY_LIMIT;
+  return parseLimit(value) ?? DEFAULT_MONTHLY_LIMIT;
+}
+
+type LimitVars = Pick<Env, "AI_MONTHLY_LIMIT" | "AI_MONTHLY_LIMIT_FREE" | "AI_MONTHLY_LIMIT_PRO">;
+
+/**
+ * The monthly limit for a plan: `AI_MONTHLY_LIMIT_FREE` or `AI_MONTHLY_LIMIT_PRO`, falling back
+ * to `AI_MONTHLY_LIMIT`, then to 300. While SUBSCRIPTIONS_ENFORCED is not "true" everyone's
+ * plan for limits is pro (`limitsPlan`), so everyone gets the pro limit.
+ */
+export function planMonthlyLimit(env: LimitVars, plan: Plan["plan"]): number {
+  const specific = plan === "pro" ? env.AI_MONTHLY_LIMIT_PRO : env.AI_MONTHLY_LIMIT_FREE;
+  return parseLimit(specific) ?? monthlyLimit(env.AI_MONTHLY_LIMIT);
 }
 
 export interface QuotaState {
@@ -47,3 +68,4 @@ export async function recordUsage(db: D1Database, userId: string, usage: AiUsage
     .bind(userId, monthOf(now), Math.max(0, Math.round(usage.input)), Math.max(0, Math.round(usage.output)))
     .run();
 }
+

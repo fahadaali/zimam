@@ -382,26 +382,41 @@ describe("Plan enforcement", () => {
     expect((await summary(user.token, { SUBSCRIPTIONS_ENFORCED: "false" })).status).toBe(200);
   });
 
-  it("requires pro for the assistant when enforced", async () => {
+  it("requires pro for the assistant when enforced and free users get no requests", async () => {
+    const proOnly = { ...ENFORCED, AI_MONTHLY_LIMIT_FREE: "0" };
     const free = await signInUser();
-    const res = await summary(free.token, ENFORCED);
+    const res = await summary(free.token, proOnly);
     expect([res.status, res.body.error.code]).toEqual([403, "pro_required"]);
-    const parse = await request("POST", "/v1/assistant/parse", { token: free.token, body: { text: "مهمة" }, env: ENFORCED });
+    const parse = await request("POST", "/v1/assistant/parse", { token: free.token, body: { text: "مهمة" }, env: proOnly });
     expect(parse.status).toBe(403);
     expect(fakeAi.requests).toEqual([]);
-    const plan = await request("GET", "/v1/subscriptions", { token: free.token, env: ENFORCED });
+    const plan = await request("GET", "/v1/subscriptions", { token: free.token, env: proOnly });
     expect(plan.body).toMatchObject({ plan: "free", enforced: true });
 
     const pro = await signInUser();
     await subscribe(pro);
-    expect((await summary(pro.token, ENFORCED)).status).toBe(200);
+    expect((await summary(pro.token, proOnly)).status).toBe(200);
+  });
+
+  it("lets a free user use the assistant up to AI_MONTHLY_LIMIT_FREE when enforced", async () => {
+    // wrangler.jsonc gives free users 20 requests a month.
+    expect(env.AI_MONTHLY_LIMIT_FREE).toBe("20");
+    const free = await signInUser();
+    expect((await summary(free.token, ENFORCED)).status).toBe(200);
+    const vars = { ...ENFORCED, AI_MONTHLY_LIMIT_FREE: "1" };
+    fakeAi.answer({ title: "مهمة", notes: null, dueDate: null, dueHijri: null, dueTime: null, duePrayer: null, duePrayerOffset: null, priority: "none", tags: [], projectId: null });
+    expect((await request("POST", "/v1/assistant/parse", { token: free.token, body: { text: "مهمة" }, env: vars })).status).toBe(200);
+    const over = await request("POST", "/v1/assistant/parse", { token: free.token, body: { text: "مهمة" }, env: vars });
+    expect(over.status).toBe(429);
+    expect(over.body.error).toMatchObject({ code: "ai_quota_exceeded", limit: 1, plan: "free" });
+    expect(fakeAi.requests).toHaveLength(1);
   });
 
   it("treats PRO_USERS (ids or emails) as pro", async () => {
     const byId = await signInUser();
     const byEmail = await signInUser("Owner@Example.com");
     const other = await signInUser("someone@example.com");
-    const overrides = { ...ENFORCED, PRO_USERS: ` ${byId.userId.toUpperCase()} , owner@example.com` };
+    const overrides = { ...ENFORCED, AI_MONTHLY_LIMIT_FREE: "0", PRO_USERS: ` ${byId.userId.toUpperCase()} , owner@example.com` };
     expect((await summary(byId.token, overrides)).status).toBe(200);
     expect((await summary(byEmail.token, overrides)).status).toBe(200);
     expect((await summary(other.token, overrides)).status).toBe(403);
