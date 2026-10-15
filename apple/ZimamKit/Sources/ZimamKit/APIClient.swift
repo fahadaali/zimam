@@ -9,6 +9,10 @@ public struct APIError: Error, Equatable, Sendable {
     /// Stable English code, e.g. "unauthorized", "invalid".
     public let code: String
     public let message: String
+    /// `429 ai_quota_exceeded` only: the monthly assistant limit.
+    public var limit: Int?
+    /// `429 ai_quota_exceeded` only: the day the quota resets, "2026-11-01".
+    public var resetsOn: String?
 
     public var isUnauthorized: Bool { status == 401 }
 }
@@ -172,21 +176,23 @@ public final class APIClient: @unchecked Sendable {
 
     // MARK: Transport
 
-    private struct Empty: Decodable {}
+    struct Empty: Decodable {}
     private struct NoBody: Encodable {}
     private struct ErrorBody: Decodable {
         struct Detail: Decodable {
             let code: String
             let message: String
+            let limit: Int?
+            let resetsOn: String?
         }
         let error: Detail
     }
 
-    private func send<Response: Decodable>(_ method: String, _ path: String, query: [URLQueryItem] = []) async throws -> Response {
+    func send<Response: Decodable>(_ method: String, _ path: String, query: [URLQueryItem] = []) async throws -> Response {
         try await send(method, path, query: query, body: Optional<NoBody>.none)
     }
 
-    private func send<Response: Decodable, Body: Encodable>(
+    func send<Response: Decodable, Body: Encodable>(
         _ method: String, _ path: String, query: [URLQueryItem] = [], body: Body?
     ) async throws -> Response {
         var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
@@ -204,7 +210,8 @@ public final class APIClient: @unchecked Sendable {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let detail = try? JSONDecoder().decode(ErrorBody.self, from: data).error
-            throw APIError(status: status, code: detail?.code ?? "http_\(status)", message: detail?.message ?? "")
+            throw APIError(status: status, code: detail?.code ?? "http_\(status)", message: detail?.message ?? "",
+                           limit: detail?.limit, resetsOn: detail?.resetsOn)
         }
         if Response.self == Empty.self || data.isEmpty { return try JSONDecoder().decode(Response.self, from: Data("{}".utf8)) }
         return try JSONDecoder().decode(Response.self, from: data)

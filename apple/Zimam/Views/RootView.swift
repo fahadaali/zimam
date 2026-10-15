@@ -34,6 +34,8 @@ struct RootView: View {
                     }
                     // Signing out replaces this view, and its socket closes with it.
                     .onDisappear { sync.stopRealtime() }
+                    // Shared projects' members are kept in memory for the signed-in account only.
+                    .onDisappear { ProjectMembers.shared.clear() }
                     .onChange(of: session.user?.settings.prayerMethod) { _, _ in
                         notifications.reschedule()
                     }

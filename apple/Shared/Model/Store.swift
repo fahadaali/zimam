@@ -26,11 +26,17 @@ struct Store {
 
     // MARK: Tasks
 
+    /// `notes`, `dueTime` and `tags` come from the assistant's suggestion; a time is kept
+    /// only for a dated task that is not tied to a prayer, as the server does.
     @discardableResult
     func addTask(title: String, projectId: UUID? = nil, dueDate: String? = nil, duePrayer: Prayer? = nil,
-                 duePrayerOffset: Int? = nil, priority: TaskPriority = .none) -> TaskItem {
+                 duePrayerOffset: Int? = nil, priority: TaskPriority = .none,
+                 notes: String? = nil, dueTime: String? = nil, tags: [String] = []) -> TaskItem {
+        let trimmedNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
         let record = TaskRecord(projectId: projectId, title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-                                priority: priority, dueDate: dueDate, duePrayer: duePrayer,
+                                notes: trimmedNotes?.isEmpty == false ? trimmedNotes : nil,
+                                priority: priority, tags: tags, dueDate: dueDate,
+                                dueTime: dueDate != nil && duePrayer == nil ? dueTime : nil, duePrayer: duePrayer,
                                 duePrayerOffset: duePrayer == nil ? nil : duePrayerOffset)
         let task = TaskItem(record, dirty: true)
         context.insert(task)
@@ -71,6 +77,8 @@ struct Store {
         }
         task.projectId = projectId
         task.sectionId = nil
+        // The assignee may not be a member of the new project; the server rejects that.
+        task.assigneeId = nil
         touch(task)
     }
 
