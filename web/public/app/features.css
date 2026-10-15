@@ -1,0 +1,702 @@
+/* زمام على الويب: the assistant (assistant-view.js), sharing and comments (share-view.js), the
+   kanban board (board-view.js) and the calendar (calendar-view.js). Tokens only; logical properties
+   only; every control is at least a 44px target (space-11). */
+
+/* Five tabs on phones: a little less side padding so «المشاريع» fits. */
+@media (max-width: 59.99rem) {
+  .app-nav a {
+    padding-inline: var(--space-1);
+  }
+}
+
+/* ——— Shared pieces ——— */
+
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.segment {
+  min-block-size: var(--space-11);
+  min-inline-size: var(--space-11);
+  padding-inline: var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.segment[aria-pressed="true"] {
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--space-11);
+  block-size: var(--space-11);
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.extra-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.extra-section:empty {
+  display: none;
+}
+
+.task-extras {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--line);
+}
+
+/* Small «نقل» / «خيارات» buttons on cards and columns: quiet text, still a 44px target. */
+.card-move {
+  min-block-size: var(--space-11);
+  min-inline-size: var(--space-11);
+  padding-inline: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--brand);
+  cursor: pointer;
+}
+
+.card-menu {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lift);
+}
+
+.menu-item {
+  min-block-size: var(--space-11);
+  padding-inline: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  text-align: start;
+  cursor: pointer;
+}
+
+.menu-item:hover:not(:disabled),
+.menu-item:focus-visible {
+  background: var(--surface-sunken);
+}
+
+.menu-item:disabled {
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+/* ——— Assistant ——— */
+
+.assist {
+  gap: var(--space-2);
+}
+
+.assist-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.assist-box:empty {
+  display: none;
+}
+
+.assist-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.assist-error {
+  padding-block: var(--space-2);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.zm-ai-actions {
+  flex-wrap: wrap;
+}
+
+.ai-lines {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+  margin-block-start: var(--space-2);
+}
+
+.ai-lines dd {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.summary-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-block-end: var(--space-6);
+}
+
+.summary-box .zm-ai {
+  align-self: stretch;
+}
+
+.subtask-list,
+.step-list,
+.member-list,
+.comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.subtask {
+  padding-inline-start: var(--space-3);
+  border-inline-start: 2px solid var(--line-strong);
+  overflow-wrap: anywhere;
+}
+
+.subtask.is-done {
+  color: var(--ink-faint);
+  text-decoration: line-through;
+}
+
+.step-list {
+  margin-block-start: var(--space-2);
+}
+
+.step {
+  inline-size: 100%;
+  background: var(--surface-raised);
+}
+
+/* ——— Sharing and comments ——— */
+
+.share-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.member {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-block: var(--space-2);
+  border-block-end: 1px solid var(--line);
+}
+
+.member-info {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.member-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.member-role {
+  inline-size: auto;
+}
+
+.member-confirm {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.invite-result:empty {
+  display: none;
+}
+
+.invite-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.invite-link {
+  text-align: start;
+}
+
+.comment {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding-block-end: var(--space-2);
+  border-block-end: 1px solid var(--line);
+}
+
+.comment-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-3);
+  align-items: baseline;
+}
+
+.comment-author {
+  font-weight: 600;
+}
+
+.comment-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.comment-input {
+  resize: vertical;
+}
+
+/* ——— Project tools and the board ——— */
+
+.project-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block-start: var(--space-2);
+}
+
+/* Columns follow the writing direction: «بلا قسم» at the inline start (the right edge in Arabic),
+   and the board scrolls toward the inline end. */
+.board {
+  /* The containing block of the cards' screen-reader text (.zm-sr), so it scrolls with them. */
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  overflow-x: auto;
+  padding-block-end: var(--space-4);
+  /* Wider than the text column on large screens: up to the page width. */
+  inline-size: min(100vw - 2 * var(--gutter), var(--page));
+  scroll-snap-type: inline proximity;
+}
+
+@media (min-width: 60rem) {
+  .board {
+    inline-size: min(100vw - var(--sidebar) - var(--space-8) - var(--gutter), var(--page));
+  }
+}
+
+.board-column,
+.board-column-add {
+  flex: none;
+  inline-size: var(--card-min);
+  scroll-snap-align: start;
+}
+
+.board-column.is-target {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.zm-column-body {
+  min-block-size: var(--space-11);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.zm-column-head {
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.zm-column-title {
+  flex: 1;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.section-tools {
+  display: contents;
+}
+
+.section-tools .card-menu {
+  flex-basis: 100%;
+}
+
+.board-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.board-card[draggable="true"] {
+  cursor: grab;
+}
+
+.board-card.is-dragged {
+  opacity: 0.6;
+}
+
+.board-card .zm-task {
+  background: transparent;
+}
+
+.card-tools {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  padding-inline: var(--space-2);
+  padding-block-end: var(--space-1);
+}
+
+.card-tools .card-menu,
+.card-tools .column-form {
+  align-self: stretch;
+}
+
+.drop-placeholder {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.column-add .zm-column-add {
+  inline-size: 100%;
+}
+
+.column-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.board-add-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  inline-size: 100%;
+  min-block-size: var(--space-11);
+  padding-block: var(--space-3);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.board-column-add .column-form {
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+}
+
+body.is-dragging .zm-check,
+body.is-dragging .zm-task-open {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .drop-placeholder {
+    transition: block-size 150ms ease;
+  }
+}
+
+/* ——— Calendar ——— */
+
+.calendar-header {
+  gap: var(--space-3);
+}
+
+.calendar-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.calendar-period {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.period-title {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.cal-grid {
+  inline-size: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: var(--space-1);
+  margin-block-end: var(--space-6);
+}
+
+.cal-grid th {
+  padding-block: var(--space-1);
+  text-align: center;
+  font-weight: 500;
+}
+
+.cal-grid abbr {
+  text-decoration: none;
+}
+
+.cal-grid td {
+  padding: 0;
+}
+
+.cal-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  inline-size: 100%;
+  min-block-size: calc(var(--space-11) + var(--space-6));
+  padding-block: var(--space-1);
+  padding-inline: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.cal-day.is-outside {
+  background: transparent;
+  color: var(--ink-muted);
+}
+
+.cal-day.is-today {
+  border-color: var(--line-strong);
+}
+
+.cal-day.is-today .cal-primary {
+  color: var(--brand);
+}
+
+.cal-day[aria-pressed="true"] {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand-ink);
+}
+
+.cal-day.is-target,
+.week-day.is-target,
+.cal-selected.is-target {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.cal-primary {
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.cal-secondary {
+  color: var(--ink-muted);
+}
+
+.cal-day[aria-pressed="true"] .cal-secondary {
+  color: var(--brand-ink);
+}
+
+.cal-dots {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-1) / 2);
+  min-block-size: var(--space-2);
+}
+
+.cal-dot {
+  inline-size: var(--space-1);
+  block-size: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--ink-muted);
+}
+
+.cal-day[aria-pressed="true"] .cal-dot {
+  background: var(--brand-ink);
+}
+
+.cal-more {
+  font-size: inherit;
+  line-height: 1;
+  color: var(--ink-muted);
+}
+
+.week {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+@media (min-width: 90rem) {
+  /* Seven columns side by side, the first at the inline start, wider than the text column. */
+  .week {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: var(--space-2);
+    inline-size: min(100vw - var(--sidebar) - var(--space-8) - var(--gutter), var(--page));
+  }
+}
+
+.week-day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-block-size: calc(var(--space-11) * 2);
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+}
+
+.week-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-block-size: var(--space-11);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink);
+  text-align: start;
+  cursor: pointer;
+}
+
+.week-head[aria-pressed="true"] {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand-ink);
+}
+
+.week-head.is-today .headline {
+  color: var(--brand);
+}
+
+.week-tasks {
+  border-radius: var(--radius-md);
+}
+
+.week-tasks .zm-task {
+  padding-inline: var(--space-2);
+}
+
+.week-empty {
+  padding-inline: var(--space-2);
+}
+
+/* In a narrow day column, «نقل إلى…» goes under the task instead of beside it. */
+@media (min-width: 90rem) {
+  .week-tasks > .task-item:has(.card-tools) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .week-tasks > .task-item .card-move {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: end;
+  }
+}
+
+/* A card's «نقل» / «نقل إلى…» sits beside its row; the menu or form opens across the card below. */
+.board-card,
+.task-list > .task-item:has(.card-tools) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.board-card .card-tools,
+.task-list > .task-item .card-tools {
+  display: contents;
+}
+
+.board-card .card-move,
+.task-list > .task-item .card-move {
+  grid-column: 2;
+  grid-row: 1;
+  margin-block-start: var(--space-1);
+  margin-inline-end: var(--space-1);
+}
+
+.board-card .card-menu,
+.board-card .column-form,
+.task-list > .task-item .column-form {
+  grid-column: 1 / -1;
+  margin: var(--space-2);
+}
+
+.task-list > .task-item .column-form {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+/* «نقل إلى…» under a task in the calendar's lists. */
+.task-list > .task-item:has(.card-tools) {
+  background: var(--surface-raised);
+  border-block-end: 1px solid var(--line);
+}
+
+.task-list > .task-item:last-child:has(.card-tools) {
+  border-block-end: 0;
+}
+
+.task-list > .task-item:has(.card-tools) .zm-task {
+  border-block-end: 0;
+}
