@@ -40,36 +40,31 @@ struct WidgetItem: Identifiable, Hashable {
 
 /// The days a task covers on the calendar widgets.
 ///
-/// `startDate` ("YYYY-MM-DD", the span startDate…dueDate) is being added to tasks in parallel and
-/// does not exist on `TaskItem` yet, so for now every task covers its due day only.
+/// A task covers startDate…dueDate, or its due day alone without a start (a start after the due
+/// day is ignored by `DatedTask`).
 enum WidgetTaskSpan {
     static func span(for task: TaskItem) -> (start: String, end: String)? {
         guard let due = task.dueDate else { return nil }
-        // startDate: once `TaskItem.startDate` exists, use it here (a start after the due day is
-        // ignored by `DatedTask`, so no extra check is needed):
-        //     let start = task.startDate ?? due
-        let start = due
-        return (start, due)
+        return (task.startDate ?? due, due)
     }
 }
 
 /// The four quadrants of the priority matrix.
 ///
-/// PriorityQuadrant: temporary. Replace with the shared `PriorityQuadrant` in ZimamKit once it lands;
-/// the rule below is the contract it follows, so the matrix screen and the widget agree:
-/// important := priority ≥ 2 (medium or high); urgent := has a due date on or before tomorrow
+/// The widget's face of the shared `ZimamKit.PriorityQuadrant`, so the matrix screen and the
+/// widget agree: important := medium or high priority; urgent := due on or before tomorrow
 /// (overdue included), in the user's time zone. Done and deleted tasks are not classified.
 enum WidgetQuadrant: String, CaseIterable {
     case importantUrgent, important, urgent, someday
 
     static func classify(priority: TaskPriority, dueDay: String?, tomorrow: String) -> WidgetQuadrant {
-        let important = priority.rawValue >= 2
-        let urgent = dueDay.map { $0 <= tomorrow } ?? false
-        switch (important, urgent) {
-        case (true, true): return .importantUrgent
-        case (true, false): return .important
-        case (false, true): return .urgent
-        case (false, false): return .someday
+        let shared = ZimamKit.PriorityQuadrant(important: ZimamKit.PriorityMatrix.isImportant(priority),
+                                               urgent: dueDay.map { $0 <= tomorrow } ?? false)
+        switch shared {
+        case .urgentImportant: return .importantUrgent
+        case .important: return .important
+        case .urgent: return .urgent
+        case .someday: return .someday
         }
     }
 
@@ -94,10 +89,10 @@ enum WidgetQuadrant: String, CaseIterable {
     /// The quadrant's color: the priority tokens, from the most pressing down; neutral for «يوماً ما».
     var color: Color {
         switch self {
-        case .importantUrgent: ZimamColor.priorityHigh
-        case .important: ZimamColor.priorityLow
-        case .urgent: ZimamColor.priorityMedium
-        case .someday: ZimamColor.inkMuted
+        case .importantUrgent: ZimamColor.quadrantUrgentImportant
+        case .important: ZimamColor.quadrantImportant
+        case .urgent: ZimamColor.quadrantUrgent
+        case .someday: ZimamColor.quadrantSomeday
         }
     }
 }
