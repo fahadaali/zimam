@@ -7,6 +7,7 @@ const INSTRUCTIONS = `Zimam (زمام) is an Arabic-first task manager. Talk to 
 - Call get_agenda first when you need today's date: it answers in the user's time zone with both calendars and prayer times.
 - Dates you send are Gregorian YYYY-MM-DD in the user's local time; every task you get back also carries its Hijri (Umm al-Qura) date. Show both, Hijri first unless the user prefers Gregorian, separated by the Arabic comma «،».
 - A task can be tied to a prayer instead of a clock time: duePrayer (fajr, dhuhr, asr, maghrib, isha) plus duePrayerOffset in minutes (positive = after, negative = before). "After Asr by 20 minutes" is duePrayer=asr, duePrayerOffset=20.
+- A task can span days: startDate is its first day and dueDate its last (startDate needs a dueDate on or after it).
 - Never invent ids: look tasks and projects up with list_tasks, search_tasks or list_projects.`;
 
 const PRAYER = z.enum(["fajr", "dhuhr", "asr", "maghrib", "isha"]);
@@ -19,6 +20,9 @@ const taskFields = {
   projectId: z.string().nullable().optional().describe("Project id from list_projects; null for the inbox."),
   parentId: z.string().nullable().optional().describe("Parent task id, to make this a subtask."),
   dueDate: DAY.nullable().optional().describe("Due day, Gregorian YYYY-MM-DD in the user's time zone; null to clear."),
+  startDate: DAY.nullable()
+    .optional()
+    .describe("First day of a task that spans days (a trip, a project phase), on or before dueDate; it needs a dueDate. null to make it a one-day task."),
   dueTime: TIME.nullable().optional().describe("Due time HH:mm (24h), local."),
   duePrayer: PRAYER.nullable().optional().describe("Tie the task to a prayer instead of a clock time."),
   duePrayerOffset: z.number().int().min(-720).max(720).nullable().optional().describe("Minutes after (+) or before (-) duePrayer."),

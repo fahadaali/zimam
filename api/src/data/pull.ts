@@ -1,6 +1,6 @@
 import type { Access } from "./access";
 import { OUT, type Row, TABLES } from "./rows";
-import { type ChangeEntity, OPT_IN_ENTITIES } from "./schemas";
+import { type ChangeEntity, OPT_IN_ENTITIES, OPT_IN_VIEWS } from "./schemas";
 
 export interface Change {
   entity: ChangeEntity;
@@ -31,6 +31,8 @@ async function loadRows(db: D1Database, entity: ChangeEntity, ids: string[]): Pr
  *
  * Opt-in entities (attachments) are left out unless `include` names them, but the
  * cursor still moves past their rows, so older apps neither see nor re-pull them.
+ * Likewise a project's opt-in view ("timeline") reaches only clients that name it in
+ * `views`; the others get "list", which every app can decode.
  */
 export async function pullChanges(
   db: D1Database,
@@ -38,6 +40,7 @@ export async function pullChanges(
   cursor: number,
   limit: number,
   include: readonly ChangeEntity[] = [],
+  views: readonly string[] = [],
 ) {
   const { results } = await db
     .prepare(
@@ -86,7 +89,10 @@ export async function pullChanges(
   for (const c of wanted) {
     const row = rows.get(c.entity)?.get(c.entity_id);
     if (row && (await visible(c.entity, row))) {
-      changes.push({ entity: c.entity, id: c.entity_id, op: "upsert", data: OUT[c.entity](row) });
+      const data = OUT[c.entity](row);
+      const view = c.entity === "project" ? (data.view as string) : null;
+      if (view !== null && OPT_IN_VIEWS.includes(view) && !views.includes(view)) data.view = "list";
+      changes.push({ entity: c.entity, id: c.entity_id, op: "upsert", data });
     } else {
       changes.push({ entity: c.entity, id: c.entity_id, op: "delete" });
     }

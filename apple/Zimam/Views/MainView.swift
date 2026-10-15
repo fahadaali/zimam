@@ -114,10 +114,12 @@ struct MainView: View {
         )
     }
 
-    /// A project shown as a board gets a wider middle column.
+    /// A project shown as a board or a timeline, the timeline and the matrix get a wider middle column.
     private var showsBoard: Bool {
+        if sidebar == .timeline || sidebar == .matrix { return true }
         guard case .project(let id) = sidebar else { return false }
-        return projects.first { $0.id == id }?.layoutRaw == ProjectRecord.Layout.kanban.rawValue
+        let layout = projects.first { $0.id == id }?.layoutRaw
+        return layout == ProjectRecord.Layout.kanban.rawValue || layout == ProjectRecord.Layout.timeline.rawValue
     }
 
     // MARK: iPhone
@@ -142,6 +144,7 @@ struct MainView: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         .environment(\.projectOpened, { id in sidebar = .project(id) })
+        .environment(\.overviewOpened, { route in sidebar = route.sidebarItem })
     }
 
     // MARK: Changing width
@@ -160,6 +163,7 @@ struct MainView: View {
         tab = sidebar.tab
         var path = NavigationPath()
         if let project = sidebar.projectId { path.append(project) }
+        if let overview = sidebar.overview { path.append(overview) }
         if let route = selectedTask.wrappedValue { path.append(route) }
         switch tab {
         case .today: todayPath = path
@@ -195,7 +199,7 @@ struct MainView: View {
         case .today: return NewTaskRequest(due: .today, projectId: nil)
         case .upcoming: return NewTaskRequest(due: .tomorrow, projectId: nil)
         case .project(let id), .section(let id, _): return NewTaskRequest(due: .unscheduled, projectId: id)
-        case .inbox, .calendar, .search: return NewTaskRequest(due: .unscheduled, projectId: nil)
+        case .inbox, .calendar, .timeline, .matrix, .search: return NewTaskRequest(due: .unscheduled, projectId: nil)
         }
     }
 
@@ -257,6 +261,8 @@ private struct ContentColumn: View {
         case .upcoming: UpcomingView()
         case .inbox: InboxView()
         case .calendar: CalendarView()
+        case .timeline: GanttView(projectId: nil)
+        case .matrix: MatrixView()
         case .search: SearchView()
         case .project(let id): ProjectDetailView(projectId: id).id(item)
         case .section(let project, let section): ProjectDetailView(projectId: project, sectionId: section).id(item)

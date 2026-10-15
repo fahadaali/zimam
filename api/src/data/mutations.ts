@@ -305,6 +305,11 @@ export class Mutator {
       }
     }
 
+    // An app that predates start dates leaves the field out: keep the stored day while the
+    // (possibly new) due day still allows it, as TaskInput would require.
+    const kept = (existing?.start_date as string | null | undefined) ?? null;
+    const startDate =
+      t.startDate !== undefined ? t.startDate : kept !== null && t.dueDate !== null && kept <= t.dueDate ? kept : null;
     const completedAt = t.status === "done" ? (t.completedAt ?? t.updatedAt) : null;
     const searchText = foldForSearch(`${t.title} ${t.notes ?? ""} ${t.tags.join(" ")}`);
     const now = Date.now();
@@ -315,19 +320,20 @@ export class Mutator {
       this.db
         .prepare(
           `INSERT INTO tasks (id, owner_id, project_id, section_id, parent_id, title, notes, status, priority, tags,
-             due_date, due_time, due_prayer, due_prayer_offset, recurrence, assignee_id, sort_order, completed_at,
-             search_text, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             due_date, start_date, due_time, due_prayer, due_prayer_offset, recurrence, assignee_id, sort_order,
+             completed_at, search_text, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (id) DO UPDATE SET project_id = excluded.project_id, section_id = excluded.section_id,
              parent_id = excluded.parent_id, title = excluded.title, notes = excluded.notes, status = excluded.status,
-             priority = excluded.priority, tags = excluded.tags, due_date = excluded.due_date, due_time = excluded.due_time,
+             priority = excluded.priority, tags = excluded.tags, due_date = excluded.due_date,
+             start_date = excluded.start_date, due_time = excluded.due_time,
              due_prayer = excluded.due_prayer, due_prayer_offset = excluded.due_prayer_offset,
              recurrence = excluded.recurrence, assignee_id = excluded.assignee_id, sort_order = excluded.sort_order,
              completed_at = excluded.completed_at, search_text = excluded.search_text, updated_at = excluded.updated_at`,
         )
         .bind(
           t.id, ownerId, t.projectId, t.sectionId, t.parentId, t.title, t.notes, t.status, t.priority,
-          JSON.stringify(t.tags), t.dueDate, t.dueTime, t.duePrayer, t.duePrayerOffset, t.recurrence,
+          JSON.stringify(t.tags), t.dueDate, startDate, t.dueTime, t.duePrayer, t.duePrayerOffset, t.recurrence,
           t.assigneeId, t.sortOrder, completedAt, searchText, now, t.updatedAt,
         ),
       this.logChange("task", t.id, newScope, now),

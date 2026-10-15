@@ -40,6 +40,51 @@ final class SyncTests: XCTestCase {
         XCTAssertEqual(delete["updatedAt"] as? Int, 2000)
     }
 
+    func testStartDateDecodesAndIsAlwaysSent() throws {
+        let json = """
+        {"id":"0b9c6f8e-6f2c-4a4e-9a51-1d2c3b4a5e6f","title":"رحلة إلى جدة","status":"todo","priority":0,"tags":[],
+         "dueDate":"2026-10-11","startDate":"2026-10-09","sortOrder":0,"updatedAt":2}
+        """
+        let trip = try JSONDecoder().decode(TaskRecord.self, from: Data(json.utf8))
+        XCTAssertEqual(trip.startDate, "2026-10-09")
+        XCTAssertEqual(trip.dueDate, "2026-10-11")
+
+        // Servers and records from before start dates decode with none.
+        let legacy = try JSONDecoder().decode(TaskRecord.self, from: Data(#"{"id":"0b9c6f8e-6f2c-4a4e-9a51-1d2c3b4a5e6f","title":"x","status":"todo","priority":0,"tags":[],"sortOrder":0,"updatedAt":1}"#.utf8))
+        XCTAssertNil(legacy.startDate)
+
+        // null is sent, so clearing the start reaches the server (which keeps a missing one).
+        let oneDay = TaskRecord(title: "x", dueDate: "2026-10-11", updatedAt: 3)
+        let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(oneDay)) as! [String: Any]
+        XCTAssertTrue(encoded["startDate"] is NSNull)
+        XCTAssertEqual(encoded["dueDate"] as? String, "2026-10-11")
+        XCTAssertNil(encoded["dueTime"], "other empty fields stay out as before")
+        let spanned = try JSONSerialization.jsonObject(with: JSONEncoder().encode(trip)) as! [String: Any]
+        XCTAssertEqual(spanned["startDate"] as? String, "2026-10-09")
+        XCTAssertEqual(try JSONDecoder().decode(TaskRecord.self, from: JSONEncoder().encode(trip)), trip)
+    }
+
+    func testProjectViewsIncludeTheTimelineAndUnknownOnesReadAsList() throws {
+        func project(_ view: String) throws -> ProjectRecord {
+            let json = #"{"id":"2a3b4c5d-6e7f-4801-9234-56789abcdef0","kind":"project","name":"م","view":"\#(view)","sortOrder":0,"updatedAt":1}"#
+            return try JSONDecoder().decode(ProjectRecord.self, from: Data(json.utf8))
+        }
+        XCTAssertEqual(try project("timeline").view, .timeline)
+        XCTAssertEqual(try project("kanban").view, .kanban)
+        XCTAssertEqual(try project("someFutureView").view, .list)
+        let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(try project("timeline"))) as! [String: Any]
+        XCTAssertEqual(encoded["view"] as? String, "timeline")
+
+        // An unknown view goes back as it came, until the user picks one this build knows.
+        var future = try project("someFutureView")
+        let kept = try JSONSerialization.jsonObject(with: JSONEncoder().encode(future)) as! [String: Any]
+        XCTAssertEqual(kept["view"] as? String, "someFutureView")
+        future.view = .kanban
+        let chosen = try JSONSerialization.jsonObject(with: JSONEncoder().encode(future)) as! [String: Any]
+        XCTAssertEqual(chosen["view"] as? String, "kanban")
+        XCTAssertTrue(APIClient.pullQuery(cursor: 0, limit: 500).contains(URLQueryItem(name: "include", value: "timeline")))
+    }
+
     func testDecodesResultsWithLowercaseIds() throws {
         let json = #"[{"entity":"task","id":"0b9c6f8e-6f2c-4a4e-9a51-1d2c3b4a5e6f","status":"stale","message":"newer"}]"#
         let results = try JSONDecoder().decode([MutationResult].self, from: Data(json.utf8))

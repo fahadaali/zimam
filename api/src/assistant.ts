@@ -37,6 +37,8 @@ export interface AssistantTask {
   project: string | null;
   parentId: string | null;
   due: { date: string; time: string | null; hijri: string; gregorian: string } | null;
+  /** The first day of a task that spans days, up to `due`; null for a one-day task. */
+  start: { date: string; hijri: string; gregorian: string } | null;
   prayer: { prayer: string; offsetMinutes: number; text: string } | null;
   recurrence: string | null;
   completedAt: string | null;
@@ -86,6 +88,7 @@ export const TaskFields = z.object({
   projectId: Id.nullable().optional(),
   parentId: Id.nullable().optional(),
   dueDate: z.iso.date().nullable().optional(),
+  startDate: z.iso.date().nullable().optional(),
   dueTime: z
     .string()
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
@@ -297,6 +300,7 @@ export class Assistant {
         due: t.dueDate
           ? { date: t.dueDate, time: t.dueTime, hijri: hijriText(t.dueDate), gregorian: gregorianText(t.dueDate) }
           : null,
+        start: t.startDate ? { date: t.startDate, hijri: hijriText(t.startDate), gregorian: gregorianText(t.startDate) } : null,
         prayer: t.duePrayer
           ? {
               prayer: t.duePrayer,
@@ -317,5 +321,7 @@ function toTaskInput(fields: z.output<typeof TaskFields>): Record<string, unknow
   const input: Record<string, unknown> = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
   if (priority !== undefined) input.priority = PRIORITIES.indexOf(priority);
   if (fields.duePrayer === null) input.duePrayerOffset = null;
+  // Clearing the due day clears the span with it; a start day alone is not allowed.
+  if (fields.dueDate === null && fields.startDate === undefined) input.startDate = null;
   return input;
 }

@@ -19,6 +19,8 @@ export interface AssistantTask {
   project: string | null;
   parentId: string | null;
   due: { date: string; time: string | null; hijri: string; gregorian: string } | null;
+  /** The first day of a task that spans days, up to `due`; null for a one-day task. */
+  start: { date: string; hijri: string; gregorian: string } | null;
   prayer: { prayer: string; offsetMinutes: number; text: string } | null;
   recurrence: string | null;
   completedAt: string | null;
@@ -64,6 +66,7 @@ export interface TaskFields {
   projectId?: string | null;
   parentId?: string | null;
   dueDate?: string | null;
+  startDate?: string | null;
   dueTime?: string | null;
   duePrayer?: PrayerName | null;
   duePrayerOffset?: number | null;

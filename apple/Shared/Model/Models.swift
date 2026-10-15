@@ -31,7 +31,7 @@ final class ProjectItem {
         parentId = r.parentId
         kindRaw = r.kind.rawValue
         name = r.name
-        layoutRaw = r.view.rawValue
+        layoutRaw = r.unknownView ?? r.view.rawValue
         sortOrder = r.sortOrder
         archivedAt = r.archivedAt
         createdAt = r.createdAt ?? r.updatedAt
@@ -45,7 +45,7 @@ final class ProjectItem {
         parentId = r.parentId
         kindRaw = r.kind.rawValue
         name = r.name
-        layoutRaw = r.view.rawValue
+        layoutRaw = r.unknownView ?? r.view.rawValue
         sortOrder = r.sortOrder
         archivedAt = r.archivedAt
         if let created = r.createdAt { createdAt = created }
@@ -54,10 +54,16 @@ final class ProjectItem {
         syncError = nil
     }
 
+    /// A view this build does not know (`layoutRaw` keeps it as the server sent it) opens as a
+    /// list and goes back unchanged, so another app's choice is not overwritten.
     var record: ProjectRecord {
-        ProjectRecord(id: id, ownerId: ownerId, parentId: parentId, kind: ProjectRecord.Kind(rawValue: kindRaw) ?? .project,
-                      name: name, view: ProjectRecord.Layout(rawValue: layoutRaw) ?? .list, sortOrder: sortOrder,
-                      archivedAt: archivedAt, createdAt: createdAt, updatedAt: updatedAt)
+        let layout = ProjectRecord.Layout(rawValue: layoutRaw)
+        var record = ProjectRecord(id: id, ownerId: ownerId, parentId: parentId,
+                                   kind: ProjectRecord.Kind(rawValue: kindRaw) ?? .project, name: name,
+                                   view: layout ?? .list, sortOrder: sortOrder, archivedAt: archivedAt,
+                                   createdAt: createdAt, updatedAt: updatedAt)
+        record.unknownView = layout == nil ? layoutRaw : nil
+        return record
     }
 }
 
@@ -112,6 +118,9 @@ final class TaskItem {
     var priorityRaw: Int
     var tags: [String]
     var dueDate: String?
+    /// The first day of a multi-day task (`TaskRecord.startDate`). Added after the first release:
+    /// an optional attribute, so SwiftData migrates existing stores on its own.
+    var startDate: String?
     var dueTime: String?
     var duePrayerRaw: String?
     var duePrayerOffset: Int?
@@ -137,6 +146,7 @@ final class TaskItem {
         priorityRaw = r.priority.rawValue
         tags = r.tags
         dueDate = r.dueDate
+        startDate = r.startDate
         dueTime = r.dueTime
         duePrayerRaw = r.duePrayer?.rawValue
         duePrayerOffset = r.duePrayerOffset
@@ -161,6 +171,7 @@ final class TaskItem {
         priorityRaw = r.priority.rawValue
         tags = r.tags
         dueDate = r.dueDate
+        startDate = r.startDate
         dueTime = r.dueTime
         duePrayerRaw = r.duePrayer?.rawValue
         duePrayerOffset = r.duePrayerOffset
@@ -176,7 +187,7 @@ final class TaskItem {
 
     var record: TaskRecord {
         TaskRecord(id: id, ownerId: ownerId, projectId: projectId, sectionId: sectionId, parentId: parentId, title: title,
-                   notes: notes, status: status, priority: priority, tags: tags, dueDate: dueDate, dueTime: dueTime,
+                   notes: notes, status: status, priority: priority, tags: tags, dueDate: dueDate, startDate: startDate, dueTime: dueTime,
                    duePrayer: duePrayer, duePrayerOffset: duePrayerOffset, recurrence: recurrence, assigneeId: assigneeId,
                    sortOrder: sortOrder, completedAt: completedAt, createdAt: createdAt, updatedAt: updatedAt)
     }
@@ -197,6 +208,9 @@ final class TaskItem {
     }
 
     var isDone: Bool { status == .done }
+
+    /// The days the task occupies on the calendar and the timeline; nil without a due day.
+    var span: DaySpan? { DaySpan(startDate: startDate, dueDate: dueDate) }
 }
 
 @Model

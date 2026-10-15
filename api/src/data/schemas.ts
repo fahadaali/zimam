@@ -14,6 +14,14 @@ export const OPT_IN_ENTITIES: readonly ChangeEntity[] = ["attachment"];
 
 export const PRAYERS = ["fajr", "dhuhr", "asr", "maghrib", "isha"] as const;
 
+/**
+ * How a project opens. "timeline" («المخطط الزمني», migrations/0012) is newer than the apps that
+ * decode `view` strictly, so a pull sends it only to clients that ask (`include=timeline`) and
+ * "list" to the rest (src/data/pull.ts).
+ */
+export const PROJECT_VIEWS = ["list", "kanban", "calendar", "timeline"] as const;
+export const OPT_IN_VIEWS: readonly string[] = ["timeline"];
+
 /** Swift sends uppercase UUIDs; the server stores them lowercase. */
 export const Id = z.uuid().transform((s) => s.toLowerCase());
 const NullableId = Id.nullable().default(null);
@@ -26,7 +34,7 @@ export const ProjectInput = z.object({
   parentId: NullableId,
   kind: z.enum(["project", "folder"]).default("project"),
   name: z.string().trim().min(1).max(200),
-  view: z.enum(["list", "kanban", "calendar"]).default("list"),
+  view: z.enum(PROJECT_VIEWS).default("list"),
   sortOrder: SortOrder,
   archivedAt: Timestamp.nullable().default(null),
   updatedAt: Timestamp,
@@ -42,33 +50,44 @@ export const SectionInput = z.object({
 });
 export type SectionInput = z.infer<typeof SectionInput>;
 
-export const TaskInput = z.object({
-  id: Id,
-  projectId: NullableId,
-  sectionId: NullableId,
-  parentId: NullableId,
-  title: z.string().trim().min(1).max(500),
-  notes: z.string().max(20_000).nullable().default(null),
-  status: z.enum(["todo", "doing", "done"]).default("todo"),
-  /** 0 none, 1 low, 2 medium, 3 high. */
-  priority: z.number().int().min(0).max(3).default(0),
-  tags: z.array(z.string().trim().min(1).max(50)).max(30).default([]),
-  dueDate: z.iso.date().nullable().default(null),
-  dueTime: z
-    .string()
-    .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
-    .nullable()
-    .default(null),
-  duePrayer: z.enum(PRAYERS).nullable().default(null),
-  /** Minutes after (positive) or before (negative) the prayer. */
-  duePrayerOffset: z.number().int().min(-720).max(720).nullable().default(null),
-  /** RFC 5545 RRULE, e.g. "FREQ=WEEKLY;BYDAY=TH". */
-  recurrence: z.string().max(500).nullable().default(null),
-  assigneeId: NullableId,
-  sortOrder: SortOrder,
-  completedAt: Timestamp.nullable().default(null),
-  updatedAt: Timestamp,
-});
+export const TaskInput = z
+  .object({
+    id: Id,
+    projectId: NullableId,
+    sectionId: NullableId,
+    parentId: NullableId,
+    title: z.string().trim().min(1).max(500),
+    notes: z.string().max(20_000).nullable().default(null),
+    status: z.enum(["todo", "doing", "done"]).default("todo"),
+    /** 0 none, 1 low, 2 medium, 3 high. */
+    priority: z.number().int().min(0).max(3).default(0),
+    tags: z.array(z.string().trim().min(1).max(50)).max(30).default([]),
+    dueDate: z.iso.date().nullable().default(null),
+    /**
+     * The first day of a task that spans days, up to `dueDate`; null for a one-day task. Left out
+     * (apps that predate it) keeps the stored one, which the server drops if the due day no
+     * longer allows it (src/data/mutations.ts).
+     */
+    startDate: z.iso.date().nullable().optional(),
+    dueTime: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+      .nullable()
+      .default(null),
+    duePrayer: z.enum(PRAYERS).nullable().default(null),
+    /** Minutes after (positive) or before (negative) the prayer. */
+    duePrayerOffset: z.number().int().min(-720).max(720).nullable().default(null),
+    /** RFC 5545 RRULE, e.g. "FREQ=WEEKLY;BYDAY=TH". */
+    recurrence: z.string().max(500).nullable().default(null),
+    assigneeId: NullableId,
+    sortOrder: SortOrder,
+    completedAt: Timestamp.nullable().default(null),
+    updatedAt: Timestamp,
+  })
+  .refine((t) => t.startDate == null || (t.dueDate !== null && t.startDate <= t.dueDate), {
+    message: "startDate needs a dueDate on or after it",
+    path: ["startDate"],
+  });
 export type TaskInput = z.infer<typeof TaskInput>;
 
 const Location = z.object({

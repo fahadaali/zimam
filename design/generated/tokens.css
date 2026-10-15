@@ -40,6 +40,14 @@
   --priority-low: var(--brand);
   --success: #1f6f43;
   --focus-ring: var(--brand);
+  --quadrant-urgent-important: var(--priority-high);
+  --quadrant-important: #11618a;
+  --quadrant-urgent: var(--priority-medium);
+  --quadrant-someday: var(--ink-muted);
+  --on-quadrant: var(--on-brand);
+  --timeline-bar: #1b6e6a;
+  --on-timeline-bar: var(--on-brand);
+  --timeline-today: var(--priority-high);
   --shadow-lift: 0 8px 24px rgba(23,27,47,0.14);
 }
 
@@ -63,6 +71,14 @@
   --priority-low: var(--brand);
   --success: #62c98f;
   --focus-ring: var(--brand);
+  --quadrant-urgent-important: var(--priority-high);
+  --quadrant-important: #6cc3e8;
+  --quadrant-urgent: var(--priority-medium);
+  --quadrant-someday: var(--ink-muted);
+  --on-quadrant: var(--on-brand);
+  --timeline-bar: #5fc4bb;
+  --on-timeline-bar: var(--on-brand);
+  --timeline-today: var(--priority-high);
   --shadow-lift: 0 8px 24px rgba(0,0,0,0.5);
 }
 
@@ -87,6 +103,14 @@
     --priority-low: var(--brand);
     --success: #62c98f;
     --focus-ring: var(--brand);
+    --quadrant-urgent-important: var(--priority-high);
+    --quadrant-important: #6cc3e8;
+    --quadrant-urgent: var(--priority-medium);
+    --quadrant-someday: var(--ink-muted);
+    --on-quadrant: var(--on-brand);
+    --timeline-bar: #5fc4bb;
+    --on-timeline-bar: var(--on-brand);
+    --timeline-today: var(--priority-high);
     --shadow-lift: 0 8px 24px rgba(0,0,0,0.5);
   }
 }

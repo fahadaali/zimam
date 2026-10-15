@@ -56,6 +56,7 @@ export function taskOut(r: Row) {
     priority: num(r.priority),
     tags: json(r.tags) as string[],
     dueDate: strOrNull(r.due_date),
+    startDate: strOrNull(r.start_date),
     dueTime: strOrNull(r.due_time),
     duePrayer: strOrNull(r.due_prayer),
     duePrayerOffset: numOrNull(r.due_prayer_offset),

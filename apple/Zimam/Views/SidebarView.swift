@@ -51,6 +51,8 @@ struct SidebarView: View {
                     count: open.filter { $0.projectId == nil }.count)
                     .modifier(taskDrop(.inbox, name: "صندوق المهام", project: nil, section: nil))
                 row("التقويم", systemImage: "calendar.circle", item: .calendar)
+                row(OverviewRoute.timeline.title, systemImage: OverviewRoute.timeline.systemImage, item: .timeline)
+                row(OverviewRoute.matrix.title, systemImage: OverviewRoute.matrix.systemImage, item: .matrix)
                 row("البحث", systemImage: "magnifyingglass", item: .search)
             }
 
