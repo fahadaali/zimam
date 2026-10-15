@@ -422,7 +422,7 @@ describe("providerFromEnv", () => {
   });
 
   it("is configured in wrangler vars without any key", () => {
-    expect(env.AI_PROVIDER).toBe("anthropic");
+    expect(env.AI_PROVIDER).toBe("deepseek");
     expect(env.AI_GATEWAY_URL).toBe(GATEWAY);
     expect(env.AI_MONTHLY_LIMIT).toBe("300");
   });
