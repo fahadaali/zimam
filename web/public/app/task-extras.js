@@ -1,8 +1,10 @@
 // Additions to the task details dialog (index.html #task-dialog), kept out of main.js: the assignee
-// picker and comments (share-view.js), and the subtasks with «تقسيم إلى خطوات» (assistant-view.js).
+// picker and comments (share-view.js), the subtasks with «تقسيم إلى خطوات» (assistant-view.js), and
+// «المدة» with the start date (duration-view.js).
 // They live in their own container after #task-details, so other additions to the dialog stay
 // separate from these.
 import { breakdownSection } from "./assistant-view.js";
+import { durationSection } from "./duration-view.js";
 import { h } from "./lib/components.js";
 import { assigneeSection, commentsSection } from "./share-view.js";
 
@@ -24,6 +26,7 @@ export function showTaskExtras(task, ctx) {
   const isCurrent = () => token === shown && dialog.open;
   const scoped = { ...ctx, isCurrent };
   box.replaceChildren(
+    durationSection(task, scoped),
     assigneeSection(task, scoped),
     task.parentId ? null : breakdownSection(task, scoped),
     task.projectId ? commentsSection(task, scoped) : null,

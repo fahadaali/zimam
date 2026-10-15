@@ -1,8 +1,9 @@
 // A project as a kanban board, as in the Apple app (KanbanBoardView, Store+Board.swift): one column
 // per section with «بلا قسم» first, so in Arabic the first column sits at the right edge. Tasks move
 // by drag and drop between and within columns (HTML5 DnD), and from each card's «نقل» menu
-// (up, down, «نقل إلى…») for the keyboard. Orders follow lib/order.js (ManualOrder). The list or
-// board choice is the project's `view`, so it follows the project to the app.
+// (up, down, «نقل إلى…») for the keyboard. Orders follow lib/order.js (ManualOrder). The list,
+// board or timeline (timeline-view.js) choice is the project's `view`, so it follows the project
+// to the app.
 // Plain DOM through h() and textContent; nothing here parses HTML.
 import { errorText } from "./lib/api.js";
 import { Button, h, icons } from "./lib/components.js";
@@ -11,16 +12,43 @@ import { after, boardColumns, byManualOrder, dropIndex, moveSection, placeTask, 
 import { arabicNumber } from "./lib/numbers.js";
 import { canEdit } from "./lib/sharing.js";
 
-// ——— List or board ———
+// ——— List, board or timeline ———
+
+const LAYOUTS = ["list", "kanban", "timeline"];
 
 /** A viewer's own choice for this page's life: viewers cannot change the project's `view`. */
 const localLayout = new Map();
 
-export function layoutOf(project) {
-  return localLayout.get(project.id) ?? (project.view === "kanban" ? "kanban" : "list");
+// «مخطط» is saved as the project's view "timeline". A server that does not accept that value yet
+// answers 400 (`invalid`); the choice is then kept for this browser tab (sessionStorage) instead.
+const SESSION_KEY = "zimam.projectLayouts";
+
+function sessionLayouts() {
+  try {
+    return JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "{}") ?? {};
+  } catch {
+    return {};
+  }
 }
 
-/** «قائمة» / «لوحة»: saves the project's `view` (owner and editor), then redraws the view. */
+function rememberLayout(projectId, value) {
+  try {
+    const all = sessionLayouts();
+    if (value) all[projectId] = value;
+    else delete all[projectId];
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(all));
+  } catch {
+    /* kept for this page only */
+  }
+}
+
+export function layoutOf(project) {
+  const chosen = localLayout.get(project.id) ?? sessionLayouts()[project.id];
+  if (LAYOUTS.includes(chosen)) return chosen;
+  return LAYOUTS.includes(project.view) ? project.view : "list";
+}
+
+/** «قائمة» / «لوحة» / «مخطط»: saves the project's `view` (owner and editor), then redraws the view. */
 export function layoutToggle(project, ctx) {
   const current = layoutOf(project);
   const make = (value, label) => {
@@ -28,6 +56,7 @@ export function layoutToggle(project, ctx) {
     button.addEventListener("click", async () => {
       if (layoutOf(project) === value) return;
       localLayout.set(project.id, value);
+      rememberLayout(project.id, null);
       ctx.render();
       if (!canEdit(project.role)) return;
       try {
@@ -35,12 +64,14 @@ export function layoutToggle(project, ctx) {
         project.view = saved.view;
         localLayout.delete(project.id);
       } catch (error) {
-        if (error.status !== 401 && error.status !== 403) ctx.showError(error);
+        // An older server knows no "timeline" view: keep the choice in this tab, say nothing.
+        if (value === "timeline" && error.status === 400) rememberLayout(project.id, value);
+        else if (error.status !== 401 && error.status !== 403) ctx.showError(error);
       }
     });
     return button;
   };
-  return h("div", { className: "segmented", role: "group", "aria-label": "طريقة العرض" }, make("list", "قائمة"), make("kanban", "لوحة"));
+  return h("div", { className: "segmented", role: "group", "aria-label": "طريقة العرض" }, make("list", "قائمة"), make("kanban", "لوحة"), make("timeline", "مخطط"));
 }
 
 // ——— The board ———
