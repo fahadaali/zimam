@@ -43,10 +43,12 @@ let memoryToken = null;
 const currentToken = () => session.get() ?? memoryToken;
 
 export class ApiError extends Error {
-  constructor(status, code, message) {
+  constructor(status, code, message, details = null) {
     super(message);
     this.status = status;
     this.code = code;
+    /** The whole `error` object, for codes with more fields (ai_quota_exceeded: limit, resetsOn). */
+    this.details = details;
   }
 }
 
@@ -101,7 +103,7 @@ export async function request(method, path, body) {
       session.clear();
       onUnauthorized();
     }
-    throw new ApiError(response.status, code, data?.error?.message ?? response.statusText);
+    throw new ApiError(response.status, code, data?.error?.message ?? response.statusText, data?.error ?? null);
   }
   return data;
 }

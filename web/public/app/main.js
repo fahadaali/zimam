@@ -23,6 +23,14 @@ import { createRealtime, realtimeUrl } from "./lib/realtime.js";
 import { viewImport } from "./import-view.js";
 import { rememberPendingJoin, takePendingJoin, viewJoin } from "./invite-view.js";
 import { PRIORITY_WORDS, groupByDay, isOpen, priorityKey, progressText, splitToday, taskCount } from "./lib/tasks.js";
+// Features in their own modules: the assistant, the board, the calendar and sharing.
+import { resetAddAssistant, setupAddAssistant, todaySummary, withAssistantExtras } from "./assistant-view.js";
+import { boardView, layoutOf, layoutToggle } from "./board-view.js";
+import { calendarSelectedDay, viewCalendar } from "./calendar-view.js";
+import { boardApi } from "./lib/feature-api.js";
+import { canEdit } from "./lib/sharing.js";
+import { openShare } from "./share-view.js";
+import { showTaskExtras } from "./task-extras.js";
 
 const APPLE_CLIENT_ID = "app.zimam.ios.web";
 // Google OAuth web client ID (public). Empty hides the Google button. Keep it in the API's GOOGLE_CLIENT_IDS.
@@ -60,6 +68,26 @@ const state = {
 
 const primary = () => state.me?.settings?.calendar ?? "hijri";
 const projectName = (id) => state.projects.find((p) => p.id === id)?.name ?? null;
+/** The viewer's role in a task's project; their own inbox is theirs. */
+const roleFor = (task) => (task.projectId ? (state.projects.find((p) => p.id === task.projectId)?.role ?? null) : "owner");
+
+/** What the feature modules (assistant, board, calendar, sharing) need from the app. */
+function featureContext() {
+  return {
+    me: state.me,
+    primary: primary(),
+    today: state.today,
+    projectName,
+    announce,
+    showError,
+    errorText,
+    taskItem,
+    canEditTask: (task) => canEdit(roleFor(task)),
+    render: () => render({ focus: false }),
+    refreshProjects,
+    markLocalChange: () => (state.localChangeAt = Date.now()),
+  };
+}
 
 // ——— Status and errors ———
 
@@ -307,6 +335,7 @@ function scheduleLiveRefresh() {
 /** Whether a reload now would get in the way: a dialog, a task leaving its list, or keyboard focus in the view. */
 function busy() {
   if (document.querySelector("dialog[open]")) return true;
+  if (document.body.classList.contains("is-dragging")) return true;
   if (Date.now() - state.localChangeAt < LEAVE_AFTER + FADE + 500) return true;
   const active = document.activeElement;
   return !!active && els.view.contains(active) && active.matches("input, select, textarea, :focus-visible");
@@ -342,11 +371,12 @@ function parseRoute() {
   if (parts[0] === "inbox") return { name: "inbox" };
   if (parts[0] === "search") return { name: "search", q: params.get("q") ?? "" };
   if (parts[0] === "import") return { name: "import" };
+  if (parts[0] === "calendar") return { name: "calendar" };
   if (parts[0] === "join") return { name: "join", code: parts[1] ?? "" };
   return { name: "today" };
 }
 
-const NAV = { today: "today", upcoming: "upcoming", projects: "projects", project: "projects", inbox: "projects", search: "search", import: "import" };
+const NAV = { today: "today", upcoming: "upcoming", calendar: "calendar", projects: "projects", project: "projects", inbox: "projects", search: "search", import: "import" };
 
 function updateNav(route) {
   for (const link of document.querySelectorAll("a[data-route]")) {
@@ -366,6 +396,7 @@ const VIEWS = {
   project: viewProject,
   inbox: viewInbox,
   search: viewSearch,
+  calendar: () => viewCalendar(featureContext()),
   import: () => viewImport({ primary: primary(), today: state.today, announce, onImported: refreshProjects }),
   join: ({ code }) =>
     viewJoin({
@@ -500,7 +531,7 @@ async function viewToday() {
   const today = state.today;
   const { tasks } = await api.tasks({ status: "open", dueTo: today });
   const { overdue, due } = splitToday(tasks, today);
-  const out = [viewHeader("اليوم", `${weekdayName(today)}، ${dualDate(today, { primary: primary(), today })}`)];
+  const out = [viewHeader("اليوم", `${weekdayName(today)}، ${dualDate(today, { primary: primary(), today })}`), todaySummary(featureContext())];
   if (tasks.length === 0) {
     out.push(emptyState("لا مهام اليوم. يومك لك."));
     return out;
@@ -564,13 +595,18 @@ async function viewProjects() {
   return out;
 }
 
-async function projectTasksView(title, subtitle, projectId) {
+async function projectTasksView(title, subtitle, projectId, project = null) {
   const { tasks } = await api.tasks({ projectId });
   const top = tasks.filter((t) => !t.parentId);
   const open = top.filter(isOpen);
   const done = top.filter((t) => !isOpen(t));
   const back = ButtonLink({ variant: "quiet", href: "#/projects", className: "back-link" }, "المشاريع");
-  const out = [h("nav", { className: "breadcrumb", "aria-label": "المسار" }, back), viewHeader(title, subtitle)];
+  const out = [h("nav", { className: "breadcrumb", "aria-label": "المسار" }, back), viewHeader(title, subtitle, project ? projectTools(project) : null)];
+  if (project && layoutOf(project) === "kanban") {
+    const detail = await boardApi.project(project.id);
+    out.push(boardView({ project: { ...project, role: detail.role ?? project.role }, sections: detail.sections ?? [], tasks: top }, featureContext()));
+    return out;
+  }
   out.push(open.length ? taskList(open, { showProject: false, label: "المهام المفتوحة" }) : emptyState("لا مهام مفتوحة هنا."));
   if (done.length) {
     out.push(
@@ -586,7 +622,21 @@ async function viewProject({ id }) {
   let project = state.projects.find((p) => p.id === id);
   if (!project) project = await api.project(id);
   const counts = project.taskCount != null ? progressText(project.doneCount ?? 0, project.taskCount) : null;
-  return projectTasksView(project.name, counts, id);
+  return projectTasksView(project.name, counts, id, project);
+}
+
+/** List or board, and «مشاركة», under a project's title. */
+function projectTools(project) {
+  const share = Button({ variant: "secondary", "aria-haspopup": "dialog" }, "مشاركة");
+  share.addEventListener("click", () =>
+    openShare(project, {
+      ...featureContext(),
+      onLeft: () => {
+        location.hash = "#/projects";
+      },
+    }),
+  );
+  return h("div", { className: "project-tools" }, layoutToggle(project, featureContext()), share);
 }
 
 async function viewInbox() {
@@ -680,6 +730,7 @@ function openTask(task, li) {
   if (task.notes) rows.push(...detail("الملاحظات", h("span", { className: "notes" }, task.notes)));
   taskDialog.details.replaceChildren(...rows);
   taskDialog.el.showModal();
+  showTaskExtras(task, { ...featureContext(), role: roleFor(task) });
 }
 
 $("task-close").addEventListener("click", () => taskDialog.el.close());
@@ -779,6 +830,8 @@ function openAdd() {
   addDialog.minutes.removeAttribute("aria-invalid");
   const route = parseRoute();
   addDialog.date.value = route.name === "upcoming" ? addDays(state.today, 1) : route.name === "project" || route.name === "inbox" ? "" : state.today;
+  if (route.name === "calendar" && isIsoDate(calendarSelectedDay())) addDialog.date.value = calendarSelectedDay();
+  resetAddAssistant();
   fillProjects();
   updateDatePreview();
   updatePrayerPreview();
@@ -819,14 +872,14 @@ addDialog.form.addEventListener("submit", async (event) => {
   if (prayer && Number.isNaN(offset)) return invalid(addDialog.minutes, "اكتب عدد الدقائق من ٠ إلى ٧٢٠.", addDialog.minutesError);
 
   const priority = Number(addDialog.form.elements.priority.value) || 0;
-  const body = {
+  const body = withAssistantExtras({
     title,
     dueDate: isIsoDate(addDialog.date.value) ? addDialog.date.value : null,
     duePrayer: prayer,
     duePrayerOffset: prayer ? offset : null,
     priority,
     projectId: addDialog.project.value || null,
-  };
+  });
   addDialog.submit.disabled = true;
   try {
     await api.createTask(body);
@@ -840,6 +893,8 @@ addDialog.form.addEventListener("submit", async (event) => {
     addDialog.submit.disabled = false;
   }
 });
+
+setupAddAssistant(featureContext);
 
 // Back from Google in this tab (popups were blocked): finish that sign-in first.
 const googleRedirect = takeGoogleRedirect();
