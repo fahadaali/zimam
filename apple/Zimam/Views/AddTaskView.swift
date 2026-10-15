@@ -4,7 +4,9 @@ import ZimamKit
 
 /// Adds a task: title, when it is due, an optional prayer anchor, priority and project.
 /// «اقتراح بالمساعد» reads the typed sentence on the server and shows the result for review;
-/// nothing is added until the user accepts it or edits it into the form.
+/// nothing is added until the user accepts it or edits it into the form. «إملاء» fills the title
+/// from speech (SpeechDictation), then asks the assistant the same way; offline, or when the
+/// assistant cannot help, the dictated words stay in the title to add as they are.
 struct AddTaskView: View {
     enum Due: Hashable { case unscheduled, today, tomorrow, pickedDate }
 
@@ -39,6 +41,9 @@ struct AddTaskView: View {
     @State private var notes = ""
     @State private var tagsText = ""
     @State private var dueTime: String?
+    @State private var dictation = SpeechDictation()
+    /// What was typed before dictation started; the dictated words follow it.
+    @State private var dictationPrefix = ""
     @FocusState private var titleFocused: Bool
 
     /// `date` is the day `.pickedDate` starts on (the calendar passes its selected day).
@@ -57,6 +62,7 @@ struct AddTaskView: View {
                     TextField("عنوان المهمة", text: $title)
                         .focused($titleFocused)
                         .onSubmit(add)
+                    dictationControl
                     if NetworkMonitor.shared.isOnline {
                         Button("اقتراح بالمساعد", systemImage: "text.badge.checkmark", action: suggest)
                             .buttonStyle(.zimamQuiet)
@@ -136,7 +142,57 @@ struct AddTaskView: View {
                 }
             }
             .onAppear { titleFocused = true }
+            .onDisappear { dictation.cancel() }
+            .onChange(of: dictation.transcript) { _, words in
+                if dictation.isActive { title = dictationPrefix + words }
+            }
         }
+    }
+
+    // MARK: Dictation
+
+    /// «إملاء» and, while listening, the words heard so far go into the title field.
+    @ViewBuilder private var dictationControl: some View {
+        let listening = dictation.phase == .listening
+        Button(listening ? "إيقاف الإملاء" : "إملاء",
+               systemImage: listening ? "stop.circle" : "mic",
+               action: toggleDictation)
+            .buttonStyle(.zimamQuiet)
+            .disabled(dictation.phase == .starting || assistant == .loading)
+            .accessibilityHint(listening ? "يوقف الاستماع ويقرأ المساعد المهمة." : "قل المهمة بصوتك، مثل «ذكرني أراجع العقد بعد العصر بكرة».")
+        switch dictation.phase {
+        case .listening:
+            Label("أستمع… قل المهمة كما تقولها لشخص.", systemImage: "waveform")
+                .font(ZimamType.callout)
+                .foregroundStyle(ZimamColor.inkMuted)
+                .frame(minHeight: ZimamSpacing.space11, alignment: .leading)
+                .accessibilityElement(children: .combine)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.circle")
+                .font(ZimamType.callout)
+                .foregroundStyle(ZimamColor.inkMuted)
+                .frame(minHeight: ZimamSpacing.space11, alignment: .leading)
+        case .idle, .starting:
+            EmptyView()
+        }
+    }
+
+    private func toggleDictation() {
+        if dictation.phase != .listening {
+            titleFocused = false
+            let typed = trimmedTitle
+            dictationPrefix = typed.isEmpty ? "" : typed + " "
+            withAnimation { assistant = .idle }
+            dictation.onFinish = { _ in dictationFinished() }
+        }
+        dictation.toggle()
+    }
+
+    /// The dictated sentence goes to the assistant when it can be reached; otherwise it stays
+    /// in the title, ready to add as it is.
+    private func dictationFinished() {
+        guard !trimmedTitle.isEmpty, NetworkMonitor.shared.isOnline else { return }
+        suggest()
     }
 
     // MARK: Assistant
@@ -150,6 +206,11 @@ struct AddTaskView: View {
         case .failed(let message):
             Section {
                 AssistantStatus(phase: .failed(message), needsPro: assistantNeedsPro, onRetry: suggest, onClose: { assistant = .idle })
+                // The assistant never blocks adding: the sentence can go in as it is.
+                if !trimmedTitle.isEmpty {
+                    Button("إضافة بالنص كما هو", systemImage: "plus.circle", action: add)
+                        .buttonStyle(.zimamQuiet)
+                }
             }
         case .suggestion(let suggestion):
             Section {

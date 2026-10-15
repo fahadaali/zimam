@@ -33,6 +33,8 @@ struct ZimamApp: App {
             // «المهمة الجارية» ends once its task is done or deleted, wherever that happened.
             FocusActivity.endFinished(in: ZimamStore.shared.mainContext)
             #endif
+            // Open tasks in Spotlight, for system search, Siri and Apple Intelligence.
+            TaskSpotlight.shared.scheduleUpdate()
         }
         location.onChange = { [notifications, session, location] in
             notifications.reschedule()

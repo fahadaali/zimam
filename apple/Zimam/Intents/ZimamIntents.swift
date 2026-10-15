@@ -30,6 +30,7 @@ enum PrayerOption: String, AppEnum, CaseIterable {
 struct AddTaskIntent: AppIntent {
     static var title: LocalizedStringResource = "إضافة مهمة"
     static var description = IntentDescription("يضيف مهمة إلى زمام، بتاريخ أو بوقت صلاة إن شئت.")
+    static var openAppWhenRun: Bool = false
 
     @Parameter(title: "العنوان")
     var taskTitle: String
@@ -42,6 +43,14 @@ struct AddTaskIntent: AppIntent {
 
     @Parameter(title: "الدقائق بعد الصلاة")
     var offsetMinutes: Int?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("أضف «\(\.$taskTitle)» إلى زمام") {
+            \.$date
+            \.$prayer
+            \.$offsetMinutes
+        }
+    }
 
     init() {}
 
@@ -74,6 +83,7 @@ struct AddTaskIntent: AppIntent {
 struct TodayTasksIntent: AppIntent {
     static var title: LocalizedStringResource = "مهام اليوم"
     static var description = IntentDescription("يقرأ مهام اليوم المفتوحة في زمام.")
+    static var openAppWhenRun: Bool = false
 
     init() {}
 
@@ -103,6 +113,18 @@ struct ZimamShortcuts: AppShortcutsProvider {
             shortTitle: "إضافة مهمة",
             systemImageName: "plus.circle"
         )
+        // A free sentence cannot be part of the phrase, so Siri asks «ما المهمة؟» after it.
+        AppShortcut(
+            intent: AddTaskFromSentenceIntent(),
+            phrases: [
+                "ذكرني في \(.applicationName)",
+                "ذكرني بشيء في \(.applicationName)",
+                "أضف تذكيراً في \(.applicationName)",
+                "سجّل تذكيراً في \(.applicationName)",
+            ],
+            shortTitle: "مهمة بجملة",
+            systemImageName: "text.bubble"
+        )
         AppShortcut(
             intent: TodayTasksIntent(),
             phrases: [
@@ -121,6 +143,15 @@ struct ZimamShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "إنجاز مهمة",
             systemImageName: "checkmark.circle"
+        )
+        AppShortcut(
+            intent: OpenTaskIntent(),
+            phrases: [
+                "افتح مهمة في \(.applicationName)",
+                "اعرض مهمة في \(.applicationName)",
+            ],
+            shortTitle: "فتح مهمة",
+            systemImageName: "doc.text"
         )
     }
 }

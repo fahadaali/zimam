@@ -2,7 +2,7 @@ import SwiftUI
 import ZimamKit
 
 /// The watch shows today only: the dual date, today's open tasks (tap to complete),
-/// and a field to add a task by dictation or typing.
+/// and a field to add a task by dictation or typing, read by the assistant when online.
 struct WatchTodayView: View {
     @Environment(WatchModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
@@ -36,6 +36,12 @@ struct WatchTodayView: View {
                         TextField("إضافة مهمة", text: $newTitle)
                             .font(ZimamType.body)
                             .onSubmit(add)
+                    }
+                }
+
+                if let notice = model.notice {
+                    Section {
+                        WatchNote(text: notice)
                     }
                 }
 
