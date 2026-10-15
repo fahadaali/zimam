@@ -37,7 +37,7 @@ final class PushRegistration {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         do {
             try await api.registerDevice(token: token, platform: Self.platform, environment: Self.environment,
-                                         bundleId: Bundle.main.bundleIdentifier ?? "app.zimam.Zimam")
+                                         bundleId: Bundle.main.bundleIdentifier ?? "app.zimam.ios")
             UserDefaults.standard.set(token, forKey: Self.tokenKey)
         } catch {
             // Signed out or offline: the next launch registers again.

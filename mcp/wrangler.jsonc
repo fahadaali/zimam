@@ -10,7 +10,7 @@
     {
       // OAuth clients, grants and tokens (stored hashed). Create with: npx wrangler kv namespace create zimam-oauth
       "binding": "OAUTH_KV",
-      "id": "00000000000000000000000000000000"
+      "id": "b74ed41be5be43c4aa567d1c010dd4df"
     }
   ],
   // Tasks are read and written through the API worker's RPC entrypoint, never over the internet.
@@ -20,6 +20,6 @@
   "vars": {
     "MCP_ORIGIN": "https://zimam-mcp.fahad2ao.workers.dev",
     // Sign in with Apple Services ID for the web.
-    "APPLE_WEB_CLIENT_ID": "app.zimam.web"
+    "APPLE_WEB_CLIENT_ID": "app.zimam.ios.web"
   }
 }

@@ -13,7 +13,7 @@ function value<T>(outcome: { ok: true; value: T } | { ok: false; error: { code: 
 describe("Assistant (MCP backend)", () => {
   it("links the same Zimam account when signing in from the web", async () => {
     const app = await signIn("apple-mcp-1");
-    const token = await appleToken("apple-mcp-1", { audience: "app.zimam.web", nonce: "handle-1" });
+    const token = await appleToken("apple-mcp-1", { audience: "app.zimam.ios.web", nonce: "handle-1" });
     expect(value(await assistant.signInWithApple(token, "handle-1")).userId).toBe(app.userId);
     const replay = await assistant.signInWithApple(token, "another-handle");
     expect(replay.ok).toBe(false);

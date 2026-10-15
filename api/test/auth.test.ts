@@ -25,7 +25,7 @@ describe("Sign in with Apple", () => {
 
   it("accepts the web Services ID as audience", async () => {
     const res = await call("POST", "/v1/auth/apple", {
-      body: { identityToken: await appleToken("apple-web", { audience: "app.zimam.web" }) },
+      body: { identityToken: await appleToken("apple-web", { audience: "app.zimam.ios.web" }) },
     });
     expect(res.status).toBe(200);
   });

@@ -9,7 +9,7 @@ import { prayerPhrase } from "./lib/prayer.js";
 import { createRealtime, realtimeUrl } from "./lib/realtime.js";
 import { PRIORITY_WORDS, groupByDay, isOpen, priorityKey, progressText, splitToday, taskCount } from "./lib/tasks.js";
 
-const APPLE_CLIENT_ID = "app.zimam.web";
+const APPLE_CLIENT_ID = "app.zimam.ios.web";
 const LEAVE_AFTER = 1000; // a completed task stays a second so it can be undone
 const FADE = 250;
 const LIVE_DEBOUNCE = 800; // folds a burst of changes into one reload

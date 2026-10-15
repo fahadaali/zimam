@@ -54,8 +54,8 @@ npx wrangler deploy --dry-run
 
 ## تسجيل الدخول بحساب أبل
 
-- Sign in with Apple JS بوضع النافذة المنبثقة، بمعرّف الخدمة `app.zimam.web`، ورابط العودة `<الموقع>/app`.
-- في حساب مطوّر أبل: **Identifiers ← Services IDs ← `app.zimam.web` ← Configure**، أضف النطاق `zimam-web.fahad2ao.workers.dev` ورابط العودة:
+- Sign in with Apple JS بوضع النافذة المنبثقة، بمعرّف الخدمة `app.zimam.ios.web`، ورابط العودة `<الموقع>/app`.
+- في حساب مطوّر أبل: **Identifiers ← Services IDs ← `app.zimam.ios.web` ← Configure**، أضف النطاق `zimam-web.fahad2ao.workers.dev` ورابط العودة:
 
   `https://zimam-web.fahad2ao.workers.dev/app`
 

@@ -37,7 +37,7 @@ class FakePush implements PushSender {
 
 const deviceToken = () => [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
 
-const deviceBody = { platform: "ios", environment: "sandbox", bundleId: "app.zimam.Zimam" };
+const deviceBody = { platform: "ios", environment: "sandbox", bundleId: "app.zimam.ios" };
 
 async function device(token: string) {
   return env.DB.prepare(`SELECT * FROM devices WHERE token = ?`).bind(token).first<Record<string, unknown>>();
@@ -97,7 +97,7 @@ describe("Device registration", () => {
       session_hash: await sha256Hex(token),
       platform: "ios",
       environment: "sandbox",
-      bundle_id: "app.zimam.Zimam",
+      bundle_id: "app.zimam.ios",
       last_seen_at: 0,
     });
 
@@ -188,7 +188,7 @@ describe("Reminder pushes", () => {
     expect(fake.to(user.apns)).toHaveLength(2);
     expect(first).toMatchObject({
       environment: "sandbox",
-      topic: "app.zimam.Zimam",
+      topic: "app.zimam.ios",
       expiration: Math.floor((now - 4 * MINUTE) / 1000) + 24 * 60 * 60,
       payload: {
         aps: { alert: { title: "العمل", body: "إرسال التقرير" }, sound: "default", category: "zimam.task", "thread-id": projectId },
@@ -378,7 +378,7 @@ describe("APNs sender", () => {
   const message = (environment: "sandbox" | "production" = "production"): PushMessage => ({
     token: "ab".repeat(32),
     environment,
-    topic: "app.zimam.Zimam",
+    topic: "app.zimam.ios",
     payload: { aps: { alert: { title: "زمام", body: "مهمة" } }, taskId: "t" },
     expiration: 123,
   });
@@ -394,7 +394,7 @@ describe("APNs sender", () => {
     const first = requests[0]!;
     expect(first.url).toBe(`https://api.push.apple.com/3/device/${"ab".repeat(32)}`);
     expect(first.headers.get("apns-push-type")).toBe("alert");
-    expect(first.headers.get("apns-topic")).toBe("app.zimam.Zimam");
+    expect(first.headers.get("apns-topic")).toBe("app.zimam.ios");
     expect(first.headers.get("apns-expiration")).toBe("123");
     expect(JSON.parse(first.body)).toEqual(message().payload);
     const jwt = first.headers.get("authorization")!.replace(/^bearer /, "");
