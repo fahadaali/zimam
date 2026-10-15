@@ -27,15 +27,17 @@ struct Store {
     // MARK: Tasks
 
     /// `notes`, `dueTime` and `tags` come from the assistant's suggestion; a time is kept
-    /// only for a dated task that is not tied to a prayer, as the server does.
+    /// only for a dated task that is not tied to a prayer, as the server does. `startDate` makes
+    /// a dated task span days; it is kept only before the due day, as the server requires.
     @discardableResult
     func addTask(title: String, projectId: UUID? = nil, dueDate: String? = nil, duePrayer: Prayer? = nil,
                  duePrayerOffset: Int? = nil, priority: TaskPriority = .none,
-                 notes: String? = nil, dueTime: String? = nil, tags: [String] = []) -> TaskItem {
+                 notes: String? = nil, dueTime: String? = nil, tags: [String] = [], startDate: String? = nil) -> TaskItem {
         let trimmedNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
         let record = TaskRecord(projectId: projectId, title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                                 notes: trimmedNotes?.isEmpty == false ? trimmedNotes : nil,
                                 priority: priority, tags: tags, dueDate: dueDate,
+                                startDate: DaySpan(startDate: startDate, dueDate: dueDate)?.startDate,
                                 dueTime: dueDate != nil && duePrayer == nil ? dueTime : nil, duePrayer: duePrayer,
                                 duePrayerOffset: duePrayer == nil ? nil : duePrayerOffset)
         let task = TaskItem(record, dirty: true)
@@ -84,9 +86,14 @@ struct Store {
 
     /// Moves a task to another day ("2026-10-15"), from the calendar's drag and drop or «نقل إلى…».
     /// Its time or prayer anchor stays: a task «بعد العصر» is after Asr on the new day too.
+    /// A task that spans days keeps its length: its start day moves by as many days.
     func reschedule(_ task: TaskItem, toDay day: String) {
         guard task.dueDate != day else { return }
-        update(task) { item in item.dueDate = day }
+        let start = task.span?.ending(on: day).startDate
+        update(task) { item in
+            item.dueDate = day
+            item.startDate = start
+        }
     }
 
     /// Completes or reopens a task. Completing a recurring task adds its next
@@ -204,6 +211,8 @@ struct Store {
         record.status = .todo
         record.completedAt = nil
         record.dueDate = next.day
+        // A repeating span (a weekly two-day trip) keeps its length.
+        record.startDate = task.span?.ending(on: next.day).startDate
         record.recurrence = next.rule.rrule
         record.createdAt = nil
         record.updatedAt = Milliseconds.now

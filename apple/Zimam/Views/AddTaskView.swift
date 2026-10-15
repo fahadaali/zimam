@@ -28,6 +28,9 @@ struct AddTaskView: View {
     @State private var title = ""
     @State private var due: Due
     @State private var pickedDate = Date()
+    /// «تاريخ البداية»: the task spans days, from this day to its due day.
+    @State private var hasStart = false
+    @State private var startDate = Date()
     @State private var linkPrayer = false
     @State private var prayer: Prayer = .asr
     @State private var offset = 0
@@ -94,6 +97,15 @@ struct AddTaskView: View {
                             .font(ZimamType.caption)
                             .foregroundStyle(ZimamColor.inkMuted)
                     }
+                    if due != .unscheduled, let latestStart {
+                        Toggle("تاريخ البداية", isOn: $hasStart)
+                        if hasStart {
+                            DatePicker("البداية", selection: $startDate, in: ...latestStart, displayedComponents: .date)
+                            Text(formatter.dual(startDate, withYear: true))
+                                .font(ZimamType.caption)
+                                .foregroundStyle(ZimamColor.inkMuted)
+                        }
+                    }
                     if let dueTime, due != .unscheduled, !linkPrayer,
                        let time = clockTime(dueTime, formatter: formatter) {
                         HStack(spacing: ZimamSpacing.space2) {
@@ -142,6 +154,13 @@ struct AddTaskView: View {
                 }
             }
             .onAppear { titleFocused = true }
+            // A new start begins the day before the due day; a due day moved before it pulls it back.
+            .onChange(of: hasStart) { _, on in
+                if on, let latestStart { startDate = latestStart }
+            }
+            .onChange(of: latestStart) { _, latest in
+                if let latest, startDate > latest { startDate = latest }
+            }
             .onDisappear { dictation.cancel() }
             .onChange(of: dictation.transcript) { _, words in
                 if dictation.isActive { title = dictationPrefix + words }
@@ -308,14 +327,24 @@ struct AddTaskView: View {
         return result
     }
 
-    private func add() {
-        guard !trimmedTitle.isEmpty else { return }
-        let day: Date? = switch due {
+    /// The chosen due day, nil when unscheduled.
+    private var dueDay: Date? {
+        switch due {
         case .unscheduled: nil
         case .today: Date()
         case .tomorrow: Calendar.current.date(byAdding: .day, value: 1, to: Date())
         case .pickedDate: pickedDate
         }
+    }
+
+    /// The latest start day: the day before the due day (the start of that day, in the user's zone).
+    private var latestStart: Date? {
+        dueDay.flatMap { DayMath.adding(-1, to: formatter.dayString(from: $0)) }.flatMap { formatter.date(fromDay: $0) }
+    }
+
+    private func add() {
+        guard !trimmedTitle.isEmpty else { return }
+        let day = dueDay
         Store(context: context, sync: sync).addTask(
             title: trimmedTitle,
             projectId: projectId,
@@ -325,7 +354,8 @@ struct AddTaskView: View {
             priority: priority,
             notes: fromAssistant ? notes : nil,
             dueTime: fromAssistant ? dueTime : nil,
-            tags: fromAssistant ? parsedTags : []
+            tags: fromAssistant ? parsedTags : [],
+            startDate: hasStart && day != nil ? formatter.dayString(from: startDate) : nil
         )
         dismiss()
     }

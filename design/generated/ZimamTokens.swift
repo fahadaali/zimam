@@ -45,6 +45,22 @@ public enum ZimamColor {
     public static let success = Color.zimamDynamic(light: (0.1216, 0.4353, 0.2627), dark: (0.3843, 0.7882, 0.5608))
     /// حلقة التركيز للوحة المفاتيح: خط صلب بسماكة 2px وإزاحة 2px. 6.5:1 أو أكثر على كل الأسطح في الثيمين.
     public static let focusRing = Color.zimamDynamic(light: (0.2275, 0.2745, 0.6902), dark: (0.5608, 0.6000, 0.9490))
+    /// ربع «مهم وعاجل» في المصفوفة: أيقونته وعنوانه وخلفية عدّاده. يرافقه دائماً اسم الربع. نص على surface وsurface-raised.
+    public static let quadrantUrgentImportant = Color.zimamDynamic(light: (0.7255, 0.2431, 0.0471), dark: (0.9490, 0.5725, 0.3725))
+    /// ربع «مهم» في المصفوفة: أيقونته وعنوانه وخلفية عدّاده. أزرق يختلف عن brand لأنه ليس إجراءً. نص على surface وsurface-raised.
+    public static let quadrantImportant = Color.zimamDynamic(light: (0.0667, 0.3804, 0.5412), dark: (0.4235, 0.7647, 0.9098))
+    /// ربع «عاجل» في المصفوفة: أيقونته وعنوانه وخلفية عدّاده. نص على surface وsurface-raised.
+    public static let quadrantUrgent = Color.zimamDynamic(light: (0.5412, 0.3804, 0.0000), dark: (0.8902, 0.7098, 0.3059))
+    /// ربع «يوماً ما» في المصفوفة: أيقونته وعنوانه وخلفية عدّاده.
+    public static let quadrantSomeday = Color.zimamDynamic(light: (0.3373, 0.3647, 0.4706), dark: (0.6353, 0.6588, 0.7608))
+    /// العدد فوق خلفية لون الربع في المصفوفة. 4.5:1 أو أكثر على ألوان الأرباع الأربعة في الثيمين.
+    public static let onQuadrant = Color.zimamDynamic(light: (1.0000, 1.0000, 1.0000), dark: (0.0549, 0.0667, 0.1255))
+    /// شريط المهمة الممتدة أياماً في التقويم والمخطط الزمني. حدّه 3:1 أو أكثر على كل الأسطح فلا يحتاج إطاراً، ونصه on-timeline-bar.
+    public static let timelineBar = Color.zimamDynamic(light: (0.1059, 0.4314, 0.4157), dark: (0.3725, 0.7686, 0.7333))
+    /// عنوان المهمة فوق timeline-bar. 4.5:1 أو أكثر في الثيمين.
+    public static let onTimelineBar = Color.zimamDynamic(light: (1.0000, 1.0000, 1.0000), dark: (0.0549, 0.0667, 0.1255))
+    /// خط اليوم في المخطط الزمني: خط صلب بسماكة 2px يرافقه اسم «اليوم» في رأس العمود.
+    public static let timelineToday = Color.zimamDynamic(light: (0.7255, 0.2431, 0.0471), dark: (0.9490, 0.5725, 0.3725))
 }
 
 public enum ZimamSpacing {

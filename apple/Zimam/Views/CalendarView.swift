@@ -3,7 +3,8 @@ import SwiftUI
 import ZimamKit
 
 /// The calendar: a month (or a week) in Hijri or Gregorian, each day with the other calendar's
-/// day under it and dots for the open tasks due that day. The selected day's tasks show under the
+/// day under it and dots for the open tasks due that day; a task that spans days is a bar from its
+/// start day to its due day, under the week (`SpanLanes`). The selected day's tasks show under the
 /// grid on iPhone and beside it on iPad and Mac. A task dragged onto a day moves there, keeping its
 /// time or prayer anchor; «نقل إلى…» in its context menu does the same with a date picker.
 struct CalendarView: View {
@@ -35,9 +36,9 @@ struct CalendarView: View {
     init() {}
 
     var body: some View {
-        let byDay = tasksByDay()
+        let collected = tasksByDay()
         let names = projectNames(projects)
-        content(byDay: byDay, names: names)
+        content(byDay: collected.byDay, spans: collected.spans, names: names)
             .background(ZimamColor.surface)
             .overlay(alignment: .bottomTrailing) { AddTaskButton { showingAdd = true } }
             .sheet(isPresented: $showingAdd) { addTaskSheet }
@@ -63,7 +64,7 @@ struct CalendarView: View {
     // MARK: Layout
 
     @ViewBuilder
-    private func content(byDay: [String: [TaskItem]], names: [UUID: String]) -> some View {
+    private func content(byDay: [String: [TaskItem]], spans: [SpanItem], names: [UUID: String]) -> some View {
         switch mode {
         case .month:
             if isRegular {
@@ -71,14 +72,14 @@ struct CalendarView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: ZimamSpacing.space4) {
                             header
-                            monthGrid(byDay)
+                            monthGrid(byDay, spans: spans)
                         }
                         .padding(margin)
                     }
                     .frame(maxWidth: .infinity)
                     Divider().overlay(ZimamColor.line)
                     ScrollView {
-                        selectedDaySection(byDay, names: names)
+                        selectedDaySection(byDay, spans: spans, names: names)
                             .padding(margin)
                             .padding(.bottom, ZimamSpacing.space11 + ZimamSpacing.space8)
                     }
@@ -89,9 +90,9 @@ struct CalendarView: View {
                     VStack(alignment: .leading, spacing: ZimamSpacing.space6) {
                         VStack(alignment: .leading, spacing: ZimamSpacing.space4) {
                             header
-                            monthGrid(byDay)
+                            monthGrid(byDay, spans: spans)
                         }
-                        selectedDaySection(byDay, names: names)
+                        selectedDaySection(byDay, spans: spans, names: names)
                     }
                     .padding(.horizontal, margin)
                     // Room for the add button over the last row.
@@ -105,12 +106,18 @@ struct CalendarView: View {
                     header
                     if isRegular {
                         WeekColumns(days: week, kind: kind, today: today, selectedDay: $selectedDay, tasksByDay: byDay,
-                                    onDrop: reschedule, onMove: { moving = MoveRequest(id: $0) }, onComplete: complete)
+                                    spans: spans, onDrop: reschedule, onMove: { moving = MoveRequest(id: $0) },
+                                    onComplete: complete)
                     } else {
                         VStack(alignment: .leading, spacing: ZimamSpacing.space6) {
+                            if spans.contains(where: { $0.span.overlaps(week.first?.day ?? "", week.last?.day ?? "") }) {
+                                WeekSpanStrip(days: week, kind: kind, today: today, selectedDay: $selectedDay,
+                                              tasksByDay: byDay, spans: spans, onMove: { moving = MoveRequest(id: $0) },
+                                              onComplete: complete)
+                            }
                             ForEach(week) { day in
                                 DayTasksSection(date: day.date, kind: kind,
-                                                tasks: byDay[day.day] ?? [], names: names,
+                                                tasks: dayList(day.day, byDay: byDay, spans: spans), names: names,
                                                 onDrop: { reschedule($0, to: day.day) },
                                                 onMove: { moving = MoveRequest(id: $0) }, onToggle: complete)
                             }
@@ -144,14 +151,14 @@ struct CalendarView: View {
         }
     }
 
-    private func monthGrid(_ byDay: [String: [TaskItem]]) -> some View {
+    private func monthGrid(_ byDay: [String: [TaskItem]], spans: [SpanItem]) -> some View {
         MonthGrid(grid: grid, days: grid.monthDays(containing: selectedNoon), today: today,
-                  selectedDay: $selectedDay, tasksByDay: byDay, onDrop: reschedule)
+                  selectedDay: $selectedDay, tasksByDay: byDay, spans: spans, onDrop: reschedule)
     }
 
-    private func selectedDaySection(_ byDay: [String: [TaskItem]], names: [UUID: String]) -> some View {
+    private func selectedDaySection(_ byDay: [String: [TaskItem]], spans: [SpanItem], names: [UUID: String]) -> some View {
         DayTasksSection(date: grid.date(fromDay: selectedDay) ?? selectedNoon, kind: kind,
-                        tasks: byDay[selectedDay] ?? [], names: names,
+                        tasks: dayList(selectedDay, byDay: byDay, spans: spans), names: names,
                         onDrop: { reschedule($0, to: selectedDay) },
                         onMove: { moving = MoveRequest(id: $0) }, onToggle: complete)
     }
@@ -237,23 +244,35 @@ struct CalendarView: View {
     // MARK: Tasks
 
     /// Open top-level tasks by due day (as in «اليوم» and «القادم»), ordered by time of day:
-    /// tasks without a time first, then by clock or prayer time.
+    /// tasks without a time first, then by clock or prayer time. Tasks that span days come apart,
+    /// as bars, with their start days; they reach the day lists through `dayList`.
     /// Only the days on screen (with the month grid's padding days) are collected.
-    private func tasksByDay() -> [String: [TaskItem]] {
+    private func tasksByDay() -> (byDay: [String: [TaskItem]], spans: [SpanItem]) {
         let visible = mode == .month ? grid.monthDays(containing: selectedNoon) : grid.weekDays(containing: selectedNoon)
-        guard let first = visible.first?.day, let last = visible.last?.day else { return [:] }
+        guard let first = visible.first?.day, let last = visible.last?.day else { return ([:], []) }
         let schedule = location.schedule(method: session.user?.settings.prayerMethod ?? .ummAlQura)
         var result: [String: [TaskItem]] = [:]
+        var spans: [SpanItem] = []
         for task in tasks where task.parentId == nil && (!task.isDone || lingering.contains(task.id)) {
             // API days ("2026-10-15") sort as text.
-            guard let day = task.dueDate, day >= first, day <= last else { continue }
-            result[day, default: []].append(task)
+            guard let span = task.span, span.overlaps(first, last) else { continue }
+            if span.isMultiDay {
+                spans.append(SpanItem(task: task, span: span))
+            } else {
+                result[span.end, default: []].append(task)
+            }
         }
-        return result.mapValues { items in
+        let byDay = result.mapValues { items in
             items.map { (task: $0, minute: minuteOfDay($0, schedule: schedule) ?? -1) }
                 .sorted { ($0.minute, $0.task.sortOrder) < ($1.minute, $1.task.sortOrder) }
                 .map { $0.task }
         }
+        return (byDay, spans.sorted { ($0.span.start, $0.span.end) < ($1.span.start, $1.span.end) })
+    }
+
+    /// A day's list: the tasks that span it first, then the ones due that day.
+    private func dayList(_ day: String, byDay: [String: [TaskItem]], spans: [SpanItem]) -> [TaskItem] {
+        spans.filter { $0.span.contains(day) }.map(\.task) + (byDay[day] ?? [])
     }
 
     /// Minutes after midnight for ordering: the clock time, or the prayer's time with its offset.

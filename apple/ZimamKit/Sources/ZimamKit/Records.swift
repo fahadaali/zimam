@@ -36,7 +36,16 @@ public struct ProjectRecord: Codable, Equatable, Sendable {
     public var updatedAt: Milliseconds
 
     public enum Kind: String, Codable, Sendable { case project, folder }
-    public enum Layout: String, Codable, Sendable { case list, kanban, calendar }
+    /// How the project opens. `timeline` is «المخطط الزمني»; the app asks the server for it
+    /// (`include=timeline`), and a view this build does not know reads as a list.
+    public enum Layout: String, Codable, Sendable {
+        case list, kanban, calendar, timeline
+
+        public init(from decoder: Decoder) throws {
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            self = Layout(rawValue: raw) ?? .list
+        }
+    }
 
     public init(id: UUID = UUID(), ownerId: UUID? = nil, parentId: UUID? = nil, kind: Kind = .project, name: String,
                 view: Layout = .list, sortOrder: Double = 0, archivedAt: Milliseconds? = nil, createdAt: Milliseconds? = nil,
@@ -51,6 +60,45 @@ public struct ProjectRecord: Codable, Equatable, Sendable {
         self.archivedAt = archivedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    /// A view this build does not know, as the server sent it. The project opens as a list, and
+    /// the value goes back unchanged on the next edit unless the user picks another view, so a
+    /// newer app's or the web's choice is never overwritten.
+    public var unknownView: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, ownerId, parentId, kind, name, view, sortOrder, archivedAt, createdAt, updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        ownerId = try c.decodeIfPresent(UUID.self, forKey: .ownerId)
+        parentId = try c.decodeIfPresent(UUID.self, forKey: .parentId)
+        kind = try c.decode(Kind.self, forKey: .kind)
+        name = try c.decode(String.self, forKey: .name)
+        let raw = try c.decodeIfPresent(String.self, forKey: .view) ?? Layout.list.rawValue
+        view = Layout(rawValue: raw) ?? .list
+        unknownView = Layout(rawValue: raw) == nil ? raw : nil
+        sortOrder = try c.decodeIfPresent(Double.self, forKey: .sortOrder) ?? 0
+        archivedAt = try c.decodeIfPresent(Milliseconds.self, forKey: .archivedAt)
+        createdAt = try c.decodeIfPresent(Milliseconds.self, forKey: .createdAt)
+        updatedAt = try c.decode(Milliseconds.self, forKey: .updatedAt)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encodeIfPresent(ownerId, forKey: .ownerId)
+        try c.encodeIfPresent(parentId, forKey: .parentId)
+        try c.encode(kind, forKey: .kind)
+        try c.encode(name, forKey: .name)
+        try c.encode(view == .list ? (unknownView ?? view.rawValue) : view.rawValue, forKey: .view)
+        try c.encode(sortOrder, forKey: .sortOrder)
+        try c.encodeIfPresent(archivedAt, forKey: .archivedAt)
+        try c.encodeIfPresent(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
     }
 }
 
@@ -86,6 +134,9 @@ public struct TaskRecord: Codable, Equatable, Sendable {
     public var tags: [String]
     /// Local Gregorian day, "2026-10-15". Hijri is derived for display.
     public var dueDate: String?
+    /// The first day of a task that spans days, up to `dueDate` (inclusive); nil for a one-day
+    /// task. Only with a `dueDate` and never after it: the server rejects anything else.
+    public var startDate: String?
     /// "HH:mm", local.
     public var dueTime: String?
     public var duePrayer: Prayer?
@@ -101,7 +152,7 @@ public struct TaskRecord: Codable, Equatable, Sendable {
 
     public init(id: UUID = UUID(), ownerId: UUID? = nil, projectId: UUID? = nil, sectionId: UUID? = nil, parentId: UUID? = nil,
                 title: String, notes: String? = nil, status: TaskStatus = .todo, priority: TaskPriority = .none,
-                tags: [String] = [], dueDate: String? = nil, dueTime: String? = nil, duePrayer: Prayer? = nil,
+                tags: [String] = [], dueDate: String? = nil, startDate: String? = nil, dueTime: String? = nil, duePrayer: Prayer? = nil,
                 duePrayerOffset: Int? = nil, recurrence: String? = nil, assigneeId: UUID? = nil, sortOrder: Double = 0,
                 completedAt: Milliseconds? = nil, createdAt: Milliseconds? = nil, updatedAt: Milliseconds = .now) {
         self.id = id
@@ -115,6 +166,7 @@ public struct TaskRecord: Codable, Equatable, Sendable {
         self.priority = priority
         self.tags = tags
         self.dueDate = dueDate
+        self.startDate = startDate
         self.dueTime = dueTime
         self.duePrayer = duePrayer
         self.duePrayerOffset = duePrayerOffset
@@ -124,6 +176,39 @@ public struct TaskRecord: Codable, Equatable, Sendable {
         self.completedAt = completedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, ownerId, projectId, sectionId, parentId, title, notes, status, priority, tags, dueDate, startDate, dueTime,
+             duePrayer, duePrayerOffset, recurrence, assigneeId, sortOrder, completedAt, createdAt, updatedAt
+    }
+
+    /// As the synthesized encoding, except that `startDate` is always sent, `null` when there is
+    /// none: the server keeps a stored start day for a record without the field (apps that predate
+    /// it), so leaving it out would never clear it.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encodeIfPresent(ownerId, forKey: .ownerId)
+        try c.encodeIfPresent(projectId, forKey: .projectId)
+        try c.encodeIfPresent(sectionId, forKey: .sectionId)
+        try c.encodeIfPresent(parentId, forKey: .parentId)
+        try c.encode(title, forKey: .title)
+        try c.encodeIfPresent(notes, forKey: .notes)
+        try c.encode(status, forKey: .status)
+        try c.encode(priority, forKey: .priority)
+        try c.encode(tags, forKey: .tags)
+        try c.encodeIfPresent(dueDate, forKey: .dueDate)
+        try c.encode(startDate, forKey: .startDate)
+        try c.encodeIfPresent(dueTime, forKey: .dueTime)
+        try c.encodeIfPresent(duePrayer, forKey: .duePrayer)
+        try c.encodeIfPresent(duePrayerOffset, forKey: .duePrayerOffset)
+        try c.encodeIfPresent(recurrence, forKey: .recurrence)
+        try c.encodeIfPresent(assigneeId, forKey: .assigneeId)
+        try c.encode(sortOrder, forKey: .sortOrder)
+        try c.encodeIfPresent(completedAt, forKey: .completedAt)
+        try c.encodeIfPresent(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
     }
 }
 

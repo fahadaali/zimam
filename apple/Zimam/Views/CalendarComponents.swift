@@ -77,48 +77,68 @@ struct ChoiceBar<Value: Hashable>: View {
 
 // MARK: Month
 
-/// Seven columns from the week's first day at the leading edge (the right in Arabic).
-/// Padding days of the months around are left empty.
+/// Seven columns from the week's first day at the leading edge (the right in Arabic), week by week.
+/// Padding days of the months around are left empty. Under each week, a task that spans days is a
+/// bar from its start day to its due day (`SpanLanes`); one-day tasks are dots in their day.
 struct MonthGrid: View {
     let grid: CalendarGrid
     let days: [CalendarDay]
     let today: String
     @Binding var selectedDay: String
     let tasksByDay: [String: [TaskItem]]
+    let spans: [SpanItem]
     let onDrop: ([UUID], String) -> Bool
 
     @Environment(\.dateFormatterZimam) private var formatter
     // Not private, so the memberwise initializer stays internal.
     @ScaledMetric(relativeTo: .headline) var cellHeight = ZimamSpacing.space11 + ZimamSpacing.space6
-
-    private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: ZimamSpacing.space1), count: 7)
-    }
+    /// A bar in the month: one caption line.
+    @ScaledMetric(relativeTo: .caption) var barHeight = ZimamSpacing.space6 - ZimamSpacing.space1
 
     var body: some View {
         let order = grid.weekdayOrder
         let short = formatter.weekdaySymbols(order, short: true)
         let full = formatter.weekdaySymbols(order, short: false)
-        LazyVGrid(columns: columns, spacing: ZimamSpacing.space1) {
-            ForEach(order.indices, id: \.self) { index in
-                Text(short[index])
-                    .font(ZimamType.caption)
-                    .foregroundStyle(ZimamColor.inkMuted)
-                    .frame(maxWidth: .infinity)
-                    .accessibilityLabel(full[index])
-            }
-            ForEach(days) { day in
-                if day.isInPeriod {
-                    DayCell(day: day, kind: grid.kind, tasks: tasksByDay[day.day] ?? [],
-                            isToday: day.day == today, isSelected: day.day == selectedDay, minHeight: cellHeight,
-                            onSelect: { selectedDay = day.day },
-                            onDrop: { onDrop($0, day.day) })
-                } else {
-                    Color.clear
-                        .frame(minHeight: cellHeight)
-                        .accessibilityHidden(true)
+        let weeks = stride(from: 0, to: days.count, by: 7).map { Array(days[$0 ..< min($0 + 7, days.count)]) }
+        VStack(spacing: ZimamSpacing.space1) {
+            HStack(spacing: ZimamSpacing.space1) {
+                ForEach(order.indices, id: \.self) { index in
+                    Text(short[index])
+                        .font(ZimamType.caption)
+                        .foregroundStyle(ZimamColor.inkMuted)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityLabel(full[index])
                 }
             }
+            ForEach(weeks.indices, id: \.self) { index in
+                week(weeks[index])
+            }
+        }
+    }
+
+    private func week(_ week: [CalendarDay]) -> some View {
+        let inPeriod = week.filter(\.isInPeriod)
+        let offset = week.firstIndex(where: \.isInPeriod) ?? 0
+        return VStack(spacing: ZimamSpacing.space1) {
+            HStack(spacing: ZimamSpacing.space1) {
+                ForEach(week) { day in
+                    if day.isInPeriod {
+                        DayCell(day: day, kind: grid.kind, tasks: tasksByDay[day.day] ?? [],
+                                spanCount: spans.filter { $0.span.contains(day.day) }.count,
+                                isToday: day.day == today, isSelected: day.day == selectedDay, minHeight: cellHeight,
+                                onSelect: { selectedDay = day.day },
+                                onDrop: { onDrop($0, day.day) })
+                    } else {
+                        Color.clear
+                            .frame(maxWidth: .infinity, minHeight: cellHeight)
+                            .accessibilityHidden(true)
+                    }
+                }
+            }
+            // Bars are drawn over the month's own days only; VoiceOver hears them in each day's count
+            // and in the selected day's list.
+            SpanLanes(days: inPeriod.map(\.day), columnOffset: offset, columnCount: week.count, spans: spans,
+                      maxLanes: 3, laneHeight: barHeight, spacing: ZimamSpacing.space1)
         }
     }
 }
@@ -129,6 +149,8 @@ private struct DayCell: View {
     let day: CalendarDay
     let kind: CalendarKind
     let tasks: [TaskItem]
+    /// Tasks that span this day, drawn as bars under the week.
+    let spanCount: Int
     let isToday: Bool
     let isSelected: Bool
     let minHeight: CGFloat
@@ -181,7 +203,8 @@ private struct DayCell: View {
         dates.primary = kind
         var parts = [formatter.weekday(day.date), dates.dual(day.date)]
         if isToday { parts.append("اليوم") }
-        if !tasks.isEmpty { parts.append(ArabicCount.tasks(tasks.count, locale: formatter.locale)) }
+        let count = tasks.count + spanCount
+        if count > 0 { parts.append(ArabicCount.tasks(count, locale: formatter.locale)) }
         return parts.joined(separator: "، ")
     }
 }
@@ -309,75 +332,115 @@ private struct CalendarTaskRow: View {
 
 // MARK: Week
 
-/// Seven columns side by side (iPad and Mac), each taking dropped tasks.
+/// Seven columns side by side (iPad and Mac), each taking dropped tasks. Tasks that span days are
+/// bars across the columns, under the day headers.
 struct WeekColumns: View {
     let days: [CalendarDay]
     let kind: CalendarKind
     let today: String
     @Binding var selectedDay: String
     let tasksByDay: [String: [TaskItem]]
+    let spans: [SpanItem]
     let onDrop: ([UUID], String) -> Bool
     let onMove: (UUID) -> Void
     let onComplete: (TaskItem) -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: ZimamSpacing.space2) {
-            ForEach(days) { day in
-                WeekColumn(day: day, kind: kind, tasks: tasksByDay[day.day] ?? [],
-                           isToday: day.day == today, isSelected: day.day == selectedDay,
-                           onSelect: { selectedDay = day.day },
-                           onDrop: { onDrop($0, day.day) }, onMove: onMove, onComplete: onComplete)
+        VStack(spacing: ZimamSpacing.space2) {
+            HStack(alignment: .top, spacing: ZimamSpacing.space2) {
+                ForEach(days) { day in
+                    WeekDayHeader(day: day, kind: kind,
+                                  taskCount: (tasksByDay[day.day]?.count ?? 0) + spans.filter { $0.span.contains(day.day) }.count,
+                                  isToday: day.day == today, isSelected: day.day == selectedDay,
+                                  onSelect: { selectedDay = day.day })
+                }
+            }
+            SpanLanes(days: days.map(\.day), columnOffset: 0, columnCount: days.count, spans: spans, maxLanes: 6,
+                      laneHeight: ZimamSpacing.space11, spacing: ZimamSpacing.space2, interactive: true,
+                      onMove: onMove, onComplete: onComplete)
+            HStack(alignment: .top, spacing: ZimamSpacing.space2) {
+                ForEach(days) { day in
+                    WeekColumn(tasks: tasksByDay[day.day] ?? [],
+                               onDrop: { onDrop($0, day.day) }, onMove: onMove, onComplete: onComplete)
+                }
             }
         }
     }
 }
 
-private struct WeekColumn: View {
+/// A day's name and both day numbers over its column; selects the day.
+struct WeekDayHeader: View {
     let day: CalendarDay
     let kind: CalendarKind
-    let tasks: [TaskItem]
+    let taskCount: Int
     let isToday: Bool
     let isSelected: Bool
+    /// The one-letter weekday («ح»), for the narrow strip on the iPhone.
+    var short = false
     let onSelect: () -> Void
+
+    @Environment(\.dateFormatterZimam) private var formatter
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(spacing: 0) {
+                Text(weekdayName)
+                    .font(ZimamType.caption)
+                    .foregroundStyle(isSelected ? ZimamColor.brandInk : ZimamColor.inkMuted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(formatter.number(day.primaryDay))
+                    .font(short ? ZimamType.headline : ZimamType.title)
+                    .foregroundStyle(isSelected ? ZimamColor.brandInk : ZimamColor.ink)
+                Text(formatter.number(day.secondaryDay))
+                    .font(ZimamType.caption)
+                    .foregroundStyle(isSelected ? ZimamColor.brandInk : ZimamColor.inkMuted)
+            }
+            .padding(.vertical, ZimamSpacing.space1)
+            .frame(maxWidth: .infinity, minHeight: ZimamSpacing.space11)
+            .background(isSelected ? ZimamColor.brandSoft : Color.clear, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
+            .overlay {
+                if isToday {
+                    RoundedRectangle(cornerRadius: ZimamRadius.radiusMd)
+                        .strokeBorder(ZimamColor.lineStrong, lineWidth: ZimamSpacing.space1 / 2)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityText)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var weekdayName: String {
+        guard short else { return formatter.weekday(day.date) }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = formatter.timeZone
+        return formatter.weekdaySymbols([calendar.component(.weekday, from: day.date)], short: true).first ?? ""
+    }
+
+    private var accessibilityText: String {
+        var dates = formatter
+        dates.primary = kind
+        var parts = [formatter.weekday(day.date), dates.dual(day.date)]
+        if isToday { parts.append("اليوم") }
+        parts.append(ArabicCount.tasks(taskCount, locale: formatter.locale))
+        return parts.joined(separator: "، ")
+    }
+}
+
+/// A day's one-day tasks in a sunken column that takes dropped tasks.
+private struct WeekColumn: View {
+    let tasks: [TaskItem]
     let onDrop: ([UUID]) -> Bool
     let onMove: (UUID) -> Void
     let onComplete: (TaskItem) -> Void
 
-    @Environment(\.dateFormatterZimam) private var formatter
     // Not private: a private @State would make the memberwise initializer private.
     @State var isTargeted = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
-            Button(action: onSelect) {
-                VStack(spacing: 0) {
-                    Text(formatter.weekday(day.date))
-                        .font(ZimamType.caption)
-                        .foregroundStyle(isSelected ? ZimamColor.brandInk : ZimamColor.inkMuted)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    Text(formatter.number(day.primaryDay))
-                        .font(ZimamType.title)
-                        .foregroundStyle(isSelected ? ZimamColor.brandInk : ZimamColor.ink)
-                    Text(formatter.number(day.secondaryDay))
-                        .font(ZimamType.caption)
-                        .foregroundStyle(isSelected ? ZimamColor.brandInk : ZimamColor.inkMuted)
-                }
-                .padding(.vertical, ZimamSpacing.space1)
-                .frame(maxWidth: .infinity, minHeight: ZimamSpacing.space11)
-                .background(isSelected ? ZimamColor.brandSoft : Color.clear, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
-                .overlay {
-                    if isToday {
-                        RoundedRectangle(cornerRadius: ZimamRadius.radiusMd)
-                            .strokeBorder(ZimamColor.lineStrong, lineWidth: ZimamSpacing.space1 / 2)
-                    }
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(accessibilityText)
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
-
             ForEach(tasks) { task in
                 WeekTaskCard(task: task, onMove: onMove, onComplete: { onComplete(task) })
             }
@@ -393,14 +456,113 @@ private struct WeekColumn: View {
             isTargeted = targeted
         }
     }
+}
 
-    private var accessibilityText: String {
-        var dates = formatter
-        dates.primary = kind
-        var parts = [formatter.weekday(day.date), dates.dual(day.date)]
-        if isToday { parts.append("اليوم") }
-        parts.append(ArabicCount.tasks(tasks.count, locale: formatter.locale))
-        return parts.joined(separator: "، ")
+/// The iPhone's week: a strip of the seven days with the tasks that span days as bars under them,
+/// above the day lists. Tapping a day selects it; a bar opens its task.
+struct WeekSpanStrip: View {
+    let days: [CalendarDay]
+    let kind: CalendarKind
+    let today: String
+    @Binding var selectedDay: String
+    let tasksByDay: [String: [TaskItem]]
+    let spans: [SpanItem]
+    let onMove: (UUID) -> Void
+    let onComplete: (TaskItem) -> Void
+
+    var body: some View {
+        VStack(spacing: ZimamSpacing.space1) {
+            HStack(spacing: ZimamSpacing.space1) {
+                ForEach(days) { day in
+                    WeekDayHeader(day: day, kind: kind,
+                                  taskCount: (tasksByDay[day.day]?.count ?? 0) + spans.filter { $0.span.contains(day.day) }.count,
+                                  isToday: day.day == today, isSelected: day.day == selectedDay, short: true,
+                                  onSelect: { selectedDay = day.day })
+                }
+            }
+            SpanLanes(days: days.map(\.day), columnOffset: 0, columnCount: days.count, spans: spans, maxLanes: 4,
+                      laneHeight: ZimamSpacing.space11, spacing: ZimamSpacing.space1, interactive: true,
+                      onMove: onMove, onComplete: onComplete)
+        }
+        .padding(ZimamSpacing.space2)
+        .background(ZimamColor.surfaceRaised, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusLg))
+    }
+}
+
+// MARK: Tasks that span days
+
+/// A task that spans days, with its days.
+struct SpanItem: Identifiable {
+    let task: TaskItem
+    let span: DaySpan
+
+    var id: UUID { task.id }
+}
+
+/// The bars of the tasks that span days over one week's columns, in lanes under the dates.
+/// `days` are the drawn days (a month's own days in its first and last weeks), starting at column
+/// `columnOffset` of `columnCount`. A bar's leading end is its start day: the right in Arabic.
+/// In the month the bars are a picture (`interactive` false: the day cells and the day's list carry
+/// them for VoiceOver); in the week each bar opens its task, drags to another day, and has
+/// «نقل إلى…» in its menu.
+struct SpanLanes: View {
+    let days: [String]
+    let columnOffset: Int
+    let columnCount: Int
+    let spans: [SpanItem]
+    let maxLanes: Int
+    let laneHeight: CGFloat
+    let spacing: CGFloat
+    var interactive = false
+    var onMove: (UUID) -> Void = { _ in }
+    var onComplete: ((TaskItem) -> Void)?
+
+    @Environment(\.dateFormatterZimam) private var formatter
+
+    var body: some View {
+        let segments = SpanLayout.week(spans.map { (id: $0.id, span: $0.span) }, days: days, maxLanes: maxLanes).segments
+        if !segments.isEmpty && columnCount > 0 {
+            let lanes = (segments.map(\.lane).max() ?? 0) + 1
+            let height = laneHeight * CGFloat(lanes) + spacing * CGFloat(lanes - 1)
+            GeometryReader { geometry in
+                let column = (geometry.size.width - spacing * CGFloat(columnCount - 1)) / CGFloat(columnCount)
+                ZStack(alignment: .topLeading) {
+                    ForEach(segments, id: \.self) { segment in
+                        if let item = spans.first(where: { $0.id == segment.id }) {
+                            bar(item)
+                                .frame(width: column * CGFloat(segment.columnCount) + spacing * CGFloat(segment.columnCount - 1),
+                                       height: laneHeight)
+                                .padding(.leading, (column + spacing) * CGFloat(segment.firstColumn + columnOffset))
+                                .padding(.top, (laneHeight + spacing) * CGFloat(segment.lane))
+                        }
+                    }
+                }
+                .frame(width: geometry.size.width, height: height, alignment: .topLeading)
+            }
+            .frame(height: height)
+        }
+    }
+
+    @ViewBuilder
+    private func bar(_ item: SpanItem) -> some View {
+        let label = Text(item.task.title)
+            .font(ZimamType.caption)
+            .foregroundStyle(ZimamColor.onTimelineBar)
+            .lineLimit(1)
+            .padding(.horizontal, ZimamSpacing.space2)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .background(ZimamColor.timelineBar, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusSm))
+        if interactive {
+            NavigationLink(value: TaskRoute(id: item.id)) {
+                label.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .modifier(CalendarTaskActions(task: item.task, onMove: onMove,
+                                          onComplete: onComplete.map { complete in { complete(item.task) } }))
+            .accessibilityLabel("\(item.task.title)، \(formatter.spanText(item.span))")
+        } else {
+            label.accessibilityHidden(true)
+        }
     }
 }
 

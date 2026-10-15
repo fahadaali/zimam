@@ -22,6 +22,21 @@ struct ProjectsView: View {
 
     var body: some View {
         List {
+            // The timeline and the matrix of every project, at the top of the iPhone's projects tab
+            // (the iPad and the Mac list them in the sidebar).
+            Section {
+                ForEach([OverviewRoute.timeline, .matrix], id: \.self) { route in
+                    NavigationLink(value: route) {
+                        Label(route.title, systemImage: route.systemImage)
+                            .font(ZimamType.body)
+                            .foregroundStyle(ZimamColor.ink)
+                            .frame(minHeight: ZimamSpacing.space11, alignment: .leading)
+                    }
+                    .listRowBackground(ZimamColor.surfaceRaised)
+                }
+            } header: {
+                ScreenHeader(title: "المشاريع")
+            }
             Section {
                 if projects.isEmpty { EmptyLine(text: "لا مشاريع بعد.") }
                 ForEach(projects) { project in
@@ -35,12 +50,11 @@ struct ProjectsView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 }
-            } header: {
-                ScreenHeader(title: "المشاريع")
             }
         }
         .zimamList()
         .navigationDestination(for: UUID.self) { ProjectDetailView(projectId: $0) }
+        .navigationDestination(for: OverviewRoute.self) { OverviewScreen(route: $0) }
         .toolbar {
             ToolbarItem {
                 Button("مشروع جديد", systemImage: "plus") { naming = true }
@@ -68,7 +82,7 @@ struct ShareTarget: Identifiable {
     let id: UUID
 }
 
-/// A project's tasks, as a list grouped by section or as a kanban board. The choice is the
+/// A project's tasks, as a list grouped by section, a kanban board or a timeline («المخطط الزمني»). The choice is the
 /// project's `view`, so it is remembered per project and follows it to other devices.
 /// From the sidebar a single section opens as a list of its tasks (`sectionId`).
 struct ProjectDetailView: View {
@@ -103,6 +117,10 @@ struct ProjectDetailView: View {
         sectionId == nil && project?.layoutRaw == ProjectRecord.Layout.kanban.rawValue
     }
 
+    private var isTimeline: Bool {
+        sectionId == nil && project?.layoutRaw == ProjectRecord.Layout.timeline.rawValue
+    }
+
     var body: some View {
         let own = tasks.filter { $0.projectId == projectId && $0.parentId == nil }
         let sections = allSections.filter { $0.projectId == projectId }
@@ -110,6 +128,8 @@ struct ProjectDetailView: View {
             if isBoard {
                 KanbanBoardView(projectId: projectId, title: name, sections: sections,
                                 tasks: own, openTask: openTask)
+            } else if isTimeline {
+                GanttView(projectId: projectId)
             } else {
                 list(own: own, sections: sections)
                     .overlay(alignment: .bottomTrailing) { AddTaskButton { showingAdd = true } }
@@ -123,6 +143,7 @@ struct ProjectDetailView: View {
                     Picker("طريقة العرض", selection: layout(of: project)) {
                         Label("قائمة", systemImage: "list.bullet").tag(ProjectRecord.Layout.list)
                         Label("لوحة", systemImage: "rectangle.split.3x1").tag(ProjectRecord.Layout.kanban)
+                        Label("مخطط", systemImage: OverviewRoute.timeline.systemImage).tag(ProjectRecord.Layout.timeline)
                     }
                     .pickerStyle(.segmented)
                 }
@@ -185,7 +206,13 @@ struct ProjectDetailView: View {
 
     private func layout(of project: ProjectItem) -> Binding<ProjectRecord.Layout> {
         Binding(
-            get: { project.layoutRaw == ProjectRecord.Layout.kanban.rawValue ? .kanban : .list },
+            get: {
+                switch ProjectRecord.Layout(rawValue: project.layoutRaw) {
+                case .kanban?: .kanban
+                case .timeline?: .timeline
+                default: .list
+                }
+            },
             set: { Store(context: context, sync: sync).setLayout(project, $0) }
         )
     }

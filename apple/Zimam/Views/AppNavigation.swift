@@ -7,18 +7,32 @@ enum SidebarItem: Hashable {
     case upcoming
     case inbox
     case calendar
+    /// «المخطط الزمني» of every project and the inbox.
+    case timeline
+    /// «المصفوفة»: the open tasks in four quadrants.
+    case matrix
     case search
     case project(UUID)
     case section(project: UUID, section: UUID)
 
-    /// The iPhone tab that shows the same place.
+    /// The iPhone tab that shows the same place. The timeline and the matrix live at the top of
+    /// the projects tab (`OverviewRoute`), which keeps the iPhone's five tabs.
     var tab: MainTab {
         switch self {
         case .today: .today
         case .upcoming: .upcoming
         case .search: .search
         case .calendar: .calendar
-        case .inbox, .project, .section: .projects
+        case .inbox, .project, .section, .timeline, .matrix: .projects
+        }
+    }
+
+    /// The overview this item opens on the iPhone's projects tab, if it is one.
+    var overview: OverviewRoute? {
+        switch self {
+        case .timeline: .timeline
+        case .matrix: .matrix
+        default: nil
         }
     }
 
@@ -40,6 +54,8 @@ extension SidebarItem: RawRepresentable {
         case "upcoming": self = .upcoming
         case "inbox": self = .inbox
         case "calendar": self = .calendar
+        case "timeline": self = .timeline
+        case "matrix": self = .matrix
         case "search": self = .search
         case "project":
             guard parts.count == 2, let id = UUID(uuidString: parts[1]) else { return nil }
@@ -60,9 +76,38 @@ extension SidebarItem: RawRepresentable {
         case .upcoming: "upcoming"
         case .inbox: "inbox"
         case .calendar: "calendar"
+        case .timeline: "timeline"
+        case .matrix: "matrix"
         case .search: "search"
         case .project(let id): "project:\(id.uuidString)"
         case .section(let project, let section): "section:\(project.uuidString):\(section.uuidString)"
+        }
+    }
+}
+
+/// «المخطط الزمني» and «المصفوفة» pushed on the iPhone's projects tab; the sidebar lists them on
+/// the iPad and the Mac.
+enum OverviewRoute: Hashable {
+    case timeline, matrix
+
+    var sidebarItem: SidebarItem {
+        switch self {
+        case .timeline: .timeline
+        case .matrix: .matrix
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .timeline: "المخطط الزمني"
+        case .matrix: "المصفوفة"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .timeline: "calendar.day.timeline.leading"
+        case .matrix: "square.grid.2x2"
         }
     }
 }
@@ -93,6 +138,10 @@ private struct ProjectOpenedKey: EnvironmentKey {
     static let defaultValue: ((UUID) -> Void)? = nil
 }
 
+private struct OverviewOpenedKey: EnvironmentKey {
+    static let defaultValue: ((OverviewRoute) -> Void)? = nil
+}
+
 extension EnvironmentValues {
     /// The task shown in the details column on the iPad and the Mac. Lists bind it with
     /// `List(selection:)`, so a row's `NavigationLink(value: TaskRoute)` selects the task
@@ -107,6 +156,12 @@ extension EnvironmentValues {
     var projectOpened: ((UUID) -> Void)? {
         get { self[ProjectOpenedKey.self] }
         set { self[ProjectOpenedKey.self] = newValue }
+    }
+
+    /// Told when the timeline or the matrix opens on the iPhone, for the same reason.
+    var overviewOpened: ((OverviewRoute) -> Void)? {
+        get { self[OverviewOpenedKey.self] }
+        set { self[OverviewOpenedKey.self] = newValue }
     }
 }
 

@@ -121,8 +121,15 @@ public final class APIClient: @unchecked Sendable {
     }
 
     /// Changes after `cursor`, oldest first. Repeat with the returned cursor while `hasMore`.
+    /// `include=timeline`: projects shown as «المخطط الزمني» come as they are, which builds before
+    /// it could not decode (the server sends them "list").
     public func pull(cursor: Int64, limit: Int = 500) async throws -> PullResponse {
-        try await send("GET", "v1/sync", query: [URLQueryItem(name: "cursor", value: String(cursor)), URLQueryItem(name: "limit", value: String(limit))])
+        try await send("GET", "v1/sync", query: Self.pullQuery(cursor: cursor, limit: limit))
+    }
+
+    static func pullQuery(cursor: Int64, limit: Int) -> [URLQueryItem] {
+        [URLQueryItem(name: "cursor", value: String(cursor)), URLQueryItem(name: "limit", value: String(limit)),
+         URLQueryItem(name: "include", value: "timeline")]
     }
 
     /// Sends up to `maxPushBatch` edits; each comes back with its own result, in order.

@@ -41,6 +41,7 @@ class FakeBackend implements ZimamBackend {
       project: null,
       parentId: null,
       due: null,
+      start: null,
       prayer: null,
       recurrence: null,
       completedAt: null,
@@ -313,6 +314,12 @@ describe("Zimam MCP server", () => {
 
     await rpc(token, "tools/call", { name: "update_task", arguments: { id: "abc", dueDate: "2026-10-16" } });
     expect(backend.calls.at(-1)).toMatchObject({ method: "updateTask", args: { id: "abc", dueDate: "2026-10-16" } });
+
+    await rpc(token, "tools/call", { name: "update_task", arguments: { id: "abc", startDate: "2026-10-14", dueDate: "2026-10-18" } });
+    expect(backend.calls.at(-1)).toMatchObject({
+      method: "updateTask",
+      args: { id: "abc", startDate: "2026-10-14", dueDate: "2026-10-18" },
+    });
   });
 
   it("rejects bad tool input before it reaches the backend", async () => {
