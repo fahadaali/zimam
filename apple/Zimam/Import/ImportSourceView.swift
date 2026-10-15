@@ -19,6 +19,9 @@ struct ImportSourceView: View {
     @State private var errorMessage: String?
     /// The import already running when the server answers 409, so the user can follow it instead.
     @State private var runningJob: ImportJob?
+    /// The server answered `pro_required` (only when it enforces plans): offer the paywall.
+    @State private var needsPro = false
+    @State private var showingPaywall = false
 
     init(source: ImportSource, maxFileBytes: Int, onStarted: @escaping (ImportJob) -> Void = { _ in }) {
         self.source = source
@@ -66,9 +69,14 @@ struct ImportSourceView: View {
                         }
                         .frame(minHeight: ZimamSpacing.space11)
                     }
+                    if needsPro {
+                        Button("الاشتراك", systemImage: "star") { showingPaywall = true }
+                            .frame(minHeight: ZimamSpacing.space11)
+                    }
                 }
             }
         }
+        .sheet(isPresented: $showingPaywall) { PaywallView() }
         .scrollContentBackground(.hidden)
         .background(ZimamColor.surface)
         .navigationTitle(ImportText.title(forSource: source.id, label: source.label))
@@ -210,6 +218,7 @@ struct ImportSourceView: View {
     }
 
     private func show(_ error: Error) async {
+        needsPro = APIError.requiresPro(error)
         if let apiError = error as? APIError, apiError.code == "invalid", source.input == .token {
             errorMessage = "الرمز غير صالح. انسخه كاملاً من إعدادات المطوّر في Todoist."
             return

@@ -14,6 +14,7 @@ import {
   uploadKey,
 } from "../imports/jobs";
 import { isSourceId, SOURCES } from "../imports/sources";
+import { requirePro } from "../subscriptions/entitlements";
 import type { AppEnv } from "../types";
 
 /** Imports from other apps. The work happens on the zimam-imports queue (src/imports/queue.ts). */
@@ -45,8 +46,10 @@ imports.get("/sources", (c) =>
  * - A file: multipart/form-data with `source` and `file` (up to MAX_UPLOAD_BYTES).
  * - A token: JSON `{ source: "todoist-api", token }`.
  * One import at a time per user (409 import_in_progress).
+ * Every source here needs «زمام الاحترافية» when enforced (403 pro_required); Apple
+ * Reminders, the free one, is imported on the device and never comes here.
  */
-imports.post("/", async (c) => {
+imports.post("/", requirePro, async (c) => {
   const userId = c.var.userId;
   const { enqueue, files } = deps(c);
   const contentType = c.req.header("Content-Type") ?? "";

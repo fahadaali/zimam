@@ -56,8 +56,13 @@ struct AssistantStatus: View {
     }
 
     let phase: Phase
+    /// The server answered `pro_required` (only when it enforces plans): «الاشتراك» opens the
+    /// paywall instead of retrying.
+    var needsPro = false
     var onRetry: (() -> Void)?
     var onClose: (() -> Void)?
+
+    @State private var showingPaywall = false
 
     var body: some View {
         switch phase {
@@ -76,9 +81,11 @@ struct AssistantStatus: View {
                     .font(ZimamType.callout)
                     .foregroundStyle(ZimamColor.inkMuted)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if onRetry != nil || onClose != nil {
+                if needsPro || onRetry != nil || onClose != nil {
                     HStack(spacing: ZimamSpacing.space2) {
-                        if let onRetry {
+                        if needsPro {
+                            Button("الاشتراك") { showingPaywall = true }.buttonStyle(.zimamPrimary)
+                        } else if let onRetry {
                             Button("إعادة المحاولة", action: onRetry).buttonStyle(.zimamSecondary)
                         }
                         if let onClose {
@@ -87,6 +94,7 @@ struct AssistantStatus: View {
                     }
                 }
             }
+            .sheet(isPresented: $showingPaywall) { PaywallView() }
         }
     }
 }

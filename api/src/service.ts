@@ -1,9 +1,10 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { Assistant, type AgendaRequest, type SignInKeys, type TaskFields, type TaskFilter } from "./assistant";
+import { Assistant, type AgendaRequest, type Outcome, type SignInKeys, type TaskFields, type TaskFilter } from "./assistant";
 import { appleKeys } from "./auth/apple";
 import { googleKeys } from "./auth/google";
 import type { Env } from "./env";
 import { channelRealtime, latestSeq, notifyChangesSince } from "./realtime/notify";
+import { hasProAccess, PRO_REQUIRED } from "./subscriptions/entitlements";
 
 /**
  * RPC entrypoint for the MCP worker (`mcp/`), reached only through its service binding,
@@ -15,6 +16,18 @@ export class ZimamService extends WorkerEntrypoint<Env> {
 
   private get assistant() {
     return new Assistant(this.env, ZimamService.keys);
+  }
+
+  /**
+   * MCP is a «زمام الاحترافية» feature: when SUBSCRIPTIONS_ENFORCED is "true", a free user's
+   * tool calls answer `pro_required` with an Arabic message the assistant shows as is.
+   * Signing in stays open, so the user can connect and then subscribe.
+   */
+  private async pro<T>(userId: string, work: () => Promise<Outcome<T>>): Promise<Outcome<T>> {
+    if (!(await hasProAccess(this.env, userId))) {
+      return { ok: false, error: { code: PRO_REQUIRED.code, message: PRO_REQUIRED.arabic } };
+    }
+    return work();
   }
 
   /** Runs a write, then (after returning) tells everyone who can see what it changed to pull. */
@@ -38,26 +51,26 @@ export class ZimamService extends WorkerEntrypoint<Env> {
   }
 
   listTasks(userId: string, filter: TaskFilter) {
-    return this.assistant.listTasks(userId, filter);
+    return this.pro(userId, () => this.assistant.listTasks(userId, filter));
   }
 
   createTask(userId: string, fields: TaskFields) {
-    return this.writing(() => this.assistant.createTask(userId, fields));
+    return this.pro(userId, () => this.writing(() => this.assistant.createTask(userId, fields)));
   }
 
   updateTask(userId: string, id: string, fields: TaskFields) {
-    return this.writing(() => this.assistant.updateTask(userId, id, fields));
+    return this.pro(userId, () => this.writing(() => this.assistant.updateTask(userId, id, fields)));
   }
 
   completeTask(userId: string, id: string) {
-    return this.writing(() => this.assistant.completeTask(userId, id));
+    return this.pro(userId, () => this.writing(() => this.assistant.completeTask(userId, id)));
   }
 
   listProjects(userId: string) {
-    return this.assistant.listProjects(userId);
+    return this.pro(userId, () => this.assistant.listProjects(userId));
   }
 
   getAgenda(userId: string, request: AgendaRequest) {
-    return this.assistant.getAgenda(userId, request);
+    return this.pro(userId, () => this.assistant.getAgenda(userId, request));
   }
 }

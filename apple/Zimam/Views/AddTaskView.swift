@@ -32,6 +32,8 @@ struct AddTaskView: View {
     @State private var priority: TaskPriority = .none
     @State private var projectId: UUID?
     @State private var assistant: AssistantPhase = .idle
+    /// The last failure was `pro_required`: the status offers the paywall.
+    @State private var assistantNeedsPro = false
     /// Filled when a suggestion is edited into the form: shown and kept on add.
     @State private var fromAssistant = false
     @State private var notes = ""
@@ -147,7 +149,7 @@ struct AddTaskView: View {
             Section { AssistantStatus(phase: .loading("يقرأ المساعد المهمة…")) }
         case .failed(let message):
             Section {
-                AssistantStatus(phase: .failed(message), onRetry: suggest, onClose: { assistant = .idle })
+                AssistantStatus(phase: .failed(message), needsPro: assistantNeedsPro, onRetry: suggest, onClose: { assistant = .idle })
             }
         case .suggestion(let suggestion):
             Section {
@@ -174,7 +176,9 @@ struct AddTaskView: View {
                 let suggestion = try await session.api.suggestTask(from: text, timeZone: formatter.timeZone)
                 withAnimation { assistant = .suggestion(suggestion) }
             } catch {
-                assistant = .failed(AssistantProblem(error).message(formatter: formatter))
+                let problem = AssistantProblem(error)
+                assistantNeedsPro = problem == .proRequired
+                assistant = .failed(problem.message(formatter: formatter))
             }
         }
     }

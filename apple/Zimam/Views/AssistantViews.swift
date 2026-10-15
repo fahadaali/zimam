@@ -108,6 +108,8 @@ struct SubtaskBreakdown: View {
     @Environment(\.dateFormatterZimam) private var formatter
     @State private var phase: Phase = .idle
     @State private var selected: Set<Int> = []
+    /// The last failure was `pro_required`: the status offers the paywall.
+    @State private var needsPro = false
 
     var body: some View {
         switch phase {
@@ -119,7 +121,7 @@ struct SubtaskBreakdown: View {
         case .loading:
             AssistantStatus(phase: .loading("يقسّم المساعد المهمة…"))
         case .failed(let message):
-            AssistantStatus(phase: .failed(message), onRetry: start, onClose: { phase = .idle })
+            AssistantStatus(phase: .failed(message), needsPro: needsPro, onRetry: start, onClose: { phase = .idle })
         case .ready(let titles):
             AssistantSuggestion(acceptLabel: "إضافة", onAccept: { accept(titles) }, onDismiss: { phase = .idle }) {
                 VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
@@ -145,7 +147,9 @@ struct SubtaskBreakdown: View {
                 selected = Set(titles.indices)
                 phase = titles.isEmpty ? .failed("لم يقترح المساعد خطوات لهذه المهمة.") : .ready(titles)
             } catch {
-                phase = .failed(AssistantProblem(error).message(formatter: formatter))
+                let problem = AssistantProblem(error)
+                needsPro = problem == .proRequired
+                phase = .failed(problem.message(formatter: formatter))
             }
         }
     }
@@ -210,6 +214,8 @@ struct DaySummaryRow: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dateFormatterZimam) private var formatter
     @State private var phase: Phase = .idle
+    /// The last failure was `pro_required`: the status offers the paywall.
+    @State private var needsPro = false
 
     var body: some View {
         Group {
@@ -222,7 +228,7 @@ struct DaySummaryRow: View {
             case .loading:
                 AssistantStatus(phase: .loading("يجهّز المساعد ملخص اليوم…"))
             case .failed(let message):
-                AssistantStatus(phase: .failed(message), onRetry: load, onClose: { phase = .idle })
+                AssistantStatus(phase: .failed(message), needsPro: needsPro, onRetry: load, onClose: { phase = .idle })
             case .ready(let summary):
                 AssistantSuggestion(label: "ملخص اليوم", dismissLabel: "إخفاء", onDismiss: { withAnimation { phase = .idle } }) {
                     Text(summary.text)
@@ -243,7 +249,9 @@ struct DaySummaryRow: View {
                 let summary = try await session.api.daySummary(day: today)
                 phase = .ready(summary)
             } catch {
-                phase = .failed(AssistantProblem(error).message(formatter: formatter))
+                let problem = AssistantProblem(error)
+                needsPro = problem == .proRequired
+                phase = .failed(problem.message(formatter: formatter))
             }
         }
     }

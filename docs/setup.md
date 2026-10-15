@@ -213,6 +213,69 @@ curl -s https://app-site-association.cdn-apple.com/a/v1/zimam-web.fahad2ao.worke
 2. في App Store Connect: **App Privacy ← Privacy Policy URL** بالقيمة `https://zimam-web.fahad2ao.workers.dev/privacy/` (لاحقاً `https://zimam.app/privacy/`)، واملأ «تفاصيل الخصوصية» بما تذكره السياسة. وإن اعتمدت شروطاً خاصة بدل اتفاقية أبل القياسية فضع رابط `/terms/` في **License Agreement**.
 3. أي تغيير فيما يجمعه الخادم أو يرسله (حقل جديد، مزوّد جديد) يُحدَّث معه نص السياسة في الطلب نفسه.
 
+### ٨. اشتراكات «زمام الاحترافية»
+
+الاشتراك عبر StoreKit 2 في مجموعة واحدة بمنتجين، شهري وسنوي. التطبيق يشتري، والخادم يتحقق من كل معاملة بسؤال Apple بمفتاح In-App Purchase، ويستقبل إشعارات التجديد والانتهاء والاسترداد. التفاصيل في `api/DEVELOPMENT.md` («الاشتراكات»).
+
+> **في التجربة الشخصية:** المزايا مفتوحة للجميع (`SUBSCRIPTIONS_ENFORCED = "false"` في `api/wrangler.jsonc`)، والتطبيق يعرض الباقة ولا يمنع شيئاً، والمشتريات من TestFlight تجريبية (sandbox) بلا خصم.
+
+#### ١. الاتفاقية
+
+في [App Store Connect](https://appstoreconnect.apple.com): **Business ← Agreements**، وفعّل **Paid Applications** مع بيانات البنك والضريبة. دونها لا تظهر المنتجات في التطبيق ولو في sandbox.
+
+#### ٢. مجموعة الاشتراك والمنتجان
+
+**Apps ← زمام ← Monetization ← Subscriptions**:
+
+1. **Subscription Groups ← +**: الاسم المرجعي `Zimam Pro`، ثم من **Localization** أضف العربية باسم العرض `زمام الاحترافية`.
+2. داخل المجموعة **Create** مرتين، بالمستوى نفسه (Level 1) فيكون التبديل بينهما عند التجديد:
+
+| Reference Name | Product ID | Duration | الاسم بالعربية | الوصف (٤٥ حرفاً على الأكثر) |
+| --- | --- | --- | --- | --- |
+| `Zimam Pro Monthly` | `app.zimam.ios.pro.monthly` | 1 Month | `زمام الاحترافية الشهري` | `المساعد الذكي وMCP والاستيراد الكامل` |
+| `Zimam Pro Yearly` | `app.zimam.ios.pro.yearly` | 1 Year | `زمام الاحترافية السنوي` | `المساعد الذكي وMCP والاستيراد الكامل` |
+
+3. **Subscription Prices**: الأسعار تُحدَّد هنا وحدها (السعودية أساساً، ويحسب App Store بقية الدول). التطبيق يعرض السعر كما يعطيه App Store (`displayPrice`) بعملة حساب المستخدم وأرقامه، فلا سعر مكتوب في الكود. والأسعار في `Zimam.storekit` للتجربة المحلية فقط.
+4. **Family Sharing**: اتركه مطفأً؛ الخادم يربط الاشتراك بحساب زمام من اشتراه.
+5. **Review Information**: لقطة شاشة لصفحة «زمام الاحترافية» في التطبيق، وملاحظة للمراجع. يُرسل المنتجان للمراجعة مع أول إصدار يعرضهما.
+6. تشترط المراجعة رابطي الشروط والخصوصية للاشتراكات المتجددة: **App Privacy ← Privacy Policy URL** هو `https://zimam-web.fahad2ao.workers.dev/privacy`، والشروط `https://zimam-web.fahad2ao.workers.dev/terms` في وصف التطبيق أو في **App Information ← License Agreement**. وهما الرابطان في صفحة الاشتراك في التطبيق.
+
+#### ٣. مفتاح In-App Purchase والأسرار الثلاثة
+
+1. **Users and Access ← Integrations ← In-App Purchase ← Generate In-App Purchase Key** (أو **+**)، باسم مثل `Zimam Server`.
+2. نزّل الملف `SubscriptionKey_XXXXXXXXXX.p8` (يُنزَّل مرة واحدة فقط) واحفظه خارج المستودع، وانسخ **Key ID** من السطر و**Issuer ID** من أعلى الصفحة.
+3. من داخل `api/` (لا تُلصق في المحادثة ولا تدخل المستودع):
+
+```sh
+cd api
+npx wrangler secret put APPSTORE_KEY_ID                 # الصق Key ID
+npx wrangler secret put APPSTORE_ISSUER_ID              # الصق Issuer ID
+npx wrangler secret put APPSTORE_PRIVATE_KEY < SubscriptionKey_XXXXXXXXXX.p8
+```
+
+جدول `entitlements` (`api/migrations/0009_subscriptions.sql`) يطبّقه النشر في Workers Builds. وقبل إضافة الأسرار يرد الخادم على التحقق من الشراء بـ 503، ويبقى الاشتراك محفوظاً عند Apple فيرسله التطبيق مرة أخرى عند فتح الإعدادات أو صفحة الاشتراك.
+
+#### ٤. إشعارات الخادم (App Store Server Notifications V2)
+
+**Apps ← زمام ← App Information ← App Store Server Notifications**: في **Production Server URL** و**Sandbox Server URL** كليهما:
+
+```
+https://zimam.fahad2ao.workers.dev/v1/subscriptions/apple/notifications
+```
+
+واختر **Version 2**. الخادم لا يصدّق محتوى الإشعار، بل يسأل Apple عن المعاملة نفسها. وعند الانتقال إلى `api.zimam.app` غيّر الرابطين.
+
+#### ٥. التجربة
+
+- **في Xcode:** مخطط `Zimam` يشغّل التطبيق بملف `apple/Zimam/Resources/Zimam.storekit` (`storeKitConfiguration` في `apple/project.yml`)، فيشتري محلياً دون حساب ولا خادم، ويدار من **Debug ← StoreKit ← Manage Transactions**. هذه المعاملات لا يعرفها App Store، فيرد الخادم عليها 404 ويعتمد التطبيق على استحقاق الجهاز. لتجربة الخادم: **Product ← Scheme ← Edit Scheme ← Run ← Options ← StoreKit Configuration: None**، ثم حساب sandbox.
+- **حساب sandbox:** **Users and Access ← Sandbox ← Test Accounts ← +**، ثم على الجهاز **الإعدادات ← App Store ← Sandbox Account**. وفي TestFlight يشتري المختبر بحسابه دون خصم، وتتجدد الاشتراكات بسرعة.
+- **التحقق:** `GET /v1/subscriptions` بعد الشراء يرجع `plan: "pro"` و`environment: "sandbox"`.
+
+#### ٦. تفعيل البوابة بعد التجربة
+
+1. ضع معرّفك في `PRO_USERS` في `api/wrangler.jsonc` (من `GET /v1/me`، أو بريدك) لتبقى مزاياك مفتوحة دون اشتراك.
+2. غيّر `SUBSCRIPTIONS_ENFORCED` إلى `"true"` وادمج إلى `main`. بعدها يحتاج المساعد وخادم MCP والاستيراد من الخادم إلى الاشتراك، ويعرض التطبيق صفحة الاشتراك لمن يحتاجها. تذكيرات أبل والمهام وبقية التطبيق تبقى مجانية.
+
 ## الدخول بحساب قوقل
 
 يدخل المستخدم بحساب أبل أو قوقل في التطبيق والويب وصفحة ربط كلود وChatGPT. أبل يبقى موجوداً دائماً (البند 4.8 من إرشادات App Store)، ومن دخل بأبل ثم بقوقل ببريد متحقَّق منه نفسه وجد حسابه نفسه (القاعدة وحدودها في `api/DEVELOPMENT.md`، «تسجيل الدخول»).

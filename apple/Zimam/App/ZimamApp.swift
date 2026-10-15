@@ -14,6 +14,7 @@ struct ZimamApp: App {
     @State private var sync: SyncEngine
     @State private var location: LocationProvider
     @State private var notifications: NotificationScheduler
+    @State private var subscriptions: SubscriptionStore
 
     init() {
         // Settings the widgets read moved to the App Group; copy them over before anything reads them.
@@ -46,6 +47,10 @@ struct ZimamApp: App {
         _sync = State(initialValue: sync)
         _location = State(initialValue: location)
         _notifications = State(initialValue: notifications)
+        // «زمام الاحترافية»: renewals and purchases made elsewhere arrive while the app runs.
+        let subscriptions = SubscriptionStore(api: session.api)
+        subscriptions.start()
+        _subscriptions = State(initialValue: subscriptions)
     }
 
     var body: some Scene {
@@ -57,6 +62,7 @@ struct ZimamApp: App {
                 .environment(sync)
                 .environment(location)
                 .environment(notifications)
+                .environment(subscriptions)
                 .environment(\.layoutDirection, .rightToLeft)
                 .environment(\.locale, ZimamLocale.current)
                 .font(ZimamType.body)

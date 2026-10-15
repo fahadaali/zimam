@@ -30,7 +30,16 @@
     "AI_MONTHLY_LIMIT": "300",
     // Reminder pushes over APNs. The key is a secret: `npx wrangler secret put APNS_KEY_ID`
     // and `npx wrangler secret put APNS_PRIVATE_KEY`. Never put them here.
-    "APNS_TEAM_ID": "72V86SZ2XC"
+    "APNS_TEAM_ID": "72V86SZ2XC",
+    // «زمام الاحترافية» (src/subscriptions/). App Store transactions must be for this bundle id.
+    // The In-App Purchase key is secret: `npx wrangler secret put APPSTORE_KEY_ID`,
+    // `APPSTORE_ISSUER_ID` and `APPSTORE_PRIVATE_KEY`. Never put them here.
+    "APPSTORE_BUNDLE_ID": "app.zimam.ios",
+    // "true" makes the assistant, MCP and server imports need a subscription. "false" during
+    // the personal trial: everyone uses everything, and the app shows the plan without blocking.
+    "SUBSCRIPTIONS_ENFORCED": "false",
+    // Comma-separated user ids or emails treated as pro whatever their subscription (the owner).
+    "PRO_USERS": ""
   },
   // Pushes the reminders beyond the app's local notification window (src/push/reminders.ts).
   "triggers": { "crons": ["*/5 * * * *"] },
