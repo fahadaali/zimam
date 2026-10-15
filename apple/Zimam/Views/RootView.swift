@@ -52,26 +52,3 @@ struct RootView: View {
         }
     }
 }
-
-struct MainView: View {
-    var body: some View {
-        TabView {
-            Tab("اليوم", systemImage: "sun.max") {
-                NavigationStack { TodayView().taskDetailDestination() }
-            }
-            Tab("القادم", systemImage: "calendar") {
-                NavigationStack { UpcomingView().taskDetailDestination() }
-            }
-            Tab("التقويم", systemImage: "calendar.badge.clock") {
-                NavigationStack { CalendarView().taskDetailDestination() }
-            }
-            Tab("المشاريع", systemImage: "folder") {
-                NavigationStack { ProjectsView().taskDetailDestination() }
-            }
-            Tab(role: .search) {
-                NavigationStack { SearchView().taskDetailDestination() }
-            }
-        }
-        .tabViewStyle(.sidebarAdaptable)
-    }
-}

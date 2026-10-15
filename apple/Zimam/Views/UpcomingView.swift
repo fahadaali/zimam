@@ -5,6 +5,7 @@ import ZimamKit
 /// Open tasks after today, grouped by day.
 struct UpcomingView: View {
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.taskSelection) private var taskSelection
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder)])
     private var tasks: [TaskItem]
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
@@ -26,7 +27,7 @@ struct UpcomingView: View {
 
     var body: some View {
         let names = projectNames(projects)
-        List {
+        List(selection: taskSelection) {
             Section {
                 if days.isEmpty { EmptyLine(text: "لا مهام قادمة.") }
             } header: {

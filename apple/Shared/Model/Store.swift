@@ -159,7 +159,8 @@ struct Store {
         commit()
     }
 
-    private func commit() {
+    /// Saves and tells the sync engine. Internal so `Store+Board` can save a batch of edits once.
+    func commit() {
         try? context.save()
         if let sync {
             // The app's listener reschedules notifications and reloads the widgets.

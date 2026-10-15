@@ -7,6 +7,8 @@ import ZimamKit
 struct TaskRow: View {
     let task: TaskItem
     var projectName: String?
+    /// The smaller title used on kanban cards (TaskRow `compact` in design/components).
+    var compact = false
     let onToggle: () -> Void
 
     @Environment(\.dateFormatterZimam) private var formatter
@@ -24,7 +26,7 @@ struct TaskRow: View {
 
             VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
                 Text(task.title)
-                    .font(ZimamType.body)
+                    .font(compact ? ZimamType.callout : ZimamType.body)
                     .foregroundStyle(task.isDone ? ZimamColor.inkFaint : ZimamColor.ink)
                     .strikethrough(task.isDone)
                 if let notes = task.notes, !notes.isEmpty {

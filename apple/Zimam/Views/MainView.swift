@@ -1,0 +1,271 @@
+import SwiftData
+import SwiftUI
+import ZimamKit
+
+/// The signed-in app. On the iPhone (compact width) the four tabs; on the iPad and the Mac
+/// (regular width) three columns: the sidebar, the task list, and the task's details
+/// (design/README.md «المنصات»). Where the user is lives here, above both layouts, so it
+/// carries across rotation, Split View and Slide Over, and is saved per window.
+struct MainView: View {
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+    @Environment(\.modelContext) private var context
+    @Environment(SyncEngine.self) private var sync
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
+
+    @SceneStorage("main.sidebar") private var sidebar: SidebarItem = .today
+    @SceneStorage("main.tab") private var tab: MainTab = .today
+    @SceneStorage("main.task") private var selectedTaskId = ""
+    @State private var columns: NavigationSplitViewVisibility = .all
+    @State private var todayPath = NavigationPath()
+    @State private var upcomingPath = NavigationPath()
+    @State private var calendarPath = NavigationPath()
+    @State private var projectsPath = NavigationPath()
+    @State private var searchPath = NavigationPath()
+    @State private var newTask: NewTaskRequest?
+
+    init() {}
+
+    private var isRegular: Bool {
+        #if os(iOS)
+        return sizeClass == .regular
+        #else
+        return true
+        #endif
+    }
+
+    var body: some View {
+        Group {
+            if isRegular {
+                splitView
+            } else {
+                tabView
+            }
+        }
+        .onChange(of: isRegular) { _, regular in
+            if regular { widen() } else { narrow() }
+        }
+        .focusedSceneValue(\.zimamActions, actions)
+        .sheet(item: $newTask) { request in
+            AddTaskView(due: request.due, projectId: request.projectId)
+        }
+        #if os(macOS)
+        .frame(minWidth: ZimamLayout.windowMinWidth, minHeight: ZimamLayout.windowMinHeight)
+        #endif
+    }
+
+    // MARK: iPad and Mac
+
+    private var splitView: some View {
+        NavigationSplitView(columnVisibility: $columns) {
+            SidebarView(selection: sidebarSelection, onSearch: openSearch)
+                .navigationSplitViewColumnWidth(min: ZimamLayout.sidebarMinWidth, ideal: ZimamLayout.sidebarIdealWidth)
+        } content: {
+            ContentColumn(item: sidebar)
+                .environment(\.taskSelection, selectedTask)
+                .navigationSplitViewColumnWidth(min: ZimamLayout.listColumnMinWidth,
+                                                ideal: showsBoard ? ZimamLayout.boardColumnIdealWidth : ZimamLayout.listColumnIdealWidth)
+        } detail: {
+            NavigationStack {
+                DetailColumn(route: selectedTask.wrappedValue)
+                    .taskDetailDestination()
+                    .toolbar {
+                        ToolbarItem(placement: .primaryAction) {
+                            if let route = selectedTask.wrappedValue {
+                                CompleteToolbarButton(taskId: route.id, action: toggleSelectedDone)
+                            }
+                        }
+                    }
+            }
+            .navigationSplitViewColumnWidth(min: ZimamLayout.detailColumnMinWidth, ideal: ZimamLayout.listColumnIdealWidth)
+        }
+    }
+
+    /// The sidebar's selection as the user changes it: a new place clears the open task.
+    private var sidebarSelection: Binding<SidebarItem?> {
+        Binding(
+            get: { sidebar },
+            set: { item in
+                guard let item, item != sidebar else { return }
+                sidebar = item
+                selectedTaskId = ""
+            }
+        )
+    }
+
+    private var selectedTask: Binding<TaskRoute?> {
+        Binding(
+            get: { UUID(uuidString: selectedTaskId).map { TaskRoute(id: $0) } },
+            set: { selectedTaskId = $0?.id.uuidString ?? "" }
+        )
+    }
+
+    /// A project shown as a board gets a wider middle column.
+    private var showsBoard: Bool {
+        guard case .project(let id) = sidebar else { return false }
+        return projects.first { $0.id == id }?.layoutRaw == ProjectRecord.Layout.kanban.rawValue
+    }
+
+    // MARK: iPhone
+
+    private var tabView: some View {
+        TabView(selection: $tab) {
+            Tab("اليوم", systemImage: "sun.max", value: MainTab.today) {
+                NavigationStack(path: $todayPath) { TodayView().compactTaskDestination(selectedTask) }
+            }
+            Tab("القادم", systemImage: "calendar", value: MainTab.upcoming) {
+                NavigationStack(path: $upcomingPath) { UpcomingView().compactTaskDestination(selectedTask) }
+            }
+            Tab("التقويم", systemImage: "calendar.badge.clock", value: MainTab.calendar) {
+                NavigationStack(path: $calendarPath) { CalendarView().compactTaskDestination(selectedTask) }
+            }
+            Tab("المشاريع", systemImage: "folder", value: MainTab.projects) {
+                NavigationStack(path: $projectsPath) { ProjectsView().compactTaskDestination(selectedTask) }
+            }
+            Tab(value: MainTab.search, role: .search) {
+                NavigationStack(path: $searchPath) { SearchView().compactTaskDestination(selectedTask) }
+            }
+        }
+        .tabViewStyle(.sidebarAdaptable)
+        .environment(\.projectOpened, { id in sidebar = .project(id) })
+    }
+
+    // MARK: Changing width
+
+    /// iPhone layout to three columns: the sidebar follows the tab. On the projects tab it
+    /// already names the project opened last (`projectOpened`).
+    private func widen() {
+        if let item = tab.sidebarItem, sidebar.tab != tab {
+            sidebar = item
+        }
+    }
+
+    /// Three columns to the iPhone layout: the tab follows the sidebar, and the open project
+    /// and task are pushed onto its stack.
+    private func narrow() {
+        tab = sidebar.tab
+        var path = NavigationPath()
+        if let project = sidebar.projectId { path.append(project) }
+        if let route = selectedTask.wrappedValue { path.append(route) }
+        switch tab {
+        case .today: todayPath = path
+        case .upcoming: upcomingPath = path
+        case .calendar: calendarPath = path
+        case .projects: projectsPath = path
+        case .search: searchPath = path
+        }
+    }
+
+    // MARK: Commands
+
+    private var actions: ZimamSceneActions {
+        ZimamSceneActions(
+            newTask: { newTask = newTaskRequest() },
+            search: openSearch,
+            toggleSelectedDone: isRegular && selectedTask.wrappedValue != nil ? toggleSelectedDone : nil
+        )
+    }
+
+    private func openSearch() {
+        if isRegular {
+            sidebarSelection.wrappedValue = .search
+        } else {
+            tab = .search
+        }
+    }
+
+    /// A new task where the user is: due today in «اليوم», tomorrow in «القادم», in the open project.
+    private func newTaskRequest() -> NewTaskRequest {
+        let place: SidebarItem = isRegular ? sidebar : (tab.sidebarItem ?? .inbox)
+        switch place {
+        case .today: return NewTaskRequest(due: .today, projectId: nil)
+        case .upcoming: return NewTaskRequest(due: .tomorrow, projectId: nil)
+        case .project(let id), .section(let id, _): return NewTaskRequest(due: .unscheduled, projectId: id)
+        case .inbox, .calendar, .search: return NewTaskRequest(due: .unscheduled, projectId: nil)
+        }
+    }
+
+    private func toggleSelectedDone() {
+        guard let id = selectedTask.wrappedValue?.id else { return }
+        let descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.id == id })
+        guard let task = try? context.fetch(descriptor).first, !task.pendingDelete else { return }
+        withAnimation(reduceMotion ? nil : .default) {
+            Store(context: context, sync: sync).toggleDone(task)
+        }
+    }
+}
+
+/// What «مهمة جديدة» (⌘N) opens.
+struct NewTaskRequest: Identifiable {
+    let id = UUID()
+    let due: AddTaskView.Due
+    let projectId: UUID?
+}
+
+/// The middle column for the sidebar's choice.
+private struct ContentColumn: View {
+    let item: SidebarItem
+
+    var body: some View {
+        switch item {
+        case .today: TodayView()
+        case .upcoming: UpcomingView()
+        case .inbox: InboxView()
+        case .calendar: CalendarView()
+        case .search: SearchView()
+        case .project(let id): ProjectDetailView(projectId: id).id(item)
+        case .section(let project, let section): ProjectDetailView(projectId: project, sectionId: section).id(item)
+        }
+    }
+}
+
+/// The details column: the selected task, or one quiet line.
+private struct DetailColumn: View {
+    let route: TaskRoute?
+
+    var body: some View {
+        if let route {
+            // A new identity per task, so the form loads the newly selected task's fields.
+            TaskDetailView(taskId: route.id).id(route.id)
+        } else {
+            Text("اختر مهمة لتظهر تفاصيلها هنا.")
+                .font(ZimamType.callout)
+                .foregroundStyle(ZimamColor.inkMuted)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(ZimamColor.surface)
+        }
+    }
+}
+
+/// «إنجاز» in the details column's toolbar, with ⌘↩ on the iPad and the Mac.
+private struct CompleteToolbarButton: View {
+    @Query private var matches: [TaskItem]
+    let action: () -> Void
+
+    init(taskId: UUID, action: @escaping () -> Void) {
+        _matches = Query(filter: #Predicate<TaskItem> { $0.id == taskId })
+        self.action = action
+    }
+
+    var body: some View {
+        if let task = matches.first, !task.pendingDelete {
+            Button(task.isDone ? "إلغاء الإنجاز" : "إنجاز",
+                   systemImage: task.isDone ? "arrow.uturn.backward.circle" : "checkmark.circle",
+                   action: action)
+                .keyboardShortcut(.return, modifiers: .command)
+        }
+    }
+}
+
+extension View {
+    /// The iPhone's task details, which also remember the open task for the iPad layout.
+    func compactTaskDestination(_ selection: Binding<TaskRoute?>) -> some View {
+        navigationDestination(for: TaskRoute.self) { route in
+            TaskDetailView(taskId: route.id)
+                .onAppear { selection.wrappedValue = route }
+        }
+    }
+}
