@@ -24,9 +24,11 @@ struct TaskListItem: View {
 
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
+    @Environment(\.taskSelection) private var taskSelection
 
     var body: some View {
         let store = Store(context: context, sync: sync)
+        let selected = taskSelection?.wrappedValue?.id == task.id
         NavigationLink(value: TaskRoute(id: task.id)) {
             TaskRow(task: task, projectName: projectName) {
                 withAnimation {
@@ -35,7 +37,8 @@ struct TaskListItem: View {
                 }
             }
         }
-        .listRowBackground(ZimamColor.surfaceRaised)
+        // The task open in the details column (iPad and Mac) stands out in brand-soft.
+        .listRowBackground(selected ? ZimamColor.brandSoft : ZimamColor.surfaceRaised)
         .swipeActions(edge: .trailing) {
             Button("حذف", role: .destructive) { store.delete(task) }
         }

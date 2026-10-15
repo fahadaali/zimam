@@ -79,5 +79,21 @@ struct ZimamApp: App {
                 }
         }
         .modelContainer(container)
+        #if os(macOS)
+        // «مهمة جديدة» (⌘N) and the «المهام» menu (AppNavigation.swift).
+        .commands { ZimamCommands() }
+        #endif
+
+        #if os(macOS)
+        // ⌘, opens the settings in their own window.
+        Settings {
+            MacSettingsView()
+                .environment(session)
+                .environment(sync)
+                .environment(location)
+                .environment(notifications)
+        }
+        .modelContainer(container)
+        #endif
     }
 }

@@ -68,50 +68,148 @@ struct ShareTarget: Identifiable {
     let id: UUID
 }
 
+/// A project's tasks, as a list grouped by section or as a kanban board. The choice is the
+/// project's `view`, so it is remembered per project and follows it to other devices.
+/// From the sidebar a single section opens as a list of its tasks (`sectionId`).
 struct ProjectDetailView: View {
     let projectId: UUID
+    var sectionId: UUID?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
+    @Environment(SyncEngine.self) private var sync
+    @Environment(\.taskSelection) private var taskSelection
+    @Environment(\.projectOpened) private var projectOpened
     @State private var sharing = false
 
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder), SortDescriptor(\TaskItem.createdAt)])
     private var tasks: [TaskItem]
     @Query private var projects: [ProjectItem]
+    @Query(filter: #Predicate<SectionItem> { !$0.pendingDelete },
+           sort: [SortDescriptor(\SectionItem.sortOrder), SortDescriptor(\SectionItem.createdAt)])
+    private var allSections: [SectionItem]
     @State private var showingAdd = false
+    /// A board card opened on the iPhone, where the board has no list to select in.
+    @State private var opened: TaskRoute?
 
-    private var name: String { projects.first { $0.id == projectId }?.name ?? "" }
+    init(projectId: UUID, sectionId: UUID? = nil) {
+        self.projectId = projectId
+        self.sectionId = sectionId
+    }
+
+    private var project: ProjectItem? { projects.first { $0.id == projectId } }
+    private var name: String { project?.name ?? "" }
+    private var isBoard: Bool {
+        sectionId == nil && project?.layoutRaw == ProjectRecord.Layout.kanban.rawValue
+    }
 
     var body: some View {
         let own = tasks.filter { $0.projectId == projectId && $0.parentId == nil }
-        let open = own.filter { !$0.isDone }
-        let done = own.filter(\.isDone)
-        List {
-            Section {
-                if open.isEmpty { EmptyLine(text: "لا مهام مفتوحة في هذا المشروع.") }
-                ForEach(open) { TaskListItem(task: $0) }
-            } header: {
-                ScreenHeader(title: name)
-            }
-            if !done.isEmpty {
-                Section {
-                    ForEach(done) { TaskListItem(task: $0) }
-                } header: {
-                    Text("المنجزة")
-                        .font(ZimamType.headline)
-                        .foregroundStyle(ZimamColor.inkMuted)
-                        .textCase(nil)
-                }
+        let sections = allSections.filter { $0.projectId == projectId }
+        Group {
+            if isBoard {
+                KanbanBoardView(projectId: projectId, title: name, sections: sections,
+                                tasks: own, openTask: openTask)
+            } else {
+                list(own: own, sections: sections)
+                    .overlay(alignment: .bottomTrailing) { AddTaskButton { showingAdd = true } }
             }
         }
-        .zimamList()
-        .overlay(alignment: .bottomTrailing) { AddTaskButton { showingAdd = true } }
         .sheet(isPresented: $showingAdd) { AddTaskView(projectId: projectId) }
+        .navigationDestination(item: $opened) { route in TaskDetailView(taskId: route.id) }
         .toolbar {
+            ToolbarItem {
+                if sectionId == nil, let project {
+                    Picker("طريقة العرض", selection: layout(of: project)) {
+                        Label("قائمة", systemImage: "list.bullet").tag(ProjectRecord.Layout.list)
+                        Label("لوحة", systemImage: "rectangle.split.3x1").tag(ProjectRecord.Layout.kanban)
+                    }
+                    .pickerStyle(.segmented)
+                }
+            }
             ToolbarItem {
                 Button("مشاركة", systemImage: "person.2") { sharing = true }
             }
         }
         // Leaving the project closes this screen too; its tasks leave with the next pull.
         .sheet(isPresented: $sharing) { ShareProjectView(projectId: projectId, onLeft: { dismiss() }) }
+        .onAppear { projectOpened?(projectId) }
+    }
+
+    @ViewBuilder
+    private func list(own: [TaskItem], sections: [SectionItem]) -> some View {
+        let known = Set(sections.map(\.id))
+        let shown = own.filter { task in
+            guard let sectionId else { return true }
+            return task.sectionId == sectionId
+        }
+        let open = shown.filter { !$0.isDone }
+        let done = shown.filter(\.isDone)
+        List(selection: taskSelection) {
+            if let sectionId {
+                Section {
+                    if open.isEmpty { EmptyLine(text: "لا مهام مفتوحة في هذا القسم.") }
+                    ForEach(open) { TaskListItem(task: $0) }
+                } header: {
+                    ScreenHeader(title: sections.first { $0.id == sectionId }?.name ?? name, subtitle: name)
+                }
+            } else {
+                // Tasks with no section (or one deleted elsewhere) first, then each section.
+                Section {
+                    if open.isEmpty { EmptyLine(text: "لا مهام مفتوحة في هذا المشروع.") }
+                    ForEach(open.filter { $0.sectionId.map { !known.contains($0) } ?? true }) { TaskListItem(task: $0) }
+                } header: {
+                    ScreenHeader(title: name)
+                }
+                ForEach(sections) { section in
+                    let items = open.filter { $0.sectionId == section.id }
+                    if !items.isEmpty {
+                        Section {
+                            ForEach(items) { TaskListItem(task: $0) }
+                        } header: {
+                            ListSectionHeader(title: section.name)
+                        }
+                    }
+                }
+            }
+            if !done.isEmpty {
+                Section {
+                    ForEach(done) { TaskListItem(task: $0) }
+                } header: {
+                    ListSectionHeader(title: "المنجزة", muted: true)
+                }
+            }
+        }
+        .zimamList()
+    }
+
+    private func layout(of project: ProjectItem) -> Binding<ProjectRecord.Layout> {
+        Binding(
+            get: { project.layoutRaw == ProjectRecord.Layout.kanban.rawValue ? .kanban : .list },
+            set: { Store(context: context, sync: sync).setLayout(project, $0) }
+        )
+    }
+
+    /// Opens a board card: in the details column on the iPad and the Mac, pushed on the iPhone.
+    private func openTask(_ taskId: UUID) {
+        if let taskSelection {
+            taskSelection.wrappedValue = TaskRoute(id: taskId)
+        } else {
+            opened = TaskRoute(id: taskId)
+        }
+    }
+}
+
+/// A section's name over its tasks in a list.
+struct ListSectionHeader: View {
+    let title: String
+    var muted = false
+
+    var body: some View {
+        Text(title)
+            .font(ZimamType.headline)
+            .foregroundStyle(muted ? ZimamColor.inkMuted : ZimamColor.ink)
+            .textCase(nil)
+            .accessibilityAddTraits(.isHeader)
     }
 }

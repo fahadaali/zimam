@@ -6,6 +6,7 @@ import ZimamKit
 /// A task completed here stays for a second so it can be undone.
 struct TodayView: View {
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.taskSelection) private var taskSelection
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder), SortDescriptor(\TaskItem.createdAt)])
     private var tasks: [TaskItem]
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
@@ -24,7 +25,7 @@ struct TodayView: View {
 
     var body: some View {
         let names = projectNames(projects)
-        List {
+        List(selection: taskSelection) {
             Section {
                 // «ملخص اليوم» from the assistant; hidden offline.
                 DaySummaryRow()

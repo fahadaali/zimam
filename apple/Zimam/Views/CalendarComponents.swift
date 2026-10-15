@@ -7,21 +7,6 @@ import ZimamKit
 
 // MARK: Drag and drop
 
-/// A task being dragged to another day. It carries only the task's id, as text.
-struct TaskDragItem: Transferable, Sendable {
-    let id: UUID
-
-    static var transferRepresentation: some TransferRepresentation {
-        ProxyRepresentation(
-            exporting: { (item: TaskDragItem) in item.id.uuidString },
-            importing: { (text: String) in
-                guard let id = UUID(uuidString: text) else { throw CocoaError(.coderReadCorrupt) }
-                return TaskDragItem(id: id)
-            }
-        )
-    }
-}
-
 /// What follows the finger while a task is dragged.
 private struct TaskDragPreview: View {
     let title: String

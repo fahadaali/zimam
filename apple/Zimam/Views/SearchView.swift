@@ -4,6 +4,7 @@ import ZimamKit
 
 /// Searches titles, notes and tags, ignoring diacritics and letter forms (see ArabicSearch).
 struct SearchView: View {
+    @Environment(\.taskSelection) private var taskSelection
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.updatedAt, order: .reverse)])
     private var tasks: [TaskItem]
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
@@ -15,7 +16,7 @@ struct SearchView: View {
 
     var body: some View {
         let names = projectNames(projects)
-        List {
+        List(selection: taskSelection) {
             if query.trimmingCharacters(in: .whitespaces).isEmpty {
                 EmptyLine(text: "ابحث في عناوين المهام وملاحظاتها ووسومها.")
             } else if results.isEmpty {
