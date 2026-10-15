@@ -9,13 +9,26 @@ const APPLE = "https://appleid.apple.com";
  * 5.1.1(v)). Passed through `Deps` so tests use a fake.
  */
 export interface AppleTokens {
-  /** Exchanges an authorization code from the app for a refresh token and the Apple user it belongs to. */
-  exchangeCode(code: string, clientId: string): Promise<{ refreshToken: string; sub: string | null }>;
+  /**
+   * Exchanges an authorization code for a refresh token and the Apple user it belongs to.
+   * A code from Sign in with Apple JS (the web, the MCP consent page) needs the same
+   * `redirectUri` it was requested with; the app's codes have none.
+   */
+  exchangeCode(code: string, clientId: string, redirectUri?: string): Promise<{ refreshToken: string; sub: string | null }>;
   /** Revokes a refresh token, ending the user's Sign in with Apple authorization for that client. */
   revoke(refreshToken: string, clientId: string): Promise<void>;
 }
 
 export class AppleTokenError extends Error {}
+
+/**
+ * The redirect URIs a Sign in with Apple JS page may say it used: the web app's
+ * (APPLE_WEB_REDIRECT_URI) and the others in APPLE_REDIRECT_URIS (the MCP consent page).
+ * Each must also be a Return URL of the web Services ID in the Apple developer account.
+ */
+export function appleRedirectUris(env: Pick<Env, "APPLE_WEB_REDIRECT_URI" | "APPLE_REDIRECT_URIS">): string[] {
+  return [env.APPLE_WEB_REDIRECT_URI ?? "", ...(env.APPLE_REDIRECT_URIS ?? "").split(",")].map((u) => u.trim()).filter(Boolean);
+}
 
 /** The client secret lives up to 6 months; ours is short-lived and made per call. */
 const SECRET_TTL_SECONDS = 5 * 60;
@@ -55,8 +68,10 @@ export class AppleTokenClient implements AppleTokens {
       .sign(await this.key);
   }
 
-  async exchangeCode(code: string, clientId: string) {
-    const body = await this.post("/auth/token", clientId, { code, grant_type: "authorization_code" });
+  async exchangeCode(code: string, clientId: string, redirectUri?: string) {
+    const fields: Record<string, string> = { code, grant_type: "authorization_code" };
+    if (redirectUri) fields.redirect_uri = redirectUri;
+    const body = await this.post("/auth/token", clientId, fields);
     const { refresh_token: refreshToken, id_token: idToken } = (body ?? {}) as { refresh_token?: unknown; id_token?: unknown };
     if (typeof refreshToken !== "string" || refreshToken === "") throw new AppleTokenError("Apple returned no refresh token");
     let sub: string | null = null;

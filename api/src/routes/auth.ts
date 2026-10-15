@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { storeAppleRefreshToken } from "../auth/account";
 import { verifyAppleToken } from "../auth/apple";
+import { appleRedirectUris } from "../auth/apple-tokens";
 import { sha256Hex } from "../auth/crypto";
 import { googleAudiences, verifyGoogleToken } from "../auth/google";
 import { createSession, deleteSession } from "../auth/sessions";
@@ -21,6 +22,8 @@ const AppleSignIn = z.object({
   device: z.string().trim().max(100).optional(),
   /** Apple's one-time authorization code, exchanged for a refresh token that account deletion revokes. */
   authorizationCode: z.string().min(1).max(1000).optional(),
+  /** The redirect URI a web page gave Sign in with Apple JS; the code is exchanged with it. */
+  redirectUri: z.string().url().max(500).optional(),
 });
 
 const GoogleSignIn = z.object({
@@ -50,7 +53,8 @@ auth.post("/apple", async (c) => {
   const user = await signInUser(db, { provider: "apple", ...identity }, body.data.name || null);
   if (body.data.authorizationCode) {
     // Never blocks sign-in: without the Apple key, or with a bad code, the user still gets in.
-    await storeAppleRefreshToken(db, c.var.deps.appleTokens(c.env), user.id as string, identity, body.data.authorizationCode);
+    const code = { authorizationCode: body.data.authorizationCode, redirectUri: body.data.redirectUri };
+    await storeAppleRefreshToken(db, c.var.deps.appleTokens(c.env), user.id as string, identity, code, appleRedirectUris(c.env));
   }
 
   const token = await createSession(db, user.id as string, body.data.device ?? null);

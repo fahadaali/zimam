@@ -19,6 +19,11 @@
     // refresh token. The key is secret: `npx wrangler secret put APPLE_KEY_ID` and
     // `npx wrangler secret put APPLE_PRIVATE_KEY`. Never put them here.
     "APPLE_TEAM_ID": "72V86SZ2XC",
+    // Web codes (Sign in with Apple JS) are exchanged with the redirect URI the page used, which the
+    // client sends and must be one of these: the web app's, then the others (the MCP consent page).
+    // Each must be a Return URL of the Services ID app.zimam.ios.web too.
+    "APPLE_WEB_REDIRECT_URI": "https://zimam-web.fahad2ao.workers.dev/app",
+    "APPLE_REDIRECT_URIS": "https://zimam-mcp.fahad2ao.workers.dev/authorize",
     // Sign in with Google: the OAuth client IDs (iOS app, then web) whose ID tokens are
     // accepted. Client IDs are public, not secrets. Empty turns Google sign-in off.
     "GOOGLE_CLIENT_IDS": "404741015373-r3p4od9ko0qd99hocpg3r7gv1arju4ge.apps.googleusercontent.com,404741015373-ukucah8482ofiuvd9lb4cn4pgqvnfm75.apps.googleusercontent.com",

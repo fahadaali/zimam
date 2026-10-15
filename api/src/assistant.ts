@@ -1,6 +1,8 @@
 import type { JWTVerifyGetKey } from "jose";
 import { z } from "zod";
+import { type AppleCode, storeAppleRefreshToken } from "./auth/account";
 import { verifyAppleToken } from "./auth/apple";
+import { type AppleTokens, appleRedirectUris } from "./auth/apple-tokens";
 import { googleAudiences, verifyGoogleToken } from "./auth/google";
 import { appleAudiences, signInUser } from "./auth/users";
 import { Access } from "./data/access";
@@ -123,14 +125,24 @@ export class Assistant {
   constructor(
     private readonly env: Env,
     private readonly keys: SignInKeys,
+    /** Sign in with Apple's token endpoint, to keep the refresh token account deletion revokes. */
+    private readonly appleTokens: (env: Env) => AppleTokens | null = () => null,
   ) {}
 
   private get db() {
     return this.env.DB;
   }
 
-  /** Verifies a Sign in with Apple identity token from the web and returns the Zimam user. */
-  async signInWithApple(identityToken: string, nonce: string): Promise<Outcome<{ userId: string; name: string | null }>> {
+  /**
+   * Verifies a Sign in with Apple identity token from the web and returns the Zimam user.
+   * With the page's authorization code (and the redirect URI it used), keeps Apple's refresh
+   * token as `/v1/auth/apple` does; that never blocks signing in.
+   */
+  async signInWithApple(
+    identityToken: string,
+    nonce: string,
+    code?: AppleCode,
+  ): Promise<Outcome<{ userId: string; name: string | null }>> {
     let identity;
     try {
       identity = await verifyAppleToken(identityToken, this.keys.apple, appleAudiences(this.env.APPLE_AUDIENCES), nonce);
@@ -138,6 +150,9 @@ export class Assistant {
       return fail("invalid_token", "Apple identity token was rejected");
     }
     const user = await signInUser(this.db, { provider: "apple", ...identity }, null);
+    if (code?.authorizationCode) {
+      await storeAppleRefreshToken(this.db, this.appleTokens(this.env), user.id as string, identity, code, appleRedirectUris(this.env));
+    }
     return ok({ userId: user.id as string, name: (user.name as string | null) ?? null });
   }
 

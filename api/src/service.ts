@@ -1,6 +1,8 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { Assistant, type AgendaRequest, type Outcome, type SignInKeys, type TaskFields, type TaskFilter } from "./assistant";
+import type { AppleCode } from "./auth/account";
 import { appleKeys } from "./auth/apple";
+import { type AppleTokens, appleTokensFromEnv } from "./auth/apple-tokens";
 import { googleKeys } from "./auth/google";
 import type { Env } from "./env";
 import { channelRealtime, latestSeq, notifyChangesSince } from "./realtime/notify";
@@ -13,9 +15,11 @@ import { hasProAccess, PRO_REQUIRED } from "./subscriptions/entitlements";
 export class ZimamService extends WorkerEntrypoint<Env> {
   /** Apple's and Google's signing keys; tests replace them with local key sets. */
   static keys: SignInKeys = { apple: appleKeys, google: googleKeys };
+  /** Sign in with Apple's token endpoint; tests replace it with a fake. */
+  static appleTokens: (env: Env) => AppleTokens | null = (env) => appleTokensFromEnv(env);
 
   private get assistant() {
-    return new Assistant(this.env, ZimamService.keys);
+    return new Assistant(this.env, ZimamService.keys, ZimamService.appleTokens);
   }
 
   /**
@@ -42,8 +46,9 @@ export class ZimamService extends WorkerEntrypoint<Env> {
     }
   }
 
-  signInWithApple(identityToken: string, nonce: string) {
-    return this.assistant.signInWithApple(identityToken, nonce);
+  /** `code`: the consent page's authorization code and the redirect URI it used, when it sends them. */
+  signInWithApple(identityToken: string, nonce: string, code?: AppleCode) {
+    return this.assistant.signInWithApple(identityToken, nonce, code);
   }
 
   signInWithGoogle(idToken: string, nonce: string) {

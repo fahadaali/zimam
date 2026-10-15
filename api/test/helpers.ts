@@ -54,12 +54,12 @@ export class FakeAppleTokens implements AppleTokens {
   /** Set to false to act as if the Apple key secrets were missing. */
   configured = true;
   codes = new Map<string, { refreshToken: string; sub: string | null }>();
-  exchanged: { code: string; clientId: string }[] = [];
+  exchanged: { code: string; clientId: string; redirectUri?: string }[] = [];
   revoked: { refreshToken: string; clientId: string }[] = [];
   failRevoke = false;
 
-  async exchangeCode(code: string, clientId: string) {
-    this.exchanged.push({ code, clientId });
+  async exchangeCode(code: string, clientId: string, redirectUri?: string) {
+    this.exchanged.push(redirectUri === undefined ? { code, clientId } : { code, clientId, redirectUri });
     const grant = this.codes.get(code);
     if (!grant) throw new AppleTokenError("Apple /auth/token failed: invalid_grant");
     this.codes.delete(code);

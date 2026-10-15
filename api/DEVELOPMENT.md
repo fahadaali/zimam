@@ -58,7 +58,7 @@ npm run db:migrate:local
 
 | المسار | ما يفعله |
 | --- | --- |
-| `POST /v1/auth/apple` | `{ identityToken, nonce?, name?, device?, authorizationCode? }` يرجع `{ token, user }` |
+| `POST /v1/auth/apple` | `{ identityToken, nonce?, name?, device?, authorizationCode?, redirectUri? }` يرجع `{ token, user }`. `redirectUri` للويب فقط (انظر «رمز Sign in with Apple») |
 | `POST /v1/auth/google` | `{ idToken, nonce?, name?, device? }` يرجع `{ token, user }` كذلك، و503 `google_unavailable` إن كان `GOOGLE_CLIENT_IDS` فارغاً (انظر «تسجيل الدخول») |
 | `POST /v1/auth/logout` | ينهي الجلسة |
 | `GET`, `PATCH`, `DELETE /v1/me` | الحساب والإعدادات (`calendar`، `prayerMethod`، `weekStart`، `timeZone`، `location`)، والحذف يمسح بيانات المستخدم (انظر «حذف الحساب») ويرجع 204 |
@@ -91,7 +91,7 @@ npm run db:migrate:local
 
 | الطريقة | ما تفعله |
 | --- | --- |
-| `signInWithApple(identityToken, nonce)` | تتحقق من رمز Apple الصادر للويب (`app.zimam.ios.web`) وترجع مستخدم زمام |
+| `signInWithApple(identityToken, nonce, code?)` | تتحقق من رمز Apple الصادر للويب (`app.zimam.ios.web`) وترجع مستخدم زمام. `code` (`{ authorizationCode, redirectUri }`) من صفحة الموافقة يحفظ رمز Apple كما في `/v1/auth/apple` |
 | `signInWithGoogle(idToken, nonce)` | تتحقق من رمز Google الصادر لعميل الويب، وترجع مستخدم زمام بقاعدة الدمج نفسها، و`google_unavailable` إن لم يُضبط Google |
 | `listTasks`، `createTask`، `updateTask`، `completeTask` | المهام بنفس صلاحيات التطبيق وسجل المزامنة |
 | `listProjects` | المشاريع مع الدور وعدد المهام |
@@ -200,12 +200,15 @@ npx wrangler d1 migrations apply zimam --remote   # جدول ai_usage
 
 ### رمز Sign in with Apple
 
-يرسل التطبيق عند الدخول `authorizationCode` الذي يعطيه Apple. يستبدله الخادم من `https://appleid.apple.com/auth/token` برمز تحديث (`refresh_token`)، ويحفظه في سطر المستخدم (`apple_refresh_token`) مع المعرّف الذي صدر له رمز الهوية (`apple_client_id`: `app.zimam.ios` للتطبيق أو `app.zimam.ios.web` للويب). ويتحقق أن الرمز للمستخدم نفسه (`sub`). وعند حذف الحساب يُلغى من `https://appleid.apple.com/auth/revoke` ويُمسح.
+يرسل التطبيق والموقع وصفحة الموافقة في خادم MCP عند الدخول `authorizationCode` الذي يعطيه Apple. يستبدله الخادم من `https://appleid.apple.com/auth/token` برمز تحديث (`refresh_token`)، ويحفظه في سطر المستخدم (`apple_refresh_token`) مع المعرّف الذي صدر له رمز الهوية (`apple_client_id`: `app.zimam.ios` للتطبيق أو `app.zimam.ios.web` للويب). ويتحقق أن الرمز للمستخدم نفسه (`sub`). وعند حذف الحساب يُلغى من `https://appleid.apple.com/auth/revoke` ويُمسح.
 
+- **رمز الويب يحتاج `redirect_uri`:** الرمز من Sign in with Apple JS لا يُستبدل إلا بالرابط نفسه الذي طُلب به (`redirectURI` في `AppleID.auth.init`). فيرسل العميل الرابط الذي استعمله في `redirectUri`، ويرسله الخادم إلى Apple بعد التحقق من أنه في القائمة: `APPLE_WEB_REDIRECT_URI` (الموقع، `https://zimam-web.fahad2ao.workers.dev/app`) و`APPLE_REDIRECT_URIS` (غيره بفاصلة: صفحة الموافقة `https://zimam-mcp.fahad2ao.workers.dev/authorize`). القيمتان في `wrangler.jsonc` وليستا سرّاً، ويجب أن تكون كل منهما Return URL في Services ID `app.zimam.ios.web`. رابط خارج القائمة لا يُرسل إلى Apple ويُهمل الرمز ويتم الدخول. رمز التطبيق بلا `redirectUri`.
+- الموقع يرسل الرمز مع `${location.origin}/app` (`web/public/app/main.js`). وصفحة الموافقة تضعه في الحقل المخفي `code`، فيمرره خادم MCP إلى `ZimamService.signInWithApple` مع `${MCP_ORIGIN}/authorize`. عند الانتقال إلى `zimam.app` أضف الروابط الجديدة إلى المتغيرين.
 - `client_secret` رمز JWT بـ ES256 يوقّعه الخادم بمفتاح Sign in with Apple عند كل طلب: `iss` معرّف الفريق، و`sub` معرّف العميل، و`aud` `https://appleid.apple.com`، وصلاحيته خمس دقائق.
 - معرّف الفريق `APPLE_TEAM_ID` ليس سراً، وهو في `wrangler.jsonc`. معرّف المفتاح `APPLE_KEY_ID` والمفتاح نفسه `APPLE_PRIVATE_KEY` (نص ملف `.p8`) سرّان فقط، وطريقة إنشائهما في `docs/setup.md`.
 - إن غاب السرّان، أو رفض Apple الرمز، يتم الدخول والحذف كالعادة، ويُكتب السبب في السجل دون الرمز. الاستبدال والإلغاء يمرّان عبر `Deps.appleTokens`، فتستعمل الاختبارات `FakeAppleTokens` في `test/helpers.ts`.
 - يُحفظ رمز آخر دخول فقط. من دخل من التطبيق والويب معاً يُلغى عند الحذف رمز آخرهما، وإلغاؤه يُنهي ربط زمام بحساب Apple.
+- `ZimamService.appleTokens` يقابل `Deps.appleTokens` لخادم MCP، وتستبدله الاختبارات بـ `FakeAppleTokens`.
 
 ## إشعارات الخادم (APNs)
 
@@ -399,11 +402,11 @@ npx wrangler d1 migrations apply zimam --remote   # جدول realtime_tickets
 
 | المسار | ما يفعله |
 | --- | --- |
-| `GET /v1/subscriptions` | الباقة الآن `{ plan: "free" \| "pro", expiresAt, productId, source: "apple" \| "override" \| null, environment: "sandbox" \| "production" \| null, enforced }`. `expiresAt` بالميلي ثانية، و`null` للمجانية ولـ `PRO_USERS` |
+| `GET /v1/subscriptions` | الباقة الآن `{ plan: "free" \| "pro", expiresAt, productId, source: "apple" \| "override" \| null, environment: "sandbox" \| "production" \| null, enforced }`. `expiresAt` بالميلي ثانية متى ينتهي pro (نهاية فترة السماح إن كان فيها)، و`null` للمجانية ولـ `PRO_USERS` |
 | `POST /v1/subscriptions/apple` | `{ transactionId, environment? }` من التطبيق بعد الشراء أو الاستعادة أو أي معاملة جديدة. يرجع الباقة كما في `GET` |
 | `POST /v1/subscriptions/apple/notifications` | عنوان App Store Server Notifications V2 للبيئتين، بلا جلسة |
 
-أخطاء `POST /v1/subscriptions/apple`: `400 invalid`، و`404 transaction_not_found` (لا يعرفها App Store في أي بيئة، ومنها معاملات StoreKit المحلية في Xcode)، و`400 wrong_bundle` أو `unknown_product`، و`403 account_mismatch` (اشتُريت لحساب زمام آخر)، و`409 already_linked` (الاشتراك مربوط بحساب آخر)، و`503 subscriptions_unavailable` (الأسرار غير مضبوطة أو تعذّر الوصول إلى Apple). المعاملة المنتهية أو المستردّة تُحفظ ويرجع الطلب 200 بباقة مجانية.
+أخطاء `POST /v1/subscriptions/apple`: `400 invalid`، و`404 transaction_not_found` (لا يعرفها App Store في أي بيئة، ومنها معاملات StoreKit المحلية في Xcode)، و`400 wrong_bundle` أو `unknown_product`، و`403 account_mismatch` (اشتُريت لحساب زمام آخر)، و`409 already_linked` (الاشتراك مربوط بحساب آخر)، و`503 subscriptions_unavailable` (الأسرار غير مضبوطة أو تعذّر الوصول إلى Apple). المعاملة المنتهية أو المستردّة تُحفظ ويرجع الطلب 200 بباقة مجانية، إلا المنتهية في فترة السماح (التالي).
 
 ### التحقق من الشراء
 
@@ -417,14 +420,14 @@ npx wrangler d1 migrations apply zimam --remote   # جدول realtime_tickets
 قواعد الحفظ:
 
 - سطر لكل اشتراك (`original_transaction_id`)، والتجديد والترقية بين المنتجين يحدّثان السطر نفسه. معاملة أقدم (استعادة ترسل تجديداً سابقاً) لا ترجع بالسطر إلى الوراء، والمعاملة نفسها مرة أخرى (استرداد) تحدّثه. ونصف الترقية القديم (`isUpgraded`) يُتجاهل.
-- **pro** ما دام `expires_at` في المستقبل و`revoked_at` فارغاً. `status` (`active` أو `expired` أو `revoked`) هو الحال عند آخر تحديث للعرض فقط، والحساب من التاريخين.
+- **pro** ما دام `expires_at` أو `grace_expires_at` في المستقبل و`revoked_at` فارغاً. `status` (`active` أو `expired` أو `revoked`) هو الحال عند آخر تحديث للعرض فقط، والحساب من التواريخ.
 - **بيئة sandbox مقبولة:** مشتريات TestFlight ومراجعة App Store كلها sandbox، ومراجعو Apple يشترون من تطبيق يكلّم خادم الإنتاج. اشتراكات sandbox تتجدد بسرعة ثم تتوقف، فلا تعطي اشتراكاً دائماً مجانياً، وتُحفظ بيئتها في السطر.
 - **المعاملة لحساب زمام محذوف:** إن كان `appAccountToken` لمستخدم حذف حسابه، تُقبل من حساب جديد يستعيدها (الجهاز الذي يحمل المعاملة مسجّل بحساب Apple نفسه)، حتى لا يبقى اشتراك يُدفع ولا يُنتفع به. وغير ذلك يُرفض: معاملة بلا `appAccountToken` (مثل رمز عرض استُبدل خارج التطبيق) أو لحساب آخر قائم.
-- **فترة السماح عند فشل الدفع (Billing Grace Period):** لا تُقرأ بعد؛ إن فُعّلت في App Store Connect فانتهاء `expiresDate` ينهي pro قبل نهاية فترة السماح. يحتاج قراءة `signedRenewalInfo` (`gracePeriodExpiresDate`) من `GET /inApps/v1/subscriptions/{id}`.
+- **فترة السماح عند فشل الدفع (Billing Grace Period):** إن فشل التجديد بقيت المعاملة الأخيرة منتهية، وApple يعيد محاولة الدفع، ومع فترة السماح (تُفعَّل في App Store Connect) يبقى المشترك pro حتى `gracePeriodExpiresDate`. فحين تكون المعاملة منتهية غير مستردّة، ومع كل إشعار `DID_FAIL_TO_RENEW` أو `GRACE_PERIOD_EXPIRED`، يسأل الخادم Apple عن حال التجديد (`GET /inApps/v1/subscriptions/{originalTransactionId}` في بيئة المعاملة، ويفك `signedRenewalInfo` من سطر الاشتراك نفسه) ويحفظ في السطر (`migrations/0014_subscription_grace.sql`): `grace_expires_at` (`gracePeriodExpiresDate`، فقط و`isInBillingRetryPeriod` صحيح)، و`billing_retry`، و`expiration_intent`. المعاملة السارية والمستردّة لا تحتاج السؤال، وتمسح الأعمدة الثلاثة، فالتجديد بعد نجاح الدفع ينهي فترة السماح. وإن تعذّر السؤال رجع الطلب أو الإشعار 503 فيُعاد لاحقاً (`needsRenewal` في `src/subscriptions/appstore.ts`، و`graceEnd` في `entitlements.ts`).
 
 ### الإشعارات
 
-`POST /v1/subscriptions/apple/notifications` يستقبل `{ signedPayload }` من Apple (التجديد، والانتهاء، والاسترداد، والإلغاء من Apple، والترقية…). الحمولة لا تُصدَّق: يُقرأ منها معرّف المعاملة فقط (من `data.signedTransactionInfo`) وبيئتها، ثم تُطلب المعاملة من Apple كما في الشراء، وما يرجعه Apple هو ما يُحفظ. لذلك لا يستطيع من يرسل إشعاراً مزيفاً أكثر من دفع الخادم إلى سؤال Apple عن معاملة حقيقية.
+`POST /v1/subscriptions/apple/notifications` يستقبل `{ signedPayload }` من Apple (التجديد، والانتهاء، والاسترداد، والإلغاء من Apple، والترقية، وفشل التجديد ونهاية فترة السماح…). الحمولة لا تُصدَّق: يُقرأ منها معرّف المعاملة فقط (من `data.signedTransactionInfo`) وبيئتها، ثم تُطلب المعاملة من Apple كما في الشراء، وما يرجعه Apple هو ما يُحفظ. لذلك لا يستطيع من يرسل إشعاراً مزيفاً أكثر من دفع الخادم إلى سؤال Apple عن معاملة حقيقية.
 
 - صاحب المعاملة: صاحب السطر الموجود للاشتراك، وإلا مستخدم `appAccountToken` إن كان حساباً قائماً. غير ذلك (حساب محذوف، أو مجهول) يُتجاهل.
 - 200 لكل ما عولج أو تُجوهل (`TEST`، والإشعار بلا معاملة، وتطبيق آخر). 400 لجسم لا يُقرأ. 503 إن غابت الأسرار أو تعذّر سؤال Apple، فيعيد Apple الإرسال لاحقاً (خمس مرات خلال أيام).
@@ -517,8 +520,7 @@ npx wrangler secret put APPSTORE_PRIVATE_KEY < SubscriptionKey_XXXXXXXXXX.p8
 
 ## لم يُبنَ بعد
 
-- إرسال `authorizationCode` من موقع الويب: Sign in with Apple JS يعطيه أيضاً، لكن استبداله يحتاج `redirect_uri` نفسه الذي طُلب به، والخادم لا يرسله بعد.
 - مزامنة بيانات المرفقات إلى SwiftData في التطبيق، ومعاينات مصغّرة للصور (انظر «المرفقات»).
-- فترة السماح عند فشل الدفع، وباقة الفرق (انظر «الاشتراكات»).
+- باقة الفرق (انظر «الاشتراكات»).
 - مصادر الاستيراد بـ OAuth (Trello وAsana وNotion وMicrosoft To Do) (انظر «الاستيراد»).
 - إشعارات الخادم لتذكيرات الموقع، ولما يتجاوز حد الستين إشعاراً داخل نافذة الأربعة عشر يوماً (انظر «إشعارات الخادم»).

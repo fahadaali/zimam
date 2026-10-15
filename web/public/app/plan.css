@@ -1,8 +1,9 @@
 /* زمام على الويب: «المزيد» in the phone tab bar, spanning bars in the calendar (calendar-view.js),
    «المخطط الزمني» (timeline-view.js), «المصفوفة» (matrix-view.js) and the start date
    (duration-view.js). Tokens only; logical properties only, so the time axis and the bars flow
-   from right to left in Arabic; every control is at least a 44px target (space-11), except a
-   timeline bar's resize handles, which «تغيير المدة…» replaces for keyboard and touch. */
+   from right to left in Arabic; every control is at least a 44px target (space-11). A timeline
+   bar's resize handles stay thin and reach 44px past the bar's ends; «تغيير المدة…» does the
+   same for keyboard and screen readers. */
 
 /* ——— Navigation: seven views, «المزيد» on phones ——— */
 
@@ -516,6 +517,24 @@ button.span-bar:focus-visible {
   inset-inline-end: 0;
 }
 
+/* The hit area: 44px square, growing outward past the bar's end so the middle of a short bar
+   still moves it. Percentages are of the handle itself (its containing block). */
+.tl-handle::before {
+  content: "";
+  position: absolute;
+  inset-block: calc((100% - var(--space-11)) / 2);
+}
+
+.tl-handle-start::before {
+  inset-inline-start: calc(100% - var(--space-11));
+  inset-inline-end: 0;
+}
+
+.tl-handle-end::before {
+  inset-inline-start: 0;
+  inset-inline-end: calc(100% - var(--space-11));
+}
+
 .tl-handle::after {
   content: "";
   position: absolute;
@@ -626,6 +645,8 @@ button.span-bar:focus-visible {
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
+  /* Nothing to round off here, and clipping would cut the circles' 44px hit area (base.css). */
+  overflow: visible;
 }
 
 .matrix-list .zm-task {

@@ -14,8 +14,10 @@ const REDIRECT = "https://claude.ai/api/mcp/auth_callback";
  */
 class FakeBackend implements ZimamBackend {
   calls: { method: string; userId: string; args: unknown }[] = [];
+  appleCodes: ({ authorizationCode: string; redirectUri: string } | undefined)[] = [];
 
-  async signInWithApple(identityToken: string, nonce: string) {
+  async signInWithApple(identityToken: string, nonce: string, code?: { authorizationCode: string; redirectUri: string }) {
+    this.appleCodes.push(code);
     return identityToken === `good:${nonce}`
       ? { ok: true as const, value: { userId: "user-1", name: "فهد" } }
       : { ok: false as const, error: { code: "invalid_token", message: "rejected" } };
@@ -105,6 +107,8 @@ async function authorize(
     decision?: "approve" | "deny";
     provider?: "apple" | "google";
     token?: (handle: string) => string;
+    /** Apple's authorization code, as the consent page's script fills it in. */
+    code?: string;
     vars?: Partial<typeof env>;
   } = {},
 ) {
@@ -135,6 +139,7 @@ async function authorize(
     id_token: (options.token ?? ((h) => (options.provider === "google" ? `google:${h}` : `good:${h}`)))(handle),
   });
   if (options.provider) form.set("provider", options.provider);
+  if (options.code !== undefined) form.set("code", options.code);
   for (const scope of options.scopes ?? ["tasks:read", "tasks:write"]) form.append("scope", scope);
   const response = await send("/authorize", {
     method: "POST",
@@ -275,6 +280,21 @@ describe("Zimam MCP server", () => {
     await initialize(token);
     await rpc(token, "tools/call", { name: "list_projects", arguments: {} });
     expect(backend.calls.at(-1)).toEqual({ method: "listProjects", userId: "user-2", args: {} });
+  });
+
+  it("passes Apple's authorization code to the API with the consent page's redirect URI", async () => {
+    const clientId = await registerClient();
+    backend.appleCodes = [];
+    const { response, html } = await authorize(clientId, { code: "apple-code-1" });
+    expect(response.status).toBe(302);
+    expect(html).toContain('name="code"');
+    expect(html).toContain("result.authorization.code");
+    expect(backend.appleCodes).toEqual([{ authorizationCode: "apple-code-1", redirectUri: `${ORIGIN}/authorize` }]);
+
+    // An older page without the field, or an empty one, signs in without a code.
+    expect((await authorize(clientId)).response.status).toBe(302);
+    expect((await authorize(clientId, { code: "" })).response.status).toBe(302);
+    expect(backend.appleCodes.slice(1)).toEqual([undefined, undefined]);
   });
 
   it("refuses a Google token that was not issued for this consent page, or an Apple token posted as Google", async () => {

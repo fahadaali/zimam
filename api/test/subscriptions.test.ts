@@ -11,6 +11,7 @@ import {
   AppStoreClient,
   AppStoreError,
   type AppStoreEnvironment,
+  type AppStoreRenewal,
   type AppStoreTransaction,
   appStoreFromEnv,
 } from "../src/subscriptions/appstore";
@@ -18,15 +19,22 @@ import { appleToken, fakeAi, testAppleKeys, testGoogleKeys, uuid } from "./helpe
 
 // MARK: Fakes
 
-/** Apple's transactions by environment, and every lookup the server made. */
+/** Apple's transactions and renewal states by environment, and every lookup the server made. */
 class FakeAppStore implements AppStore {
   configured = true;
   failing = false;
+  failingRenewals = false;
   transactions = new Map<string, { environment: AppStoreEnvironment; transaction: AppStoreTransaction }>();
+  renewals = new Map<string, { environment: AppStoreEnvironment; renewal: AppStoreRenewal }>();
   lookups: { id: string; environment: AppStoreEnvironment }[] = [];
+  renewalLookups: { id: string; environment: AppStoreEnvironment }[] = [];
 
   put(transaction: AppStoreTransaction, environment: AppStoreEnvironment = "production") {
     this.transactions.set(transaction.transactionId, { environment, transaction });
+  }
+
+  putRenewal(renewal: AppStoreRenewal, environment: AppStoreEnvironment = "production") {
+    this.renewals.set(renewal.originalTransactionId, { environment, renewal });
   }
 
   async getTransaction(id: string, environment: AppStoreEnvironment) {
@@ -36,11 +44,21 @@ class FakeAppStore implements AppStore {
     return found && found.environment === environment ? found.transaction : null;
   }
 
+  async getRenewal(id: string, environment: AppStoreEnvironment) {
+    this.renewalLookups.push({ id, environment });
+    if (this.failingRenewals) throw new AppStoreError("App Store production failed: HTTP 500");
+    const found = this.renewals.get(id);
+    return found && found.environment === environment ? found.renewal : null;
+  }
+
   reset() {
     this.configured = true;
     this.failing = false;
+    this.failingRenewals = false;
     this.transactions.clear();
+    this.renewals.clear();
     this.lookups = [];
+    this.renewalLookups = [];
   }
 }
 
@@ -370,6 +388,106 @@ describe("POST /v1/subscriptions/apple/notifications", () => {
   });
 });
 
+// MARK: Billing grace period
+
+describe("Billing grace period", () => {
+  /** Apple's renewal state while it retries a failed payment, in the grace period until `graceEnd`. */
+  const inGrace = (tx: AppStoreTransaction, graceEnd: number): AppStoreRenewal => ({
+    originalTransactionId: tx.originalTransactionId,
+    status: 4,
+    gracePeriodExpiresDate: graceEnd,
+    isInBillingRetryPeriod: true,
+    expirationIntent: 2,
+    autoRenewStatus: 1,
+  });
+
+  it("keeps the user pro until the grace period ends after a failed renewal, then free", async () => {
+    const user = await signInUser();
+    const tx = await subscribe(user);
+    expect(store.renewalLookups).toEqual([]);
+
+    // The renewal failed: the transaction has expired, and Apple is retrying within the grace period.
+    const expired = { ...tx, expiresDate: Date.now() - 1000 };
+    const graceEnd = Date.now() + 6 * DAY;
+    store.put(expired);
+    store.putRenewal(inGrace(tx, graceEnd));
+    expect((await notify({ transactionId: tx.transactionId }, { type: "DID_FAIL_TO_RENEW" })).status).toBe(200);
+    expect(store.renewalLookups).toEqual([{ id: tx.originalTransactionId, environment: "production" }]);
+    expect((await request("GET", "/v1/subscriptions", { token: user.token })).body).toMatchObject({ plan: "pro", expiresAt: graceEnd });
+    expect(await rows(user.userId)).toMatchObject([
+      { status: "active", expires_at: expired.expiresDate, grace_expires_at: graceEnd, billing_retry: 1, expiration_intent: 2 },
+    ]);
+    expect((await request("GET", "/v1/subscriptions", { token: user.token, env: ENFORCED })).body).toMatchObject({ plan: "pro", enforced: true });
+
+    // The grace period ended without a payment: Apple may keep retrying, but pro stops.
+    store.putRenewal({ ...inGrace(tx, Date.now() - 1000), status: 3 });
+    expect((await notify({ transactionId: tx.transactionId }, { type: "GRACE_PERIOD_EXPIRED" })).status).toBe(200);
+    expect((await request("GET", "/v1/subscriptions", { token: user.token })).body.plan).toBe("free");
+    expect(await rows(user.userId)).toMatchObject([{ status: "expired", billing_retry: 1 }]);
+
+    // The payment went through at last: the renewal clears the grace period without asking again.
+    const renewal = transaction(user.userId, { originalTransactionId: tx.transactionId, purchaseDate: Date.now(), expiresDate: Date.now() + 30 * DAY });
+    store.put(renewal);
+    store.renewalLookups = [];
+    expect((await notify({ transactionId: renewal.transactionId }, { type: "DID_RENEW" })).status).toBe(200);
+    expect(store.renewalLookups).toEqual([]);
+    expect((await request("GET", "/v1/subscriptions", { token: user.token })).body).toMatchObject({ plan: "pro", expiresAt: renewal.expiresDate });
+    expect(await rows(user.userId)).toMatchObject([
+      { transaction_id: renewal.transactionId, status: "active", grace_expires_at: null, billing_retry: 0, expiration_intent: null },
+    ]);
+  });
+
+  it("reads the renewal state for an expired transaction the app sends, in its environment", async () => {
+    const user = await signInUser();
+    const tx = transaction(user.userId, { purchaseDate: Date.now() - 31 * DAY, expiresDate: Date.now() - DAY });
+    const graceEnd = Date.now() + 2 * DAY;
+    store.put(tx, "sandbox");
+    store.putRenewal(inGrace(tx, graceEnd), "sandbox");
+    const res = await purchase(user.token, tx.transactionId, { environment: "sandbox" });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ plan: "pro", expiresAt: graceEnd, environment: "sandbox" });
+    expect(store.renewalLookups).toEqual([{ id: tx.originalTransactionId, environment: "sandbox" }]);
+
+    // Retrying without a grace period (or a lapsed subscription Apple no longer retries) is not pro.
+    const lapsed = transaction(user.userId, { purchaseDate: Date.now() - 40 * DAY, expiresDate: Date.now() - 10 * DAY });
+    store.put(lapsed);
+    store.putRenewal({ originalTransactionId: lapsed.originalTransactionId, status: 3, isInBillingRetryPeriod: true, gracePeriodExpiresDate: undefined });
+    expect((await purchase(user.token, lapsed.transactionId)).status).toBe(200);
+    const cancelled = transaction(user.userId, { purchaseDate: Date.now() - 40 * DAY, expiresDate: Date.now() - 10 * DAY });
+    store.put(cancelled);
+    store.putRenewal({ originalTransactionId: cancelled.originalTransactionId, status: 2, isInBillingRetryPeriod: false, gracePeriodExpiresDate: Date.now() + DAY, expirationIntent: 1 });
+    expect((await purchase(user.token, cancelled.transactionId)).status).toBe(200);
+    const byId = Object.fromEntries((await rows(user.userId)).map((r) => [r.original_transaction_id, r]));
+    expect(byId[lapsed.transactionId]).toMatchObject({ status: "expired", grace_expires_at: null, billing_retry: 1 });
+    expect(byId[cancelled.transactionId]).toMatchObject({ status: "expired", grace_expires_at: null, billing_retry: 0, expiration_intent: 1 });
+    // Only the first subscription, still in its grace period, makes the user pro.
+    expect((await request("GET", "/v1/subscriptions", { token: user.token })).body).toMatchObject({ plan: "pro", expiresAt: graceEnd });
+  });
+
+  it("never reads it for an active or refunded transaction, and ignores a grace period after a refund", async () => {
+    const user = await signInUser();
+    const tx = await subscribe(user);
+    store.putRenewal(inGrace(tx, Date.now() + 5 * DAY));
+    store.put({ ...tx, expiresDate: Date.now() - 1000, revocationDate: Date.now() - 1000, revocationReason: 0 });
+    expect((await notify({ transactionId: tx.transactionId }, { type: "REFUND" })).status).toBe(200);
+    expect(store.renewalLookups).toEqual([]);
+    expect((await request("GET", "/v1/subscriptions", { token: user.token })).body.plan).toBe("free");
+    expect(await rows(user.userId)).toMatchObject([{ status: "revoked", grace_expires_at: null }]);
+  });
+
+  it("asks to be retried when Apple cannot give the renewal state", async () => {
+    const user = await signInUser();
+    const tx = await subscribe(user);
+    store.put({ ...tx, expiresDate: Date.now() - 1000 });
+    store.failingRenewals = true;
+    expect((await notify({ transactionId: tx.transactionId }, { type: "DID_FAIL_TO_RENEW" })).status).toBe(503);
+    const res = await purchase(user.token, tx.transactionId);
+    expect([res.status, res.body.error.code]).toEqual([503, "subscriptions_unavailable"]);
+    // Nothing changed: the row still has the earlier, active transaction.
+    expect(await rows(user.userId)).toMatchObject([{ status: "active", expires_at: tx.expiresDate }]);
+  });
+});
+
 // MARK: Enforcement
 
 describe("Plan enforcement", () => {
@@ -505,6 +623,51 @@ describe("AppStoreClient", () => {
     expect(seen[1]!.auth).toBe(seen[0]!.auth);
   });
 
+  it("reads a subscription's renewal state from Get All Subscription Statuses", async () => {
+    const { privateKey } = await generateKeyPair("ES256", { extractable: true });
+    const graceEnd = Date.now() + 3 * DAY;
+    const seen: string[] = [];
+    const client = new AppStoreClient(
+      { keyId: "K", issuerId: "I", privateKeyPem: await exportPKCS8(privateKey), bundleId: "app.zimam.ios" },
+      async (input) => {
+        const url = String(input);
+        seen.push(url);
+        if (url.includes("storekit-sandbox")) return Response.json({ errorCode: 4040010 }, { status: 404 });
+        return Response.json({
+          environment: "Production",
+          bundleId: "app.zimam.ios",
+          data: [
+            {
+              subscriptionGroupIdentifier: "21000000",
+              lastTransactions: [
+                { originalTransactionId: "111", status: 1, signedTransactionInfo: jws({}), signedRenewalInfo: jws({ autoRenewStatus: 1 }) },
+                {
+                  originalTransactionId: "222",
+                  status: 4,
+                  signedTransactionInfo: jws({}),
+                  signedRenewalInfo: jws({ originalTransactionId: "222", gracePeriodExpiresDate: graceEnd, isInBillingRetryPeriod: true, expirationIntent: 2, autoRenewStatus: 1 }),
+                },
+              ],
+            },
+          ],
+        });
+      },
+    );
+    expect(await client.getRenewal("222", "production")).toEqual({
+      originalTransactionId: "222",
+      status: 4,
+      gracePeriodExpiresDate: graceEnd,
+      isInBillingRetryPeriod: true,
+      expirationIntent: 2,
+      autoRenewStatus: 1,
+    });
+    expect(await client.getRenewal("111", "production")).toMatchObject({ status: 1, isInBillingRetryPeriod: false, gracePeriodExpiresDate: undefined });
+    expect(await client.getRenewal("333", "production")).toBeNull();
+    expect(await client.getRenewal("222", "sandbox")).toBeNull();
+    expect(seen[0]).toBe("https://api.storekit.itunes.apple.com/inApps/v1/subscriptions/222");
+    expect(seen.at(-1)).toBe("https://api.storekit-sandbox.itunes.apple.com/inApps/v1/subscriptions/222");
+  });
+
   it("reports Apple's failures as AppStoreError, and needs all three secrets", async () => {
     const { privateKey } = await generateKeyPair("ES256", { extractable: true });
     const client = new AppStoreClient(
@@ -512,6 +675,7 @@ describe("AppStoreClient", () => {
       async () => Response.json({ errorCode: 4010001 }, { status: 401 }),
     );
     await expect(client.getTransaction("1", "production")).rejects.toThrow(AppStoreError);
+    await expect(client.getRenewal("1", "production")).rejects.toThrow(AppStoreError);
     expect(appStoreFromEnv(env)).toBeNull();
     expect(appStoreFromEnv({ ...env, APPSTORE_KEY_ID: "K", APPSTORE_ISSUER_ID: "I", APPSTORE_PRIVATE_KEY: "pem" })).not.toBeNull();
   });

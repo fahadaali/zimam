@@ -2,7 +2,16 @@ import { type Context, Hono } from "hono";
 import { z } from "zod";
 import { fail, readJson } from "../http";
 import { requireUser } from "../middleware";
-import { type AppStore, AppStoreError, type AppStoreEnvironment, decodeAppleJws, findTransaction } from "../subscriptions/appstore";
+import {
+  type AppStore,
+  AppStoreError,
+  type AppStoreEnvironment,
+  type AppStoreRenewal,
+  type AppStoreTransaction,
+  decodeAppleJws,
+  findTransaction,
+  needsRenewal,
+} from "../subscriptions/appstore";
 import { applyTransaction, checkProduct, currentPlan, ownerForApp, ownerForNotification } from "../subscriptions/entitlements";
 import type { AppEnv } from "../types";
 
@@ -17,6 +26,21 @@ type Ctx = Context<AppEnv>;
 const appStore = (c: Ctx): AppStore | null => c.var.deps.appStore?.(c.env) ?? null;
 
 const unavailable = (c: Ctx) => fail(c, 503, "subscriptions_unavailable", "Subscriptions cannot be verified right now");
+
+/**
+ * The subscription's renewal state when the transaction alone cannot say whether the user is
+ * still pro (`needsRenewal`): asked in the environment the transaction was found in.
+ * Throws AppStoreError when Apple cannot be asked, like the transaction lookup.
+ */
+async function renewalFor(
+  store: AppStore,
+  transaction: AppStoreTransaction,
+  environment: AppStoreEnvironment,
+  notificationType?: string,
+): Promise<AppStoreRenewal | null> {
+  if (!needsRenewal(transaction, Date.now(), notificationType)) return null;
+  return store.getRenewal(transaction.originalTransactionId, environment);
+}
 
 const planOut = async (c: Ctx) => {
   const { plan, expiresAt, productId, source, environment, enforced } = await currentPlan(c.env, c.var.userId);
@@ -64,7 +88,14 @@ subscriptions.post("/apple", requireUser, async (c) => {
     const [status, message] = PROBLEMS[problem];
     return fail(c, status, problem, message);
   }
-  await applyTransaction(c.env.DB, c.var.userId, transaction, environment);
+  let renewal;
+  try {
+    renewal = await renewalFor(store, transaction, environment);
+  } catch (error) {
+    console.error(`subscriptions: renewal lookup failed: ${error instanceof AppStoreError ? error.message : "error"}`);
+    return unavailable(c);
+  }
+  await applyTransaction(c.env.DB, c.var.userId, transaction, environment, Date.now(), renewal);
   return c.json(await planOut(c));
 });
 
@@ -76,8 +107,9 @@ interface NotificationPayload {
 
 /**
  * POST /v1/subscriptions/apple/notifications — App Store Server Notifications V2
- * (renewals, expiry, refunds, revocations), for both environments. The payload is only
- * a pointer: its transaction id is fetched again from Apple, and that is what is saved.
+ * (renewals, expiry, refunds, revocations, failed renewals and the end of the billing grace
+ * period), for both environments. The payload is only a pointer: its transaction id is
+ * fetched again from Apple, with the renewal state when needed, and that is what is saved.
  * 200 for anything handled or ignored; 503 when Apple could not be asked, so Apple retries.
  */
 subscriptions.post("/apple/notifications", async (c) => {
@@ -108,6 +140,13 @@ subscriptions.post("/apple/notifications", async (c) => {
     console.warn(`subscriptions: ${payload.notificationType ?? "notification"} for an unknown or deleted account`);
     return c.json({ ok: true });
   }
-  await applyTransaction(c.env.DB, userId, found.transaction, found.environment);
+  let renewal;
+  try {
+    renewal = await renewalFor(store, found.transaction, found.environment, payload.notificationType);
+  } catch (error) {
+    console.error(`subscriptions: notification renewal lookup failed: ${error instanceof AppStoreError ? error.message : "error"}`);
+    return unavailable(c);
+  }
+  await applyTransaction(c.env.DB, userId, found.transaction, found.environment, Date.now(), renewal);
   return c.json({ ok: true });
 });

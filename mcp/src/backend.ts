@@ -77,7 +77,16 @@ export interface TaskFields {
 }
 
 export interface ZimamBackend {
-  signInWithApple(identityToken: string, nonce: string): Promise<Outcome<{ userId: string; name: string | null }>>;
+  /**
+   * Verifies a Sign in with Apple identity token whose nonce claim is the SHA-256 (hex) of `nonce`.
+   * `code`: the page's authorization code and the redirect URI it used, so the API keeps Apple's
+   * refresh token and revokes it when the account is deleted.
+   */
+  signInWithApple(
+    identityToken: string,
+    nonce: string,
+    code?: { authorizationCode: string; redirectUri: string },
+  ): Promise<Outcome<{ userId: string; name: string | null }>>;
   /** Verifies a Google ID token whose nonce claim is the SHA-256 (hex) of `nonce`. */
   signInWithGoogle(idToken: string, nonce: string): Promise<Outcome<{ userId: string; name: string | null }>>;
   listTasks(userId: string, filter: TaskFilter): Promise<Outcome<AssistantTask[]>>;

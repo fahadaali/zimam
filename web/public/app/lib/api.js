@@ -136,7 +136,9 @@ const query = (params) => {
 };
 
 export const api = {
-  signIn: (identityToken, nonce) => request("POST", "/v1/auth/apple", { identityToken, nonce, device: "web" }),
+  /** `authorizationCode` and `redirectUri` let the API keep Apple's refresh token, revoked when the account is deleted. */
+  signIn: (identityToken, nonce, { authorizationCode, redirectUri } = {}) =>
+    request("POST", "/v1/auth/apple", { identityToken, nonce, authorizationCode, redirectUri, device: "web" }),
   signInWithGoogle: (idToken, nonce) => request("POST", "/v1/auth/google", { idToken, nonce, device: "web" }),
   signOut: () => request("POST", "/v1/auth/logout"),
   me: () => request("GET", "/v1/me"),
