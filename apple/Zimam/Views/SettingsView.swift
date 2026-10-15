@@ -13,6 +13,7 @@ struct SettingsView: View {
     @Environment(LocationProvider.self) private var location
     @AppStorage(SessionStore.shareLocationKey) private var shareLocation = false
     @Environment(NotificationScheduler.self) private var notifications
+    @Environment(SubscriptionStore.self) private var subscriptions
     @Environment(\.dateFormatterZimam) private var formatter
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -31,6 +32,7 @@ struct SettingsView: View {
                 calendarSection
                 prayerSection
                 notificationsSection
+                subscriptionSection
                 importSection
                 accountSection
                 LegalLinksSection()
@@ -50,6 +52,7 @@ struct SettingsView: View {
                 Text("تُمسح بيانات زمام من هذا الجهاز، وتبقى محفوظة في حسابك.")
             }
             .task { await notifications.refreshStatus() }
+            .task { await subscriptions.refresh(signedIn: session.isSignedIn) }
         }
         #if os(macOS)
         .frame(minWidth: ZimamSpacing.space8 * 14, minHeight: ZimamSpacing.space8 * 18)
@@ -129,6 +132,29 @@ struct SettingsView: View {
         }
     }
 
+    /// «زمام الاحترافية»: the plan, and the paywall (Subscriptions/PaywallView.swift). While the
+    /// server does not enforce plans (the personal trial), nothing is locked and the footer says so.
+    private var subscriptionSection: some View {
+        Section {
+            LabeledContent("الباقة", value: subscriptions.isPro ? "الاحترافية" : "المجانية")
+            if subscriptions.isPro, let end = subscriptions.plan?.expiresDate {
+                LabeledContent("الفترة الحالية حتى", value: formatter.dual(end, withYear: true))
+            }
+            NavigationLink {
+                PaywallContent()
+            } label: {
+                Label(subscriptions.isPro ? "إدارة الاشتراك" : ZimamPro.groupName, systemImage: "star")
+            }
+            .frame(minHeight: ZimamSpacing.space11)
+        } header: {
+            Text("الاشتراك")
+        } footer: {
+            if !subscriptions.isEnforced {
+                Text("في فترة التجربة كل المزايا متاحة دون اشتراك.")
+            }
+        }
+    }
+
     /// Tasks from Todoist, TickTick, Google Tasks, a CSV file or Apple Reminders (Import/ImportView.swift).
     private var importSection: some View {
         Section {
@@ -163,7 +189,7 @@ struct SettingsView: View {
                 Button("حذف الحساب", role: .destructive, action: deleteAccount)
                 Button("إلغاء", role: .cancel) {}
             } message: {
-                Text("تُحذف مهامك ومشاريعك وتذكيراتك من خادم زمام ومن هذا الجهاز نهائياً، ولا يمكن استرجاعها. المشروع المشترك ينتقل إلى أقدم أعضائه.")
+                Text("تُحذف مهامك ومشاريعك وتذكيراتك من خادم زمام ومن هذا الجهاز نهائياً، ولا يمكن استرجاعها. المشروع المشترك ينتقل إلى أقدم أعضائه. حذف الحساب لا يلغي اشتراك «زمام الاحترافية»: ألغه من إعدادات حسابك في App Store.")
             }
         } header: {
             Text("الحساب")
@@ -225,6 +251,7 @@ struct SettingsView: View {
 
     private func signOut() {
         dismiss()
+        subscriptions.signedOut()
         Task {
             await session.signOut()
             try? sync.reset()
@@ -243,6 +270,7 @@ struct SettingsView: View {
                 return
             }
             try? sync.reset()
+            subscriptions.signedOut()
             dismiss()
         }
     }

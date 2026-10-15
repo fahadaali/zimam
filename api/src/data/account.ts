@@ -21,6 +21,8 @@ interface OwnedProject {
  *   tasks assigned to them become unassigned, and their reminders go.
  * - Inbox tasks, reminders and the comments they wrote are deleted everywhere.
  *   Tasks they created in projects that live on stay with those projects.
+ * - Their App Store entitlements are deleted; the subscription itself is Apple's, and
+ *   the user cancels it in their Apple account settings.
  * - Invites they created are revoked, every session ends, and their sign-in
  *   identities (Apple, Google) are unlinked, so signing in again starts afresh.
  * - Deleted rows stay as tombstones for sync, but their text is cleared, and
@@ -116,6 +118,8 @@ export async function deleteAccount(db: D1Database, access: Access, mutator: Mut
       `DELETE FROM external_refs WHERE user_id = ?1`,
       // Their files in R2 go when the queue next sees the job missing, or by the bucket's lifecycle rule.
       `DELETE FROM import_jobs WHERE user_id = ?1`,
+      // The subscription itself stays with Apple until the user cancels it in their Apple account.
+      `DELETE FROM entitlements WHERE user_id = ?1`,
       `DELETE FROM sessions WHERE user_id = ?1`,
       // Their Apple and Google accounts are no longer linked: signing in with them again starts a fresh account.
       `DELETE FROM identities WHERE user_id = ?1`,

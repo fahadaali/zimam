@@ -9,6 +9,7 @@ import { handleImportBatch } from "./imports/queue";
 import { apnsFromEnv } from "./push/apns";
 import { sendDueReminders } from "./push/reminders";
 import { channelRealtime, latestSeq, notifyChangesSince } from "./realtime/notify";
+import { appStoreFromEnv } from "./subscriptions/appstore";
 import type { Deps } from "./types";
 
 const deps: Deps = {
@@ -18,6 +19,7 @@ const deps: Deps = {
   appleTokens: (env) => appleTokensFromEnv(env),
   push: (env) => apnsFromEnv(env),
   realtime: (env) => channelRealtime(env.USER_CHANNEL),
+  appStore: (env) => appStoreFromEnv(env),
 };
 const app = createApp(deps);
 

@@ -11,6 +11,7 @@ import { listProjects } from "../data/queries";
 import { type Row, userOut } from "../data/rows";
 import { Id, PRAYERS } from "../data/schemas";
 import { fail, readJson } from "../http";
+import { requirePro } from "../subscriptions/entitlements";
 import type { AppEnv } from "../types";
 import { loadVisible } from "./resources";
 
@@ -19,6 +20,9 @@ import { loadVisible } from "./resources";
  * Nothing here is saved; the app shows the suggestion and the user confirms it.
  */
 export const assistant = new Hono<AppEnv>();
+
+// «زمام الاحترافية» when SUBSCRIPTIONS_ENFORCED is "true" (403 pro_required); open to all otherwise.
+assistant.use("*", requirePro);
 
 type Ctx = Context<AppEnv>;
 type Run<T> = { ok: true; value: T } | { ok: false; response: Response };

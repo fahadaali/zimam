@@ -40,6 +40,10 @@ targets:
     supportedDestinations: [iOS, macOS]
     sources:
       - path: Zimam
+        # StoreKit testing only (the scheme below); not copied into the app.
+        excludes: [Resources/Zimam.storekit]
+      - path: Zimam/Resources/Zimam.storekit
+        buildPhase: none
       # Shared with the widget extension: SwiftData models, Store, the App Group store, intents.
       - path: Shared
       # Shared with the widget extension and the watch app.
@@ -47,6 +51,11 @@ targets:
       - path: ../design/generated/ZimamTokens.swift
       - path: ../design/fonts/apple
         buildPhase: resources
+    # A shared "Zimam" scheme whose Run uses the local StoreKit configuration: purchases of
+    # «زمام الاحترافية» in the simulator or from Xcode are local (no App Store, no server
+    # verification). Untick it in Edit Scheme → Run → Options to test against the sandbox.
+    scheme:
+      storeKitConfiguration: Zimam/Resources/Zimam.storekit
     dependencies:
       - package: ZimamKit
       - package: GoogleSignIn

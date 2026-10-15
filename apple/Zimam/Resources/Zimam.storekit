@@ -1,0 +1,85 @@
+{
+  "identifier" : "5A1F3C2E",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_developerTeamID" : "72V86SZ2XC",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "ar_SA",
+    "_storefront" : "SAU",
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21500001",
+      "localizations" : [
+        {
+          "description" : "",
+          "displayName" : "زمام الاحترافية",
+          "locale" : "ar_SA"
+        }
+      ],
+      "name" : "زمام الاحترافية",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "149.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6740000002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "المساعد الذكي وMCP والاستيراد الكامل",
+              "displayName" : "زمام الاحترافية السنوي",
+              "locale" : "ar_SA"
+            }
+          ],
+          "productID" : "app.zimam.ios.pro.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Zimam Pro Yearly",
+          "subscriptionGroupID" : "21500001",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "14.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6740000001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "المساعد الذكي وMCP والاستيراد الكامل",
+              "displayName" : "زمام الاحترافية الشهري",
+              "locale" : "ar_SA"
+            }
+          ],
+          "productID" : "app.zimam.ios.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Zimam Pro Monthly",
+          "subscriptionGroupID" : "21500001",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

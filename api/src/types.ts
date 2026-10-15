@@ -7,6 +7,7 @@ import type { Env } from "./env";
 import type { ImportDeps } from "./imports/jobs";
 import type { PushSender } from "./push/apns";
 import type { Realtime } from "./realtime/notify";
+import type { AppStore } from "./subscriptions/appstore";
 
 export interface Deps {
   /** Sign in with Apple signing keys; tests pass a local key set. */
@@ -26,6 +27,11 @@ export interface Deps {
   realtime?: (env: Env) => Realtime | null;
   /** The imports queue, R2 bucket and fetch; defaults to the Worker's bindings. Tests pass fakes. */
   imports?: (env: Env) => ImportDeps;
+  /**
+   * The App Store Server API, or null when its secrets are missing (purchases and
+   * notifications then answer 503). Tests pass a fake.
+   */
+  appStore?: (env: Env) => AppStore | null;
 }
 
 export interface AppEnv {

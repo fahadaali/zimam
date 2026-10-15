@@ -12,6 +12,7 @@ import { me } from "./routes/me";
 import { members } from "./routes/members";
 import { projects } from "./routes/projects";
 import { realtime } from "./routes/realtime";
+import { subscriptions } from "./routes/subscriptions";
 import { sync } from "./routes/sync";
 import { tasks } from "./routes/tasks";
 import type { AppEnv, Deps } from "./types";
@@ -54,6 +55,8 @@ export function createApp(deps: Deps) {
   app.route("/v1/devices", devices);
   app.route("/v1/realtime", realtime);
   app.route("/v1/imports", imports);
+  // Signed-in per route: the App Store's notifications come without a session.
+  app.route("/v1/subscriptions", subscriptions);
 
   app.notFound((c) => fail(c, 404, "not_found", "No such endpoint"));
   app.onError((err, c) => {

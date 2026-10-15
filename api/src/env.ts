@@ -45,6 +45,18 @@ declare global {
       IMPORTS: Queue;
       /** R2 bucket zimam-imports: uploaded exports and parsed imports, deleted when the job ends. */
       IMPORT_FILES: R2Bucket;
+      /** The app's bundle id: App Store transactions must be for it. Not a secret. */
+      APPSTORE_BUNDLE_ID: string;
+      /** Secret (`wrangler secret put`): the In-App Purchase key's id (App Store Server API). */
+      APPSTORE_KEY_ID?: string;
+      /** Secret (`wrangler secret put`): the App Store Connect issuer id. */
+      APPSTORE_ISSUER_ID?: string;
+      /** Secret (`wrangler secret put`): the In-App Purchase key, the .p8 file's PEM text. */
+      APPSTORE_PRIVATE_KEY?: string;
+      /** "true" makes pro features need «زمام الاحترافية»; anything else lets everyone use them (personal trial). */
+      SUBSCRIPTIONS_ENFORCED: string;
+      /** Comma-separated user ids or emails treated as pro whatever their subscription (the owner). */
+      PRO_USERS?: string;
     }
   }
 }

@@ -135,6 +135,8 @@ export function importErrorText(error, { maxFileBytes = DEFAULT_MAX_BYTES, exten
       return "يجري استيراد آخر الآن. انتظر حتى ينتهي ثم ابدأ استيراداً جديداً.";
     case "import_unavailable":
       return "تعذّر بدء الاستيراد الآن. أعد المحاولة بعد قليل.";
+    case "pro_required":
+      return "الاستيراد من هذا المصدر من مزايا «زمام الاحترافية». اشترك من تطبيق زمام: الإعدادات ← الاشتراك.";
     case "not_found":
       return "لم نجد هذا الاستيراد.";
     case "unauthorized":

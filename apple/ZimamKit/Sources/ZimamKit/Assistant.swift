@@ -115,11 +115,15 @@ public enum AssistantProblem: Equatable, Sendable {
     case invalidInput
     /// `401`: the session ended; the next sync signs out.
     case signedOut
+    /// `403 pro_required`: the assistant needs «زمام الاحترافية» (only when the server enforces plans).
+    /// The app offers the paywall with this message.
+    case proRequired
     case other
 
     public init(_ error: Error) {
         if let api = error as? APIError {
             switch (api.status, api.code) {
+            case (_, "pro_required"): self = .proRequired
             case (429, _), (_, "ai_quota_exceeded"): self = .quotaExceeded(limit: api.limit, resetsOn: api.resetsOn)
             case (503, _), (_, "ai_unavailable"): self = .unavailable
             case (404, _): self = .notFound
@@ -157,6 +161,8 @@ public enum AssistantProblem: Equatable, Sendable {
             return "تعذّر فهم النص. اكتب جملة أقصر وأوضح."
         case .signedOut:
             return "انتهت الجلسة. سجّل الدخول مرة أخرى."
+        case .proRequired:
+            return "المساعد الذكي من مزايا «زمام الاحترافية». اشترك لتستعمله."
         case .other:
             return "تعذّر الوصول إلى المساعد. حاول مرة أخرى."
         }

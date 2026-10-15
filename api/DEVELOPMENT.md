@@ -25,6 +25,7 @@ npm run db:migrate:local
 | `src/push/` | إشعارات الخادم: تسجيل الأجهزة، ومرسل APNs، ومهمة الـ Cron |
 | `src/realtime/` | المزامنة اللحظية: كائن `UserChannel` لكل مستخدم، وتذاكر المتصفح، ومن يُنبَّه بعد كل كتابة |
 | `src/imports/` | الاستيراد من التطبيقات الأخرى: المصادر، والطابور، والكتابة عبر الـ Mutator |
+| `src/subscriptions/` | «زمام الاحترافية»: عميل App Store Server API (`appstore.ts`)، والباقة والبوابة أمام المزايا المدفوعة (`entitlements.ts`) |
 
 ## المزامنة
 
@@ -179,6 +180,7 @@ npx wrangler d1 migrations apply zimam --remote   # جدول ai_usage
 - **المشاريع التي هو عضو فيها** يخرج منها بـ `removeMemberStatements` نفسها: تُلغى إسناداته، وتُحذف تذكيراته، ويُضاف سجل التغيير الموجّه له. المهام التي أنشأها فيها تبقى للمشروع.
 - مهام صندوقه وتذكيراته كلها وتعليقاته في كل مكان تُحذف، مع سجل تغيير لجمهور كل سجل، فتحذفها أجهزة من يراها.
 - الدعوات التي أنشأها ولم تُستعمل تُلغى، وكل جلساته تنتهي، فلا تعمل رموزه على أي جهاز.
+- صفوف اشتراكه في `entitlements` تُحذف. الاشتراك نفسه عند Apple ولا يلغيه حذف الحساب، فيلغيه المستخدم من إعدادات حسابه في App Store، وهذا مكتوب في رسالة تأكيد الحذف في التطبيق. وإن بقي يتجدد ثم أنشأ حساباً جديداً، فـ«استعادة المشتريات» تنقله إليه (انظر «الاشتراكات»).
 - الحذف ناعم (`deleted_at`) لتعرف المزامنة به، لكن نصوص السجلات المحذوفة تُمسح (العنوان والملاحظات والوسوم والاسم ونص التعليق والموقع). وسطر المستخدم يبقى مجهول الهوية (`apple_sub = 'deleted:<id>'` دون اسم ولا بريد)، لأن سجلات أخرى تشير إليه. وتُحذف كل حساباته في `identities` (Apple وGoogle)، فإن سجّل الدخول بأحدها بدأ حساباً جديداً فارغاً.
 - الجلسات تُحذف في آخر خطوة، فإن فشل الحذف في منتصفه بقي المستخدم مسجّلاً ليعيد المحاولة، وكل خطوة تتجاوز ما أُنجز قبلها.
 
@@ -375,9 +377,79 @@ npx wrangler d1 migrations apply zimam --remote   # جدول realtime_tickets
 
 الواجهة: في التطبيق «الإعدادات» ← «استيراد المهام» (`apple/Zimam/Import/`، وأنواعه وطلباته في `ZimamKit/Imports.swift` و`APIClient+Imports.swift`)، وفي الويب `#/import` (`web/public/app/import-view.js`). كلاهما يرفع الملف أو يرسل الرمز مرة واحدة، ثم يسأل `GET /v1/imports/:id` كل ثانية ونصف حتى ينتهي ويعرض الأعداد والتحذيرات والأخطاء، ثم يزامن. وتذكيرات أبل تُستورد على الجهاز عبر EventKit (`AppleRemindersImport` في ZimamKit): كل قائمة مشروع، وتُحفظ روابط ما استُورد (`calendarItemExternalIdentifier` ← معرّف المهمة) في `UserDefaults` لكل حساب، فلا تتكرر.
 
+## الاشتراكات
+
+«زمام الاحترافية» اشتراك متجدد تلقائياً عبر StoreKit 2 في مجموعة واحدة، بمنتجين: `app.zimam.ios.pro.monthly` و`app.zimam.ios.pro.yearly` (`PRO_PRODUCTS` في `src/subscriptions/entitlements.ts`). الأسعار تُضبط في App Store Connect وحده، والتطبيق يعرض `displayPrice` كما يعطيه App Store. ما يشمله الاشتراك من `docs/idea.md` («نموذج الربح والاشتراكات»): المساعد الذكي، وخادم MCP، والاستيراد من كل المصادر. الفرق لاحقاً. وإعداد App Store Connect والمفتاح في `docs/setup.md` («اشتراكات زمام الاحترافية»).
+
+### المسارات
+
+| المسار | ما يفعله |
+| --- | --- |
+| `GET /v1/subscriptions` | الباقة الآن `{ plan: "free" \| "pro", expiresAt, productId, source: "apple" \| "override" \| null, environment: "sandbox" \| "production" \| null, enforced }`. `expiresAt` بالميلي ثانية، و`null` للمجانية ولـ `PRO_USERS` |
+| `POST /v1/subscriptions/apple` | `{ transactionId, environment? }` من التطبيق بعد الشراء أو الاستعادة أو أي معاملة جديدة. يرجع الباقة كما في `GET` |
+| `POST /v1/subscriptions/apple/notifications` | عنوان App Store Server Notifications V2 للبيئتين، بلا جلسة |
+
+أخطاء `POST /v1/subscriptions/apple`: `400 invalid`، و`404 transaction_not_found` (لا يعرفها App Store في أي بيئة، ومنها معاملات StoreKit المحلية في Xcode)، و`400 wrong_bundle` أو `unknown_product`، و`403 account_mismatch` (اشتُريت لحساب زمام آخر)، و`409 already_linked` (الاشتراك مربوط بحساب آخر)، و`503 subscriptions_unavailable` (الأسرار غير مضبوطة أو تعذّر الوصول إلى Apple). المعاملة المنتهية أو المستردّة تُحفظ ويرجع الطلب 200 بباقة مجانية.
+
+### التحقق من الشراء
+
+1. يشتري التطبيق بـ `appAccountToken` = معرّف المستخدم في زمام (UUID)، فيحمله Apple في المعاملة وفي كل تجديد.
+2. يرسل التطبيق معرّف كل معاملة تحقق منها StoreKit. الخادم لا يأخذ من التطبيق إلا المعرّف: يطلب المعاملة بنفسه من App Store Server API (`GET https://api.storekit.itunes.apple.com/inApps/v1/transactions/{id}`، ثم `api.storekit-sandbox.itunes.apple.com` إن لم توجد، كما توصي Apple، أو بالعكس إن قال التطبيق `sandbox`).
+3. الطلب موقَّع برمز JWT بـ ES256 من مفتاح In-App Purchase: `iss` معرّف المُصدر، و`aud` `appstoreconnect-v1`، و`bid` `app.zimam.ios`، وصلاحيته خمس دقائق ويُعاد استعماله خلالها.
+4. يتحقق من `bundleId` (`APPSTORE_BUNDLE_ID`)، ومن أن `productId` أحد المنتجين، ومن أن `appAccountToken` هو المستخدم. ثم يحفظ المعاملة في `entitlements` (`migrations/0009_subscriptions.sql`).
+
+**لماذا يكفي فك `signedTransactionInfo` دون التحقق من سلسلة x5c:** المعاملة لا تأتي من العميل، بل يجلبها الخادم من Apple مباشرة عبر TLS برمز موقَّع بمفتاحنا، فلا يستطيع أحد غير Apple أن يضع فيها شيئاً. التحقق من السلسلة يضيف حماية فقط حين يكون الـ JWS قد مرّ بيد غير موثوقة، وهذا لا يحدث هنا: التطبيق يرسل المعرّف لا الـ JWS، والإشعار لا يُصدَّق محتواه (التالي).
+
+قواعد الحفظ:
+
+- سطر لكل اشتراك (`original_transaction_id`)، والتجديد والترقية بين المنتجين يحدّثان السطر نفسه. معاملة أقدم (استعادة ترسل تجديداً سابقاً) لا ترجع بالسطر إلى الوراء، والمعاملة نفسها مرة أخرى (استرداد) تحدّثه. ونصف الترقية القديم (`isUpgraded`) يُتجاهل.
+- **pro** ما دام `expires_at` في المستقبل و`revoked_at` فارغاً. `status` (`active` أو `expired` أو `revoked`) هو الحال عند آخر تحديث للعرض فقط، والحساب من التاريخين.
+- **بيئة sandbox مقبولة:** مشتريات TestFlight ومراجعة App Store كلها sandbox، ومراجعو Apple يشترون من تطبيق يكلّم خادم الإنتاج. اشتراكات sandbox تتجدد بسرعة ثم تتوقف، فلا تعطي اشتراكاً دائماً مجانياً، وتُحفظ بيئتها في السطر.
+- **المعاملة لحساب زمام محذوف:** إن كان `appAccountToken` لمستخدم حذف حسابه، تُقبل من حساب جديد يستعيدها (الجهاز الذي يحمل المعاملة مسجّل بحساب Apple نفسه)، حتى لا يبقى اشتراك يُدفع ولا يُنتفع به. وغير ذلك يُرفض: معاملة بلا `appAccountToken` (مثل رمز عرض استُبدل خارج التطبيق) أو لحساب آخر قائم.
+- **فترة السماح عند فشل الدفع (Billing Grace Period):** لا تُقرأ بعد؛ إن فُعّلت في App Store Connect فانتهاء `expiresDate` ينهي pro قبل نهاية فترة السماح. يحتاج قراءة `signedRenewalInfo` (`gracePeriodExpiresDate`) من `GET /inApps/v1/subscriptions/{id}`.
+
+### الإشعارات
+
+`POST /v1/subscriptions/apple/notifications` يستقبل `{ signedPayload }` من Apple (التجديد، والانتهاء، والاسترداد، والإلغاء من Apple، والترقية…). الحمولة لا تُصدَّق: يُقرأ منها معرّف المعاملة فقط (من `data.signedTransactionInfo`) وبيئتها، ثم تُطلب المعاملة من Apple كما في الشراء، وما يرجعه Apple هو ما يُحفظ. لذلك لا يستطيع من يرسل إشعاراً مزيفاً أكثر من دفع الخادم إلى سؤال Apple عن معاملة حقيقية.
+
+- صاحب المعاملة: صاحب السطر الموجود للاشتراك، وإلا مستخدم `appAccountToken` إن كان حساباً قائماً. غير ذلك (حساب محذوف، أو مجهول) يُتجاهل.
+- 200 لكل ما عولج أو تُجوهل (`TEST`، والإشعار بلا معاملة، وتطبيق آخر). 400 لجسم لا يُقرأ. 503 إن غابت الأسرار أو تعذّر سؤال Apple، فيعيد Apple الإرسال لاحقاً (خمس مرات خلال أيام).
+
+### البوابة
+
+| المتغير | المعنى |
+| --- | --- |
+| `SUBSCRIPTIONS_ENFORCED` | `"true"` يجعل المزايا المدفوعة للمشتركين فقط. الافتراضي `"false"` في التجربة الشخصية: كل المستخدمين يستعملون كل شيء، والتطبيق يعرض الباقة ولا يمنع شيئاً |
+| `PRO_USERS` | معرّفات مستخدمين أو عناوين بريد، بفاصلة، تُعامل pro دائماً (المالك). البريد يُطابق بريد الحساب وبريد أي حساب دخول مربوط (Apple أو Google)، دون اعتبار لحالة الأحرف. يُفضَّل المعرّف (من `GET /v1/me`) حتى لا يدخل البريد المستودع |
+| `APPSTORE_BUNDLE_ID` | `app.zimam.ios` |
+
+حين `SUBSCRIPTIONS_ENFORCED = "true"` والمستخدم مجاني:
+
+- **المساعد:** كل مسارات `/v1/assistant/*` ترجع `403 pro_required` قبل أي طلب للنموذج (`requirePro` في `src/routes/assistant.ts`).
+- **خادم MCP:** طرق `ZimamService` (المهام والمشاريع والجدول) ترجع `{ ok: false, error: { code: "pro_required", message } }` برسالة عربية يعرضها كلود أو ChatGPT كما هي. تسجيل الدخول وصفحة الموافقة يبقيان مفتوحين، فيربط المستخدم حسابه ثم يشترك. لا تغيير في `mcp/`.
+- **الاستيراد من الخادم:** `POST /v1/imports` يرجع `403 pro_required` لكل المصادر. `GET /v1/imports/sources` وسجل الاستيراد مفتوحان. تذكيرات أبل مجانية وتُستورد على الجهاز فلا تمر بالخادم.
+- يعرض التطبيق لـ `pro_required` صفحة الاشتراك، ويعرضها الويب نصاً.
+
+**إن غابت أسرار App Store والبوابة مفعّلة** (الخيار الآمن): لا يصير أحد pro جديداً (الشراء والإشعارات ترجع 503 ويعيدها التطبيق وApple لاحقاً)، ومن له سطر ساري يبقى pro حتى `expires_at`، و`PRO_USERS` يعمل. لا يُفتح شيء للجميع، لأن فتح المزايا المدفوعة لكل المستخدمين عند خلل في الإعداد يكلّف الذكاء الاصطناعي بلا حد.
+
+### الإعداد
+
+القيم غير السرية في `wrangler.jsonc` (`APPSTORE_BUNDLE_ID` و`SUBSCRIPTIONS_ENFORCED` و`PRO_USERS`). مفتاح In-App Purchase أسرار فقط:
+
+```sh
+npx wrangler secret put APPSTORE_KEY_ID        # Key ID
+npx wrangler secret put APPSTORE_ISSUER_ID     # Issuer ID من صفحة المفاتيح
+npx wrangler secret put APPSTORE_PRIVATE_KEY < SubscriptionKey_XXXXXXXXXX.p8
+```
+
+عميل App Store يمر عبر `Deps.appStore`، فتستعمل الاختبارات `FakeAppStore` (`test/subscriptions.test.ts`)، وتفحص `AppStoreClient` نفسه بمفتاح محلي.
+
+التطبيق: `apple/Zimam/Subscriptions/` (`SubscriptionStore` و`PaywallView`)، وأنواعه وطلباته في `ZimamKit/Subscriptions.swift`. وللاختبار المحلي في Xcode ملف `apple/Zimam/Resources/Zimam.storekit` مربوط بمخطط التشغيل في `project.yml`؛ معاملاته محلية لا يعرفها App Store، فيرد الخادم عليها 404 ويعتمد التطبيق على استحقاق الجهاز وحده.
+
 ## لم يُبنَ بعد
 
 - إرسال `authorizationCode` من موقع الويب: Sign in with Apple JS يعطيه أيضاً، لكن استبداله يحتاج `redirect_uri` نفسه الذي طُلب به، والخادم لا يرسله بعد.
 - حصص المساعد بحسب الاشتراك (الحد الآن واحد للجميع).
+- فترة السماح عند فشل الدفع، وباقة الفرق (انظر «الاشتراكات»).
 - مصادر الاستيراد بـ OAuth (Trello وAsana وNotion وMicrosoft To Do) (انظر «الاستيراد»).
 - إشعارات الخادم لتذكيرات الموقع، ولما يتجاوز حد الستين إشعاراً داخل نافذة الأربعة عشر يوماً (انظر «إشعارات الخادم»).
