@@ -5,7 +5,15 @@ import OAuthProvider, {
 } from "@cloudflare/workers-oauth-provider";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { ZimamBackend } from "./backend";
-import { consentPage, homePage, messagePage } from "./consent";
+import {
+  GOOGLE_CALLBACK_CSP,
+  GOOGLE_CALLBACK_PATH,
+  GOOGLE_CALLBACK_SCRIPT,
+  consentPage,
+  googleCallbackPage,
+  homePage,
+  messagePage,
+} from "./consent";
 import { type Env, type GrantProps, SCOPES } from "./env";
 import { buildServer } from "./tools";
 
@@ -72,6 +80,33 @@ async function authorize(request: Request, env: Env, backend: ZimamBackend): Pro
   }
 }
 
+/**
+ * Where Google's sign-in returns (redirect URI `<MCP_ORIGIN>/google-callback`). The page only
+ * runs its own script, which hands the ID token from the URL fragment to the consent page.
+ */
+function googleCallback(): Response {
+  return html(
+    googleCallbackPage(),
+    200,
+    new Headers({
+      "Content-Security-Policy": GOOGLE_CALLBACK_CSP,
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+    }),
+  );
+}
+
+function googleCallbackScript(): Response {
+  return new Response(GOOGLE_CALLBACK_SCRIPT, {
+    headers: {
+      "Content-Type": "text/javascript; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-cache",
+    },
+  });
+}
+
 /** The MCP endpoint, stateless: each request builds a server for the grant's user. */
 async function mcp(request: Request, ctx: OAuthResourceContext<GrantProps>, backend: ZimamBackend): Promise<Response> {
   const server = buildServer(backend, ctx.props.userId, ctx.auth.scope.includes(SCOPES.write));
@@ -94,6 +129,8 @@ export function createWorker(backendFor: (env: Env) => ZimamBackend) {
         fetch: (request, env) => {
           const { pathname } = new URL(request.url);
           if (pathname === "/authorize") return authorize(request, env, backendFor(env));
+          if (pathname === GOOGLE_CALLBACK_PATH) return googleCallback();
+          if (pathname === `${GOOGLE_CALLBACK_PATH}.js`) return googleCallbackScript();
           if (pathname === "/") return html(homePage(env.MCP_ORIGIN));
           return new Response("Not found", { status: 404 });
         },

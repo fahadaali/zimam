@@ -2,6 +2,7 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { AssistantTask, Outcome, TaskFields, ZimamBackend } from "../src/backend";
+import { GOOGLE_CALLBACK_SCRIPT, googleAuthUrl } from "../src/consent";
 import { createWorker } from "../src/index";
 
 const ORIGIN = env.MCP_ORIGIN;
@@ -69,6 +70,11 @@ async function send(path: string, init: RequestInit = {}, vars: Partial<typeof e
   const response = await worker.fetch(new Request(`${ORIGIN}${path}`, { redirect: "manual", ...init }), { ...env, ...vars }, ctx);
   await waitOnExecutionContext(ctx);
   return response;
+}
+
+async function sha256Hex(text: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 const base64url = (bytes: ArrayBuffer) =>
@@ -203,9 +209,56 @@ describe("Zimam MCP server", () => {
     expect(html).toContain("ربط Claude بحسابك في زمام");
     expect(html).toContain("claude.ai");
     expect(html).toContain("appleid.auth.js");
-    expect(html).toContain("https://accounts.google.com/gsi/client");
+    expect(html).toContain("المتابعة بحساب أبل");
     expect(html).toContain("المتابعة بحساب قوقل");
-    expect(html).toContain(env.GOOGLE_WEB_CLIENT_ID);
+    // Our own Google button: no Google script on the page.
+    expect(html).not.toContain("accounts.google.com/gsi");
+  });
+
+  it("sends Google's sign-in back to /google-callback with an ID token for this consent page", async () => {
+    const clientId = await registerClient();
+    const { html } = await authorize(clientId, { decision: "deny" });
+    const handle = html.match(/name="handle" value="([^"]+)"/)![1]!;
+    const authUrl = JSON.parse(html.match(/new URL\(("https:\/\/accounts\.google\.com[^"]+")\)/)![1]!) as string;
+    const url = new URL(authUrl);
+    expect(`${url.origin}${url.pathname}`).toBe("https://accounts.google.com/o/oauth2/v2/auth");
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      client_id: env.GOOGLE_WEB_CLIENT_ID,
+      redirect_uri: `${ORIGIN}/google-callback`,
+      response_type: "id_token",
+      scope: "openid email profile",
+      nonce: await sha256Hex(handle),
+      prompt: "select_account",
+      hl: "ar",
+    });
+    expect(googleAuthUrl("client", ORIGIN, "n")).toContain(encodeURIComponent(`${ORIGIN}/google-callback`));
+  });
+
+  it("serves the Google callback page with its script as a separate file and a strict CSP", async () => {
+    const page = await send("/google-callback");
+    expect(page.status).toBe(200);
+    const csp = page.headers.get("Content-Security-Policy")!;
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).toContain("frame-ancestors 'none'");
+    // The whole-tab fallback posts the consent form, then /authorize redirects to the client.
+    expect(csp).not.toContain("form-action");
+    expect(page.headers.get("Referrer-Policy")).toBe("no-referrer");
+    const html = await page.text();
+    expect(html).toContain('dir="rtl"');
+    const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)];
+    expect(scripts).toHaveLength(1);
+    expect(scripts[0]![1]).toContain('src="/google-callback.js"');
+    expect(scripts[0]![2]!.trim()).toBe("");
+
+    const script = await send("/google-callback.js");
+    expect(script.status).toBe(200);
+    expect(script.headers.get("Content-Type")).toContain("text/javascript");
+    const code = await script.text();
+    expect(code).toBe(GOOGLE_CALLBACK_SCRIPT);
+    expect(code).toContain('"zimam-google-signin"');
+    expect(code).toContain('form.action = "/authorize"');
+    expect(code).toContain("history.replaceState");
   });
 
   it("hides Sign in with Google when no web client ID is configured", async () => {

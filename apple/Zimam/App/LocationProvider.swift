@@ -2,11 +2,19 @@ import CoreLocation
 import Foundation
 import Observation
 import ZimamKit
+#if canImport(UIKit)
+import UIKit
+#endif
 
-/// The place prayer times are computed for. Asks for the location once when
-/// the user taps «استعمال موقعي الحالي» (when in use, one reading), and keeps
-/// the last coordinate on the device. It reaches the server only, rounded to city level,
-/// when the user turns on sharing in settings (see `SessionStore.sharePlace`).
+/// The place prayer times are computed for. Asks for the location when the user taps
+/// «استعمال موقعي الحالي» (when in use, until the first reading), and keeps the last coordinate
+/// on the device. It reaches the server only, rounded to city level, when the user turns on
+/// sharing in settings (see `SessionStore.sharePlace`).
+///
+/// The reading uses `startUpdatingLocation` and stops at the first fix, rather than the one-shot
+/// `requestLocation`: that one gives up with `kCLErrorLocationUnknown` when the first fix is slow
+/// (right after the permission prompt, indoors, or in the Simulator before a location is set),
+/// while continuous updates keep trying until the timeout below.
 @MainActor
 @Observable
 final class LocationProvider {
@@ -16,39 +24,47 @@ final class LocationProvider {
     }
 
     private(set) var coordinate: Coordinate? = nil
+    /// True while a reading is running (not while the permission prompt is up).
     private(set) var isLocating = false
     private(set) var errorMessage: String? = nil
+    /// Kept here, not read from the manager, so views showing «فتح إعدادات النظام» update.
+    private(set) var authorization: CLAuthorizationStatus = .notDetermined
     /// Called when a new coordinate is saved.
     @ObservationIgnored var onChange: (@MainActor () -> Void)?
 
     private let manager = CLLocationManager()
     private let delegate = LocationDelegate()
     @ObservationIgnored private var waitingForPermission = false
+    @ObservationIgnored private var timeout: Task<Void, Never>?
 
-    private static let deniedMessage = "لا يصل زمام إلى موقعك. اسمح له من إعدادات النظام لحساب أوقات الصلاة."
-    private static let failedMessage = "تعذّر تحديد موقعك. حاول مرة أخرى."
+    /// How long a reading may take before the user is told it failed.
+    private static let readingTimeout: Duration = .seconds(20)
+    private static let deniedMessage = "لا يصل زمام إلى موقعك. اسمح له بالموقع من إعدادات النظام، أو فعّل خدمات الموقع."
+    private static let failedMessage = "تعذّر تحديد موقعك. تحقّق من تفعيل خدمات الموقع وحاول مرة أخرى."
 
     init() {
         // Saved in the App Group, so the large widget can find the next prayer.
         if let saved = SharedSettings.coordinate() {
             coordinate = Coordinate(latitude: saved.latitude, longitude: saved.longitude)
         }
+        authorization = manager.authorizationStatus
+        // City level is enough for prayer times, and quicker to get than a precise fix.
         manager.desiredAccuracy = kCLLocationAccuracyKilometer
         manager.delegate = delegate
         delegate.onLocation = { [weak self] latitude, longitude in
             self?.received(latitude: latitude, longitude: longitude)
         }
-        delegate.onFailure = { [weak self] in
-            self?.failed()
+        delegate.onFailure = { [weak self] code in
+            self?.failed(code)
         }
-        delegate.onAuthorizationChange = { [weak self] in
-            self?.authorizationChanged()
+        delegate.onAuthorizationChange = { [weak self] status in
+            self?.authorizationChanged(status)
         }
     }
 
+    /// The user (or a policy) turned location off for Zimam, or Location Services are off.
     var isDenied: Bool {
-        let status = manager.authorizationStatus
-        return status == .denied || status == .restricted
+        authorization == .denied || authorization == .restricted
     }
 
     /// Prayer times for the saved place, or nil before the first location.
@@ -59,72 +75,120 @@ final class LocationProvider {
 
     /// Asks for permission if needed, then reads the location once.
     func requestLocation() {
+        guard !isLocating else { return }
         errorMessage = nil
-        switch manager.authorizationStatus {
+        authorization = manager.authorizationStatus
+        switch authorization {
         case .notDetermined:
+            // The reading starts from `authorizationChanged` once the user answers. Tapping
+            // again while the prompt is up just asks again; the system shows one prompt.
             waitingForPermission = true
-            isLocating = true
             manager.requestWhenInUseAuthorization()
         case .denied, .restricted:
             errorMessage = Self.deniedMessage
         default:
-            isLocating = true
-            manager.requestLocation()
+            // .authorizedWhenInUse on iPhone and iPad, .authorizedAlways on the Mac.
+            startReading()
         }
     }
 
-    private func authorizationChanged() {
-        guard waitingForPermission else { return }
-        switch manager.authorizationStatus {
+    /// The page in System Settings where the user can allow location for Zimam.
+    static var systemSettingsURL: URL? {
+        #if os(iOS)
+        URL(string: UIApplication.openSettingsURLString)
+        #else
+        URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")
+        #endif
+    }
+
+    // MARK: Reading
+
+    private func startReading() {
+        isLocating = true
+        manager.startUpdatingLocation()
+        timeout?.cancel()
+        timeout = Task { [weak self] in
+            try? await Task.sleep(for: Self.readingTimeout)
+            guard !Task.isCancelled else { return }
+            self?.stopReading(message: Self.failedMessage)
+        }
+    }
+
+    private func stopReading(message: String?) {
+        timeout?.cancel()
+        timeout = nil
+        manager.stopUpdatingLocation()
+        isLocating = false
+        errorMessage = message
+    }
+
+    private func authorizationChanged(_ status: CLAuthorizationStatus) {
+        authorization = status
+        switch status {
         case .notDetermined:
             return
         case .denied, .restricted:
+            let wasAsking = waitingForPermission || isLocating
             waitingForPermission = false
-            isLocating = false
-            errorMessage = Self.deniedMessage
+            if wasAsking { stopReading(message: Self.deniedMessage) }
         default:
-            waitingForPermission = false
-            manager.requestLocation()
+            if waitingForPermission {
+                waitingForPermission = false
+                startReading()
+            }
         }
     }
 
     private func received(latitude: Double, longitude: Double) {
-        isLocating = false
-        errorMessage = nil
+        guard isLocating else { return }
+        stopReading(message: nil)
         coordinate = Coordinate(latitude: latitude, longitude: longitude)
         SharedSettings.saveCoordinate(SharedSettings.Coordinate(latitude: latitude, longitude: longitude))
         ZimamShared.reloadWidgets()
         onChange?()
     }
 
-    private func failed() {
-        isLocating = false
-        errorMessage = isDenied ? Self.deniedMessage : Self.failedMessage
+    private func failed(_ code: CLError.Code?) {
+        guard isLocating else { return }
+        switch code {
+        case .some(.locationUnknown):
+            // No fix yet; Core Location keeps trying until the timeout.
+            return
+        case .some(.denied):
+            authorization = manager.authorizationStatus
+            stopReading(message: Self.deniedMessage)
+        default:
+            stopReading(message: Self.failedMessage)
+        }
     }
 }
 
 /// CoreLocation's delegate, kept apart so the observable provider stays a plain class.
-/// Callbacks hop to the main actor.
+/// The manager is created on the main thread, so its callbacks arrive there; they still hop
+/// to the main actor explicitly.
 private final class LocationDelegate: NSObject, CLLocationManagerDelegate {
     var onLocation: (@MainActor (Double, Double) -> Void)?
-    var onFailure: (@MainActor () -> Void)?
-    var onAuthorizationChange: (@MainActor () -> Void)?
+    var onFailure: (@MainActor (CLError.Code?) -> Void)?
+    var onAuthorizationChange: (@MainActor (CLAuthorizationStatus) -> Void)?
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let coordinate = locations.last?.coordinate else { return }
-        let latitude = coordinate.latitude
-        let longitude = coordinate.longitude
+        // A negative accuracy marks an invalid reading.
+        guard let location = locations.last(where: { $0.horizontalAccuracy >= 0 }) else { return }
+        let latitude = location.coordinate.latitude
+        let longitude = location.coordinate.longitude
         let handler = onLocation
         Task { @MainActor in handler?(latitude, longitude) }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        let code = (error as? CLError)?.code
         let handler = onFailure
-        Task { @MainActor in handler?() }
+        Task { @MainActor in handler?(code) }
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
         let handler = onAuthorizationChange
-        Task { @MainActor in handler?() }
+        Task { @MainActor in handler?(status) }
     }
 }

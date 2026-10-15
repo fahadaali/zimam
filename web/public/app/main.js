@@ -3,7 +3,19 @@
 import { api, apiBase, errorText, session, whenSignedOut } from "./lib/api.js";
 import { Button, ButtonLink, PrayerChip, ProjectCard, TaskRow, h, setRowDone } from "./lib/components.js";
 import { addDays, dayHeading, dualDate, dueChip, isIsoDate, localIsoDate, relativeDay, weekdayName } from "./lib/dates.js";
-import { googleButtonOptions, googleEnabled, googleInitOptions, whenGoogleLoaded } from "./lib/google.js";
+import {
+  GOOGLE_CHANNEL,
+  GOOGLE_MESSAGE_TYPE,
+  GOOGLE_PENDING_KEY,
+  GOOGLE_RESULT_KEY,
+  googleAuthUrl,
+  googleCallbackUrl,
+  googleEnabled,
+  googlePopupFeatures,
+  googleState,
+  googleStateMatches,
+  isGoogleMessage,
+} from "./lib/google.js";
 import { randomNonce, sha256Hex } from "./lib/nonce.js";
 import { arabicNumber, parseDigits } from "./lib/numbers.js";
 import { prayerPhrase } from "./lib/prayer.js";
@@ -24,7 +36,7 @@ const els = {
   signin: $("signin"),
   signinButton: $("signin-button"),
   signinError: $("signin-error"),
-  googleSignin: $("google-signin"),
+  googleButton: $("google-button"),
   shell: $("shell"),
   view: $("view"),
   main: $("main"),
@@ -83,43 +95,104 @@ function showSignIn(message = "") {
 
 // ——— Sign in with Google ———
 
-// Google's button carries the nonce it was set up with, so each sign-in screen (and each
-// attempt) sets it up again with a fresh one.
+// Our own button opens Google's sign-in (lib/google.js); window.open must run inside the click,
+// so the nonce for the next attempt is ready before it, as with Apple.
+let googleNext = null;
+/** The attempt waiting for Google's answer in a popup: { raw, state }. */
 let googleAttempt = null;
+
 async function prepareGoogle() {
   if (!googleEnabled(GOOGLE_CLIENT_ID)) return;
+  els.googleButton.hidden = false;
   const raw = randomNonce();
-  const attempt = { raw, hashed: await sha256Hex(raw) };
-  googleAttempt = attempt;
-  whenGoogleLoaded((id) => {
-    if (googleAttempt !== attempt || els.signin.hidden) return;
-    id.initialize(googleInitOptions(GOOGLE_CLIENT_ID, attempt.hashed, (response) => signInWithGoogle(attempt, response)));
-    els.googleSignin.hidden = false;
-    els.googleSignin.replaceChildren();
-    id.renderButton(
-      els.googleSignin,
-      googleButtonOptions({ dark: matchMedia("(prefers-color-scheme: dark)").matches, width: els.googleSignin.clientWidth }),
-    );
-  });
+  googleNext = { raw, hashed: await sha256Hex(raw), random: randomNonce(16) };
 }
 
-async function signInWithGoogle(attempt, response) {
+function setSigningIn(busy) {
+  els.signinButton.disabled = busy;
+  els.googleButton.disabled = busy;
+}
+
+els.googleButton.addEventListener("click", () => {
   els.signinError.textContent = "";
-  const idToken = response?.credential;
-  if (!idToken) {
-    els.signinError.textContent = "تعذّر تسجيل الدخول بحساب قوقل. حاول مرة أخرى.";
+  const next = googleNext;
+  if (!next) {
+    els.signinError.textContent = "تعذّر بدء الدخول بحساب قوقل. حاول مرة أخرى.";
     return;
   }
-  els.signinButton.disabled = true;
+  prepareGoogle();
+  const authUrl = (mode) =>
+    googleAuthUrl({
+      clientId: GOOGLE_CLIENT_ID,
+      redirectUri: googleCallbackUrl(location.origin),
+      nonce: next.hashed,
+      state: googleState(mode, next.random),
+    });
+
+  googleAttempt = { raw: next.raw, state: googleState("popup", next.random) };
+  const popup = window.open(authUrl("popup"), "zimam-google", googlePopupFeatures());
+  if (popup) return;
+
+  // Popups blocked: the whole tab goes to Google and comes back to /app/ (takeGoogleRedirect).
+  googleAttempt = null;
   try {
-    const { token } = await api.signInWithGoogle(idToken, attempt.raw);
+    sessionStorage.setItem(GOOGLE_PENDING_KEY, JSON.stringify({ raw: next.raw, state: googleState("redirect", next.random) }));
+  } catch {
+    els.signinError.textContent = "اسمح بالنوافذ المنبثقة لهذا الموقع، ثم حاول مرة أخرى.";
+    return;
+  }
+  location.assign(authUrl("redirect"));
+});
+
+/** Google's answer from the popup, taken only for the attempt that opened it. */
+function receiveGoogleAnswer(answer) {
+  const attempt = googleAttempt;
+  if (!attempt || !googleStateMatches(attempt.state, answer.state)) return;
+  googleAttempt = null;
+  completeGoogle(answer, attempt.raw);
+}
+
+if ("BroadcastChannel" in window) {
+  new BroadcastChannel(GOOGLE_CHANNEL).addEventListener("message", (event) => {
+    if (event.data?.type === GOOGLE_MESSAGE_TYPE) receiveGoogleAnswer(event.data);
+  });
+}
+window.addEventListener("message", (event) => {
+  if (isGoogleMessage(event.data, event.origin, location.origin)) receiveGoogleAnswer(event.data);
+});
+
+/** After a whole-tab sign-in: the answer google-callback.js left, if it matches the attempt. */
+function takeGoogleRedirect() {
+  let pending = null;
+  let answer = null;
+  try {
+    pending = JSON.parse(sessionStorage.getItem(GOOGLE_PENDING_KEY) ?? "null");
+    answer = JSON.parse(sessionStorage.getItem(GOOGLE_RESULT_KEY) ?? "null");
+    sessionStorage.removeItem(GOOGLE_PENDING_KEY);
+    sessionStorage.removeItem(GOOGLE_RESULT_KEY);
+  } catch {
+    return null;
+  }
+  if (!pending || !answer || !googleStateMatches(pending.state, answer.state)) return null;
+  return { answer, raw: pending.raw };
+}
+
+async function completeGoogle(answer, raw) {
+  els.signinError.textContent = "";
+  if (answer.error) {
+    // access_denied is the user closing Google's chooser; nothing to say.
+    if (answer.error !== "access_denied") els.signinError.textContent = "تعذّر تسجيل الدخول بحساب قوقل. حاول مرة أخرى.";
+    return;
+  }
+  setSigningIn(true);
+  try {
+    const { token } = await api.signInWithGoogle(answer.idToken, raw);
     session.set(token);
     await start();
   } catch (error) {
     els.signinError.textContent = errorText(error);
-    prepareGoogle();
   } finally {
-    els.signinButton.disabled = false;
+    setSigningIn(false);
   }
 }
 
@@ -155,7 +228,7 @@ els.signinButton.addEventListener("click", async () => {
     els.signinError.textContent = "تعذّر تسجيل الدخول بحساب أبل. حاول مرة أخرى.";
     return;
   }
-  els.signinButton.disabled = true;
+  setSigningIn(true);
   try {
     const { token } = await api.signIn(idToken, attempt.raw);
     session.set(token);
@@ -163,7 +236,7 @@ els.signinButton.addEventListener("click", async () => {
   } catch (error) {
     els.signinError.textContent = errorText(error);
   } finally {
-    els.signinButton.disabled = false;
+    setSigningIn(false);
   }
 });
 
@@ -734,4 +807,11 @@ addDialog.form.addEventListener("submit", async (event) => {
   }
 });
 
-start();
+// Back from Google in this tab (popups were blocked): finish that sign-in first.
+const googleRedirect = takeGoogleRedirect();
+if (googleRedirect && !session.get()) {
+  showSignIn();
+  completeGoogle(googleRedirect.answer, googleRedirect.raw);
+} else {
+  start();
+}

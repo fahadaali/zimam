@@ -101,9 +101,10 @@ targets:
           - thmanyahserifdisplay-Bold.otf
           - thmanyahserifdisplay-Black.otf
         ATSApplicationFontsPath: .
-        # Prayer times are computed on the device from the location; it is never sent anywhere.
-        NSLocationWhenInUseUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، فتصلك المهام والتذكيرات المرتبطة بالصلاة في وقتها. يبقى الموقع على جهازك ولا يُرسل إلى أي خادم.
-        NSLocationUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، فتصلك المهام والتذكيرات المرتبطة بالصلاة في وقتها. يبقى الموقع على جهازك ولا يُرسل إلى أي خادم.
+        # Prayer times are computed on the device. Only the opt-in «أوقات الصلاة في كلود وChatGPT»
+        # (settings) keeps a city-level place (rounded to 0.1°) on the server; the text says so.
+        NSLocationWhenInUseUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، فتصلك المهام والتذكيرات المرتبطة بالصلاة في وقتها. يبقى الموقع على جهازك، إلا إن فعّلت أوقات الصلاة في كلود وChatGPT فيُحفظ في خادم زمام موقع تقريبي على مستوى المدينة.
+        NSLocationUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، فتصلك المهام والتذكيرات المرتبطة بالصلاة في وقتها. يبقى الموقع على جهازك، إلا إن فعّلت أوقات الصلاة في كلود وChatGPT فيُحفظ في خادم زمام موقع تقريبي على مستوى المدينة.
         ZimamAPIURL: $(ZIMAM_API_URL)
         # Sign in with Google reads its client from GIDClientID, and Google's sign-in page
         # returns to the reversed client ID scheme (handled by .onOpenURL in ZimamApp).

@@ -34,20 +34,82 @@
   inline-size: auto;
 }
 
-.signin-button {
-  inline-size: 100%;
+/* Sign in with Apple and with Google: our own buttons, one above the other, the same size, corners
+   and font. Their fills, strokes and text are Apple's and Google's (their branding guidelines), not
+   Zimam's, so they are the one place colours are written here rather than taken from tokens.css. */
+.signin-providers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  --apple-fill: #000000;
+  --apple-ink: #ffffff;
+  --apple-stroke: #000000;
+  --google-fill: #ffffff;
+  --google-ink: #1f1f1f;
+  --google-stroke: #747775;
 }
 
-/* Google's own button (its branding rules); the row keeps a 44px target and centres it. */
-.signin-google {
-  min-block-size: var(--space-11);
+[data-theme="dark"] .signin-providers {
+  --apple-fill: #ffffff;
+  --apple-ink: #000000;
+  --apple-stroke: #ffffff;
+  --google-fill: #131314;
+  --google-ink: #e3e3e3;
+  --google-stroke: #8e918f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .signin-providers {
+    --apple-fill: #ffffff;
+    --apple-ink: #000000;
+    --apple-stroke: #ffffff;
+    --google-fill: #131314;
+    --google-ink: #e3e3e3;
+    --google-stroke: #8e918f;
+  }
+}
+
+.provider-button {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-block-size: var(--space-11);
+  padding-block: var(--space-2);
+  padding-inline: var(--space-4);
+  border: 1px solid;
+  border-radius: var(--radius-md);
+  cursor: pointer;
 }
 
-.signin-google[hidden] {
-  display: none;
+.provider-apple {
+  background: var(--apple-fill);
+  color: var(--apple-ink);
+  border-color: var(--apple-stroke);
+}
+
+.provider-google {
+  background: var(--google-fill);
+  color: var(--google-ink);
+  border-color: var(--google-stroke);
+}
+
+.provider-logo {
+  inline-size: calc(var(--space-6) - var(--space-1));
+  block-size: calc(var(--space-6) - var(--space-1));
+  flex: none;
+}
+
+.provider-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Waiting for the server: the buttons keep their branding, dimmed, and cannot be pressed again. */
+.provider-button:disabled {
+  cursor: progress;
+  opacity: 0.6;
 }
 
 .signin-home {

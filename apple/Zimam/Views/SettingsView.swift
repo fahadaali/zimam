@@ -90,19 +90,7 @@ struct SettingsView: View {
                 }
             }
             .disabled(session.user == nil)
-            Button(locationButtonTitle, systemImage: "location") {
-                location.requestLocation()
-            }
-            .disabled(location.isLocating)
-            .frame(minHeight: ZimamSpacing.space11)
-            if location.isLocating {
-                ProgressView()
-            }
-            if let message = location.errorMessage {
-                Text(message)
-                    .font(ZimamType.caption)
-                    .foregroundStyle(ZimamColor.priorityHigh)
-            }
+            LocationRequestRows()
             if let schedule = location.schedule(method: settings.prayerMethod) {
                 PrayerTimesList(schedule: schedule)
             }
@@ -173,10 +161,6 @@ struct SettingsView: View {
 
     private var settings: User.Settings {
         session.user?.settings ?? User.Settings()
-    }
-
-    private var locationButtonTitle: String {
-        location.coordinate == nil ? "استعمال موقعي الحالي" : "تحديث موقعي"
     }
 
     private var calendarBinding: Binding<CalendarKind> {

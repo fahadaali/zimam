@@ -206,7 +206,21 @@ npx wrangler secret put APPLE_PRIVATE_KEY < AuthKey_XXXXXXXXXX.p8   # نص ال�
 | النوع | الإعداد | المعرّف |
 | --- | --- | --- |
 | iOS | Bundle ID: `app.zimam.ios` (يخدم الآيفون والآيباد والماك) | `404741015373-r3p4od9ko0qd99hocpg3r7gv1arju4ge.apps.googleusercontent.com` |
-| Web application | Authorized JavaScript origins: `https://zimam-web.fahad2ao.workers.dev` و`https://zimam-mcp.fahad2ao.workers.dev` (لا حاجة لـ Redirect URIs) | `404741015373-ukucah8482ofiuvd9lb4cn4pgqvnfm75.apps.googleusercontent.com` |
+| Web application | Authorized JavaScript origins: `https://zimam-web.fahad2ao.workers.dev` و`https://zimam-mcp.fahad2ao.workers.dev`، وAuthorized redirect URIs كما في الجدول التالي | `404741015373-ukucah8482ofiuvd9lb4cn4pgqvnfm75.apps.googleusercontent.com` |
+
+#### روابط العودة (Authorized redirect URIs) لعميل الويب
+
+> **خطوة جديدة لم تُنجز بعد:** بدونها يتوقف زر قوقل في الموقع وفي صفحة الربط.
+
+زر قوقل في الموقع وفي صفحة ربط كلود وChatGPT زرّنا نحن، يفتح صفحة الدخول من Google (`https://accounts.google.com/o/oauth2/v2/auth`، برمز هوية فقط) في نافذة منبثقة، أو في الصفحة نفسها إن مُنعت النوافذ المنبثقة، ثم يرجع Google إلى صفحة صغيرة في نطاقنا تسلّم الرمز. أضف هذين الرابطين حرفياً في **Clients ← عميل الويب ← Authorized redirect URIs**، وإلا رفض Google الدخول بالخطأ `redirect_uri_mismatch`:
+
+| الموضع | الرابط |
+| --- | --- |
+| الموقع (`web/public/app/google-callback.html`) | `https://zimam-web.fahad2ao.workers.dev/app/google-callback` |
+| صفحة ربط كلود وChatGPT (`mcp/src/consent.ts`، المسار `GET /google-callback`) | `https://zimam-mcp.fahad2ao.workers.dev/google-callback` |
+
+- الرابط بلا `.html` ولا شرطة في آخره، كما يبنيه الكود من أصل الصفحة.
+- قد يأخذ Google دقائق قليلة قبل أن يقبل الرابط الجديد.
 
 معرّف العميل ليس سراً، ولا يوجد سر عميل لهذين النوعين في هذا الاستعمال (الخادم يتحقق من رمز الهوية بمفاتيح Google العامة). إن أنشأ Google سراً لعميل الويب فلا ترسله ولا تضعه في أي مكان.
 
@@ -221,7 +235,7 @@ npx wrangler secret put APPLE_PRIVATE_KEY < AuthKey_XXXXXXXXXX.p8   # نص ال�
 
 - تفريغ أي قيمة يخفي زر قوقل في مكانها، وتفريغ `GOOGLE_CLIENT_IDS` يوقف `POST /v1/auth/google` (503).
 - جدول `identities` (`api/migrations/0008_identities.sql`) يطبّقه أمر النشر في Workers Builds تلقائياً، وينقل إليه كل حسابات أبل الحالية.
-- عند الانتقال إلى `zimam.app`: أضف `https://zimam.app` و`https://mcp.zimam.app` إلى Authorized JavaScript origins لعميل الويب.
+- عند الانتقال إلى `zimam.app`: أضف `https://zimam.app` و`https://mcp.zimam.app` إلى Authorized JavaScript origins لعميل الويب، و`https://zimam.app/app/google-callback` و`https://mcp.zimam.app/google-callback` إلى Authorized redirect URIs.
 - بعد تعديل `project.yml` شغّل `xcodegen`. أول بناء ينزّل حزمة GoogleSignIn-iOS (الإصدار 9.2.0 فما فوق ضمن 9.x).
 
 ## طريقة العمل بعد الربط
