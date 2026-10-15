@@ -1,24 +1,30 @@
 import { type Context, Hono } from "hono";
+import { z } from "zod";
 import { fail, readJson } from "../http";
-import { activeJob, failJob, type ImportDeps, importsFromEnv, insertJob } from "../imports/jobs";
+import { activeJob, failJob, getUserJob, type ImportDeps, importsFromEnv, insertJob, jobOut } from "../imports/jobs";
 import {
   callbackUrl,
+  createPending,
   exchangeCode,
+  findPending,
   isOAuthSource,
   oauthAvailable,
+  PROVIDERS,
   parseReturnTarget,
   returnUrl,
-  type StateRow,
   startAuthorization,
+  takePending,
   takeState,
   trelloToken,
 } from "../imports/oauth";
-import { hasProAccess, requirePro } from "../subscriptions/entitlements";
+import { hasProAccess, PRO_REQUIRED, requirePro } from "../subscriptions/entitlements";
 import type { AppEnv } from "../types";
 
 /**
- * Imports through OAuth (src/imports/oauth.ts), under /v1/imports/oauth. `start` is signed in;
- * the callbacks are public (app.ts lets them through): the single-use state names the user.
+ * Imports through OAuth (src/imports/oauth.ts), under /v1/imports/oauth. `start` and `confirm` are
+ * signed in; the callbacks are public (app.ts lets them through): the single-use state names the
+ * user. A callback starts nothing: the import starts at `confirm`, from the client the user is
+ * signed in to, and only for the user who started the flow.
  */
 export const importOAuth = new Hono<AppEnv>();
 
@@ -26,6 +32,9 @@ const deps = (c: Context<AppEnv>): ImportDeps => c.var.deps.imports?.(c.env) ?? 
 
 /** Paths `requireUser` skips: the providers come back here without a Zimam session. */
 export const isOAuthCallback = (path: string) => /^\/v1\/imports\/oauth\/[a-z-]+\/callback$/.test(path);
+
+/** Longest authorization code the callback keeps; providers' codes are far shorter. */
+const MAX_CODE_LENGTH = 2048;
 
 /**
  * GET /v1/imports/oauth/:source/start?return=app|<site origin> — `{ url, expiresAt }`: the
@@ -50,14 +59,16 @@ importOAuth.get("/:source/start", requirePro, async (c) => {
 });
 
 /**
- * GET /v1/imports/oauth/:source/callback?code&state — the provider returns here. Exchanges the
- * code, queues the import with the token, and redirects to the client with `job` or `error`
- * (`denied`, `provider_error`, `exchange_failed`, `pro_required`, `import_in_progress`,
- * `import_unavailable`). A state that is unknown, used or expired gets an Arabic page instead:
- * there is nowhere known to return to.
+ * GET /v1/imports/oauth/:source/callback?code&state — the provider returns here. Takes the state,
+ * keeps the code in a pending record for the state's user (10 minutes, single use), and redirects
+ * to the client with `pending` (`zimam://import-callback?pending=…`, `<site>/app/#/import?pending=…`),
+ * or with `error` (`denied`, `provider_error`). Nothing is exchanged or queued here: the signed-in
+ * client confirms first (POST /confirm below). A state that is unknown, used or expired gets an
+ * Arabic page instead: there is nowhere known to return to.
  *
  * Trello returns its token in the URL fragment, which never reaches a server: for Trello this
- * answers a page whose script posts the fragment's token to the POST below.
+ * answers a page whose script posts the state to the POST below and passes the token on to the
+ * client in the fragment.
  */
 importOAuth.get("/:source/callback", async (c) => {
   const source = c.req.param("source");
@@ -69,48 +80,100 @@ importOAuth.get("/:source/callback", async (c) => {
   const code = c.req.query("code");
   const error = c.req.query("error");
   if (error || !code) return redirect(c, returnUrl(row.return_to, { error: error === "access_denied" || !error ? "denied" : "provider_error" }));
-  let token: string;
-  try {
-    token = await exchangeCode(c.env, deps(c).fetch, source, { code, state, callback: callbackUrl(c.req.url, source) });
-  } catch (e) {
-    // The message names the source and the HTTP status only, never the code.
-    console.error(`import oauth: ${e instanceof Error ? e.message : "exchange failed"}`);
-    return redirect(c, returnUrl(row.return_to, { error: "exchange_failed" }));
-  }
-  return redirect(c, await startJob(c, row, token));
+  if (code.length > MAX_CODE_LENGTH) return redirect(c, returnUrl(row.return_to, { error: "provider_error" }));
+  const pending = await createPending(c.env.DB, row, { state, code });
+  return redirect(c, returnUrl(row.return_to, { pending, source: row.source }));
 });
 
-/** POST /v1/imports/oauth/trello/callback `{ state, token }` from the callback page — `{ redirect }`, or 400 `{ error }`. */
+/**
+ * POST /v1/imports/oauth/trello/callback `{ state, granted }` from Trello's callback page —
+ * `{ redirect, token? }`, or 400 `{ error }`. The token itself stays in the browser: when
+ * `token` is "fragment", the page adds it to the redirect's fragment for the client's confirm.
+ */
 importOAuth.post("/trello/callback", async (c) => {
-  const body = (await readJson(c)) as { state?: unknown; token?: unknown } | undefined;
+  const body = (await readJson(c)) as { state?: unknown; granted?: unknown } | undefined;
   const row = typeof body?.state === "string" ? await takeState(c.env.DB, body.state, "trello") : null;
   if (!row) return fail(c, 400, "expired", PAGE.expired);
   noStore(c);
-  if (body?.token === null || body?.token === undefined || body.token === "") {
-    return c.json({ redirect: returnUrl(row.return_to, { error: "denied" }) });
-  }
-  const credential = trelloToken(c.env, body.token);
-  if (!credential) return c.json({ redirect: returnUrl(row.return_to, { error: "exchange_failed" }) });
-  return c.json({ redirect: await startJob(c, row, credential) });
+  if (body?.granted !== true) return c.json({ redirect: returnUrl(row.return_to, { error: "denied" }) });
+  const pending = await createPending(c.env.DB, row, { state: body.state as string, code: null });
+  return c.json({ redirect: returnUrl(row.return_to, { pending, source: row.source }), token: "fragment" });
 });
 
-/** Queues the import for the state's user with the token in the first message, and says where to go next. */
-async function startJob(c: Context<AppEnv>, row: StateRow, token: string): Promise<string> {
+const ConfirmBody = z.object({
+  pending: z.string().min(1).max(200),
+  /** Trello only: the token its page passed to the client in the fragment. Never stored or logged. */
+  token: z.string().max(500).optional(),
+});
+
+const CONFIRM = {
+  notFound: "انتهت صلاحية الطلب أو لا يخص حسابك. ابدأ الاستيراد مرة أخرى من حسابك في زمام.",
+  expired: "انتهت صلاحية طلب الاستيراد أو استُعمل من قبل. ابدأ الاستيراد مرة أخرى.",
+  invalidToken: "لم يصل إذن Trello كاملاً. ابدأ الاستيراد مرة أخرى.",
+  exchangeFailed: "تعذّر إكمال الربط بالمصدر. ابدأ الاستيراد مرة أخرى.",
+};
+
+/**
+ * POST /v1/imports/oauth/confirm `{ pending, token? }` — signed in. Starts the import a returned
+ * flow is waiting for, once the user has seen which account receives it: exchanges the code (or
+ * takes Trello's token from the body), queues the job with the token in its first message only,
+ * and answers 202 `{ job }`. The record is taken once.
+ *
+ * 404 `not_found` when there is no such record or it is another user's (the same answer, so it
+ * says nothing about either), 410 `expired` once used or after 10 minutes, 400 `invalid` or
+ * `invalid_token` (Trello), 403 `pro_required`, 409 `import_in_progress`, 502 `exchange_failed`,
+ * 503 `import_unavailable`. Refusals before the record is taken (400, 403, 409) leave it for a retry.
+ */
+importOAuth.post("/confirm", async (c) => {
+  noStore(c);
+  const body = ConfirmBody.safeParse(await readJson(c));
+  if (!body.success) return fail(c, 400, "invalid", "pending is required");
   const db = c.env.DB;
-  if (!(await hasProAccess(c.env, row.user_id))) return returnUrl(row.return_to, { error: "pro_required" });
-  if (await activeJob(db, row.user_id)) return returnUrl(row.return_to, { error: "import_in_progress" });
+  const userId = c.var.userId;
+  const found = await findPending(db, body.data.pending, userId);
+  if (found.kind === "not_found") return fail(c, 404, "not_found", CONFIRM.notFound);
+  if (found.kind === "gone") return fail(c, 410, "expired", CONFIRM.expired);
+  const { row } = found;
+  const provider = PROVIDERS[row.source];
+
+  let token: string | null = null;
+  if (provider.flow === "trello") {
+    token = trelloToken(c.env, body.data.token);
+    if (!token) return fail(c, 400, "invalid_token", CONFIRM.invalidToken);
+  } else if (!row.code) {
+    return fail(c, 410, "expired", CONFIRM.expired);
+  }
+  if (!(await hasProAccess(c.env, userId))) return fail(c, 403, PRO_REQUIRED.code, PRO_REQUIRED.message);
+  if (await activeJob(db, userId)) return fail(c, 409, "import_in_progress", "Another import is still running");
+  if (!(await takePending(db, row))) return fail(c, 410, "expired", CONFIRM.expired);
+
+  if (!token) {
+    try {
+      token = await exchangeCode(c.env, deps(c).fetch, row.source, {
+        code: row.code!,
+        verifier: row.code_verifier,
+        callback: callbackUrl(c.req.url, row.source),
+      });
+    } catch (e) {
+      // The message names the source and the HTTP status only, never the code.
+      console.error(`import oauth: ${e instanceof Error ? e.message : "exchange failed"}`);
+      return fail(c, 502, "exchange_failed", CONFIRM.exchangeFailed);
+    }
+  }
+
   const { enqueue, files } = deps(c);
   const id = crypto.randomUUID();
-  await insertJob(db, { id, userId: row.user_id, source: row.source, fileName: null, fileSize: null, fileKey: null });
+  await insertJob(db, { id, userId, source: row.source, fileName: null, fileSize: null, fileKey: null });
   try {
     await enqueue({ jobId: id, cursor: 0, token });
   } catch (error) {
     console.error(`import ${id}: enqueue failed: ${error instanceof Error ? error.name : "error"}`);
     await failJob(db, files, id, "unavailable", "تعذّر بدء الاستيراد الآن. أعد المحاولة بعد قليل.");
-    return returnUrl(row.return_to, { error: "import_unavailable" });
+    return fail(c, 503, "import_unavailable", "Could not start the import");
   }
-  return returnUrl(row.return_to, { job: id });
-}
+  const job = await getUserJob(db, userId, id);
+  return c.json({ job: jobOut(job!) }, 202);
+});
 
 // MARK: Responses
 
@@ -166,19 +229,28 @@ ${script && nonce ? `<script nonce="${nonce}">${script}</script>` : ""}
 }
 
 /**
- * Trello's return page: reads the token from the fragment, removes it from the address bar,
- * and posts it with the state to this same path, then follows the answer.
+ * Trello's return page: reads the token from the fragment and removes it from the address bar,
+ * posts only the state (and whether a token came) to this same path, then follows the answer,
+ * carrying the token on in the redirect's fragment: `zimam://import-callback?pending=…#token=…`
+ * or `<site>/app/#/import?pending=…&token=…`. The token never reaches the server before the
+ * client's confirm, and never travels in a query.
  */
-function trelloPage(c: Context<AppEnv>) {
-  const script = `(() => {
+export const TRELLO_PAGE_SCRIPT = `(() => {
   const state = new URLSearchParams(location.search).get("state") || "";
   const token = new URLSearchParams(location.hash.slice(1)).get("token");
   history.replaceState(null, "", location.pathname);
   const show = (text) => { document.getElementById("message").textContent = text; };
-  fetch(location.pathname, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state, token }) })
+  fetch(location.pathname, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state, granted: !!token }) })
     .then((r) => r.json())
-    .then((b) => { if (b && typeof b.redirect === "string") location.replace(b.redirect); else show(${JSON.stringify(PAGE.expired)}); })
+    .then((b) => {
+      if (!b || typeof b.redirect !== "string") return show(${JSON.stringify(PAGE.expired)});
+      let next = b.redirect;
+      if (b.token === "fragment" && token) next += (next.includes("#") ? "&" : "#") + "token=" + encodeURIComponent(token);
+      location.replace(next);
+    })
     .catch(() => show(${JSON.stringify(PAGE.failed)}));
 })();`;
-  return page(c, 200, PAGE.working, script);
+
+function trelloPage(c: Context<AppEnv>) {
+  return page(c, 200, PAGE.working, TRELLO_PAGE_SCRIPT);
 }

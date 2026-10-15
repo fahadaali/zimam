@@ -20,7 +20,7 @@ import { randomNonce, sha256Hex } from "./lib/nonce.js";
 import { arabicNumber, parseDigits } from "./lib/numbers.js";
 import { prayerPhrase } from "./lib/prayer.js";
 import { createRealtime, realtimeUrl } from "./lib/realtime.js";
-import { viewImport } from "./import-view.js";
+import { hasPendingImport, rememberPendingImport, viewImport } from "./import-view.js";
 import { showAttachments } from "./attachments-view.js";
 import { rememberPendingJoin, takePendingJoin, viewJoin } from "./invite-view.js";
 import { PRIORITY_WORDS, groupByDay, isOpen, priorityKey, progressText, splitToday, taskCount } from "./lib/tasks.js";
@@ -53,6 +53,7 @@ const els = {
   signinError: $("signin-error"),
   googleButton: $("google-button"),
   signinInvite: $("signin-invite"),
+  signinImport: $("signin-import"),
   shell: $("shell"),
   view: $("view"),
   main: $("main"),
@@ -130,6 +131,9 @@ function showSignIn(message = "") {
   const route = parseRoute();
   els.signinInvite.hidden = route.name !== "join";
   if (route.name === "join") rememberPendingJoin(route.code);
+  // Back from an import provider's page while signed out: sign in first; the import view then asks
+  // which account receives the data, and the server refuses a flow another account started.
+  els.signinImport.hidden = !(route.name === "import" && (rememberPendingImport() || hasPendingImport()));
   prepareNonce();
   prepareGoogle();
 }
@@ -323,6 +327,8 @@ async function start() {
   // Back from a sign-in that lost the hash (Google's whole-tab flow): return to the invite.
   const pendingJoin = takePendingJoin();
   if (pendingJoin && parseRoute().name !== "join") history.replaceState(null, "", pendingJoin);
+  // The same for an import provider's return, kept in this tab by rememberPendingImport().
+  else if (hasPendingImport() && parseRoute().name !== "import") history.replaceState(null, "", `${location.pathname}${location.search}#/import`);
   render({ focus: false });
   live.start();
 }
@@ -412,7 +418,7 @@ const VIEWS = {
   calendar: () => viewCalendar(featureContext()),
   timeline: () => viewTimeline(featureContext()),
   matrix: () => viewMatrix(featureContext()),
-  import: () => viewImport({ primary: primary(), today: state.today, announce, onImported: refreshProjects }),
+  import: () => viewImport({ primary: primary(), today: state.today, me: state.me, announce, onImported: refreshProjects }),
   join: ({ code }) =>
     viewJoin({
       code,

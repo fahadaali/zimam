@@ -158,7 +158,7 @@ targets:
             CFBundleURLSchemes:
               - $(GOOGLE_REVERSED_CLIENT_ID)
           # «فتح في التطبيق» on the web join page: zimam://join/<code> (App/InviteLinks.swift), and the
-          # import OAuth callback zimam://import-callback?job=<id> (Import/ImportSourceView.swift, ImportLinks.swift).
+          # import OAuth callback zimam://import-callback?pending=<id> (Import/ImportSourceView.swift, ImportLinks.swift).
           - CFBundleURLName: app.zimam.ios.invite
             CFBundleURLSchemes:
               - zimam

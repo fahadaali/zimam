@@ -30,15 +30,34 @@ final class ImportsTests: XCTestCase {
     }
 
     func testReadsTheOAuthCallback() throws {
-        let id = "0B9C6F8E-6F2C-4A4E-9A51-1D2C3B4A5E6F"
-        XCTAssertEqual(ImportCallback(url: try XCTUnwrap(URL(string: "zimam://import-callback?job=\(id)"))), .job(id.lowercased()))
+        let id = "Zk3_q-8vXc1Lr0aT9yUeWb2NpHs4MdFg7jK6oQiAxYz"
+        XCTAssertEqual(ImportCallback(url: try XCTUnwrap(URL(string: "zimam://import-callback?pending=\(id)&source=notion"))),
+                       .pending(ImportCallback.Pending(id: id, source: "notion", token: nil)))
+        // Trello's token comes in the fragment, never the query.
+        let trello = "ATTA0123456789abcdef0123456789abcdef"
+        XCTAssertEqual(ImportCallback(url: try XCTUnwrap(URL(string: "zimam://import-callback?pending=\(id)&source=trello#token=\(trello)"))),
+                       .pending(ImportCallback.Pending(id: id, source: "trello", token: trello)))
+        XCTAssertEqual(ImportCallback(url: try XCTUnwrap(URL(string: "zimam://import-callback?pending=\(id)&source=Not%20One"))),
+                       .pending(ImportCallback.Pending(id: id, source: nil, token: nil)))
         XCTAssertEqual(ImportCallback(url: try XCTUnwrap(URL(string: "zimam://import-callback?error=denied"))), .failure("denied"))
-        XCTAssertNil(ImportCallback(url: try XCTUnwrap(URL(string: "zimam://import-callback?job=nope"))))
+        XCTAssertNil(ImportCallback(url: try XCTUnwrap(URL(string: "zimam://import-callback?pending=short"))))
+        // A job id in the link starts nothing: only the server's confirm does.
+        XCTAssertNil(ImportCallback(url: try XCTUnwrap(URL(string: "zimam://import-callback?job=0b9c6f8e-6f2c-4a4e-9a51-1d2c3b4a5e6f"))))
         XCTAssertNil(ImportCallback(url: try XCTUnwrap(URL(string: "zimam://join/ABC"))))
-        XCTAssertNil(ImportCallback(url: try XCTUnwrap(URL(string: "https://example.com/import-callback?job=\(id)"))))
+        XCTAssertNil(ImportCallback(url: try XCTUnwrap(URL(string: "https://example.com/import-callback?pending=\(id)"))))
         XCTAssertEqual(ImportText.connect(ImportSource(id: "notion", label: "Notion", input: .oauth)), "الربط بـ Notion")
         XCTAssertTrue(ImportText.oauthMessage("denied").hasPrefix("لم يكتمل الإذن"))
         XCTAssertEqual(ImportText.title(forSource: "ticktick-api", label: "TickTick"), "TickTick: الربط بالحساب")
+    }
+
+    func testAsksBeforeImportingIntoTheSignedInAccount() {
+        let account = ImportText.accountLabel(name: "فهد", email: "fahad@example.com")
+        XCTAssertEqual(account, "فهد، fahad@example.com")
+        XCTAssertEqual(ImportText.accountLabel(name: " ", email: nil), nil)
+        XCTAssertEqual(ImportText.confirmQuestion(source: "notion", account: account), "استيراد بيانات Notion إلى حسابك فهد، fahad@example.com؟")
+        XCTAssertEqual(ImportText.confirmQuestion(source: nil, account: nil), "استيراد البيانات إلى حسابك؟")
+        XCTAssertTrue(ImportText.confirmMessage(for: APIError(status: 404, code: "not_found", message: "")).contains("لا يخص حسابك"))
+        XCTAssertTrue(ImportText.confirmMessage(for: APIError(status: 410, code: "expired", message: "")).contains("استُعمل من قبل"))
     }
 
     func testDecodesAJobWithCountsWarningsAndErrors() throws {

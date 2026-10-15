@@ -11,16 +11,32 @@ import { trelloCredential } from "./sources/trello";
  *    where to return, for 15 minutes, and answers the provider's authorization URL.
  * 2. The user agrees on the provider's page, which returns to
  *    `/v1/imports/oauth/:source/callback?code&state` (public: the state names the user).
- * 3. The callback takes the state (single use), exchanges the code with the client secret, puts
- *    the access token in the job's first queue message (never stored or logged), and redirects
- *    to the app (`zimam://import-callback?job=…`) or the site (`/app/#/import?job=…`).
+ * 3. The callback takes the state (single use) and keeps the code in a pending record
+ *    (`import_oauth_pending`, 10 minutes, single use) bound to the state's user and source. It
+ *    exchanges nothing and starts nothing: it redirects to the app
+ *    (`zimam://import-callback?pending=…`) or the site (`/app/#/import?pending=…`).
+ * 4. The signed-in client shows which account will receive the data and, once the user agrees,
+ *    sends `POST /v1/imports/oauth/confirm { pending }`. Only the user who started the flow can
+ *    confirm (anyone else gets 404). The server then exchanges the code with the client secret
+ *    and puts the access token in the job's first queue message (never stored or logged).
+ *
+ * The confirm step stops login CSRF: someone who starts a flow on their own account and sends the
+ * provider's link to another person cannot receive that person's data, because the pending id
+ * goes only to the browser that consented, which is signed in as its own user, or not at all.
+ *
+ * Trello returns its token in the URL fragment: its callback page sends the server only the state,
+ * and passes the token on to the client in the fragment (never the query); the client sends it in
+ * the confirm's body.
  *
  * PKCE (S256) where the provider supports it: the verifier is derived from the state, so it is
- * stored nowhere and only the request holding the state can present it.
+ * stored nowhere until the callback, which keeps it beside the code for the confirm's exchange.
  */
 
 /** How long a started flow can wait for the provider's callback. */
 export const STATE_TTL_MS = 15 * 60_000;
+
+/** How long a returned flow waits for the client's confirmation. */
+export const PENDING_TTL_MS = 10 * 60_000;
 
 /** The app's callback; ASWebAuthenticationSession listens for this scheme. */
 export const APP_RETURN = "zimam://import-callback";
@@ -147,9 +163,14 @@ export function parseReturnTarget(value: string | undefined, allowedOrigins: str
   return origins.includes(value) ? value : null;
 }
 
-/** The URL a finished (or failed) flow sends the user to. */
-export function returnUrl(target: string, result: { job: string } | { error: string }): string {
-  const query = new URLSearchParams("job" in result ? { job: result.job } : { error: result.error }).toString();
+/**
+ * The URL a returned (or failed) flow sends the user to: `pending` and `source` (for the client's
+ * question «استيراد بيانات <المصدر>…؟»), or `error`, in the app's query, or in the site's route,
+ * which is itself in the fragment. Trello's token, when there is one, is added to the fragment by
+ * its callback page in the browser, never to the query.
+ */
+export function returnUrl(target: string, result: { pending: string; source: OAuthSourceId } | { error: string }): string {
+  const query = new URLSearchParams("pending" in result ? { pending: result.pending, source: result.source } : { error: result.error }).toString();
   return target === "app" ? `${APP_RETURN}?${query}` : `${target}/app/#/import?${query}`;
 }
 
@@ -189,6 +210,7 @@ export async function startAuthorization(
   const expiresAt = now + STATE_TTL_MS;
   await db.batch([
     db.prepare(`DELETE FROM import_oauth_states WHERE expires_at < ?`).bind(now),
+    sweepPending(db, now),
     db
       .prepare(`INSERT INTO import_oauth_states (state_hash, user_id, source, return_to, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`)
       .bind(await sha256Hex(state), o.userId, o.source, o.returnTo, now, expiresAt),
@@ -231,6 +253,80 @@ export async function takeState(db: D1Database, state: string, source: OAuthSour
   return row;
 }
 
+// MARK: The pending record between the callback and the confirm
+
+export interface PendingRow {
+  pending_hash: string;
+  user_id: string;
+  source: OAuthSourceId;
+  /** The authorization code until the confirm; null for Trello, and once used. */
+  code: string | null;
+  code_verifier: string | null;
+  created_at: number;
+  expires_at: number;
+  used_at: number | null;
+}
+
+/** Deletes used and expired pending records: a used one only answers 410 until its time is up. */
+const sweepPending = (db: D1Database, now: number) => db.prepare(`DELETE FROM import_oauth_pending WHERE expires_at < ?`).bind(now);
+
+/**
+ * At the callback: keeps what the confirm needs for the state's user and source (the code and its
+ * PKCE verifier; nothing for Trello), and returns the random pending id for the client. Only its
+ * SHA-256 is stored.
+ */
+export async function createPending(
+  db: D1Database,
+  row: Pick<StateRow, "user_id" | "source">,
+  o: { state: string; code: string | null },
+  now = Date.now(),
+): Promise<string> {
+  const provider = PROVIDERS[row.source];
+  const verifier = provider.flow === "code" && provider.pkce && o.code ? await pkceVerifier(o.state) : null;
+  const pending = randomToken();
+  await db.batch([
+    sweepPending(db, now),
+    db
+      .prepare(
+        `INSERT INTO import_oauth_pending (pending_hash, user_id, source, code, code_verifier, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(await sha256Hex(pending), row.user_id, row.source, o.code, verifier, now, now + PENDING_TTL_MS),
+  ]);
+  return pending;
+}
+
+/**
+ * The user's pending record, without taking it. `not_found` when there is none or it is another
+ * user's (the two look the same), `gone` when it was used or has expired.
+ */
+export async function findPending(
+  db: D1Database,
+  pending: string,
+  userId: string,
+  now = Date.now(),
+): Promise<{ kind: "ok"; row: PendingRow } | { kind: "not_found" } | { kind: "gone" }> {
+  if (!pending || pending.length > 200) return { kind: "not_found" };
+  const row = await db.prepare(`SELECT * FROM import_oauth_pending WHERE pending_hash = ?`).bind(await sha256Hex(pending)).first<PendingRow>();
+  if (!row || row.user_id !== userId) return { kind: "not_found" };
+  if (row.used_at !== null || row.expires_at < now) return { kind: "gone" };
+  return { kind: "ok", row };
+}
+
+/**
+ * Takes the record, once: marks it used and clears the code and verifier in the same statement.
+ * False when another request took it first or it expired meanwhile.
+ */
+export async function takePending(db: D1Database, row: PendingRow, now = Date.now()): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `UPDATE import_oauth_pending SET used_at = ?3, code = NULL, code_verifier = NULL
+       WHERE pending_hash = ?1 AND user_id = ?2 AND used_at IS NULL AND expires_at >= ?3`,
+    )
+    .bind(row.pending_hash, row.user_id, now)
+    .run();
+  return result.meta.changes > 0;
+}
+
 /** The token endpoint refused or failed. The message names the source and the HTTP status only. */
 export class OAuthExchangeError extends Error {
   constructor(message: string) {
@@ -239,12 +335,15 @@ export class OAuthExchangeError extends Error {
   }
 }
 
-/** Exchanges an authorization code for the access token. The refresh token, if any, is dropped. */
+/**
+ * Exchanges an authorization code (from the pending record, with its PKCE verifier) for the access
+ * token. The refresh token, if any, is dropped.
+ */
 export async function exchangeCode(
   env: Env,
   fetcher: typeof fetch,
   source: OAuthSourceId,
-  o: { code: string; state: string; callback: string },
+  o: { code: string; verifier: string | null; callback: string },
 ): Promise<string> {
   const provider = PROVIDERS[source];
   if (provider.flow !== "code") throw new OAuthExchangeError(`${source}: no code flow`);
@@ -255,7 +354,10 @@ export async function exchangeCode(
     redirect_uri: o.callback,
     ...(provider.tokenParams ?? {}),
   };
-  if (provider.pkce) fields.code_verifier = await pkceVerifier(o.state);
+  if (provider.pkce) {
+    if (!o.verifier) throw new OAuthExchangeError(`${source}: no PKCE verifier`);
+    fields.code_verifier = o.verifier;
+  }
   const headers: Record<string, string> = { Accept: "application/json" };
   if (provider.clientAuth === "basic") {
     headers.Authorization = `Basic ${btoa(`${clientId!.trim()}:${clientSecret!.trim()}`)}`;

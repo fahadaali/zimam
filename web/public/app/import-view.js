@@ -2,16 +2,24 @@
 // flows) Google Calendar, Microsoft To Do, Notion, Trello, Asana and TickTick into Zimam.
 // The server does the work (POST /v1/imports, then its queue); this view uploads the file or sends
 // the token once, or opens the provider's page in this tab (the server's callback returns to
-// #/import?job=<id>), follows the job until it ends, and lists the latest imports.
+// #/import?pending=<id>&source=<id>, and asks here «استيراد بيانات … إلى حسابك …؟» before
+// POST /v1/imports/oauth/confirm starts anything), follows the job until it ends, and lists the
+// latest imports.
 // Plain DOM through h() and textContent; nothing here parses HTML.
 import { request } from "./lib/api.js";
 import { Button, h } from "./lib/components.js";
 import {
+  CONFIRM_NOTE,
   DEFAULT_MAX_BYTES,
+  OAUTH_CONFIRM_PATH,
+  PENDING_IMPORT_KEY,
   TODOIST_TOKEN_URL,
   acceptList,
+  accountLabel,
   checkFile,
   checkToken,
+  confirmErrorText,
+  confirmQuestion,
   connectLabel,
   countRows,
   extensionsText,
@@ -27,10 +35,12 @@ import {
   oauthStartPath,
   progressPercent,
   progressText,
+  readStoredPending,
   sourceHowTo,
   sourceSubtitle,
   sourceTitle,
   statusText,
+  storedPending,
   summaryText,
   usableSources,
 } from "./lib/imports.js";
@@ -48,13 +58,57 @@ const importsApi = {
   },
   startWithToken: (source, token) => request("POST", "/v1/imports", { source, token }),
   oauthStart: (source) => request("GET", oauthStartPath(source, location.origin)),
+  // Trello's token (from the fragment) is sent once, here, and kept nowhere.
+  oauthConfirm: (pending, token) => request("POST", OAUTH_CONFIRM_PATH, token ? { pending, token } : { pending }),
 };
+
+/** The route without the provider's return in it: a reload or a shared link does not carry it. */
+function clearReturnFromAddress() {
+  window.history.replaceState(null, "", `${location.pathname}${location.search}#/import`);
+}
+
+/**
+ * Before sign-in (main.js): keeps a provider's return (#/import?pending=…) for after it, in this
+ * tab only, and clears it from the address bar. Google's sign-in leaves the page, losing the hash.
+ * True when there was one.
+ */
+export function rememberPendingImport() {
+  const back = oauthReturn(location.hash);
+  if (!back?.pending) return false;
+  try {
+    sessionStorage.setItem(PENDING_IMPORT_KEY, storedPending(back));
+    clearReturnFromAddress();
+  } catch {
+    /* storage blocked: the hash still carries it through Apple's popup */
+  }
+  return true;
+}
+
+/** After sign-in: whether a kept return waits, so main.js opens #/import. */
+export function hasPendingImport() {
+  try {
+    return readStoredPending(sessionStorage.getItem(PENDING_IMPORT_KEY)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** The kept return, once. */
+function takePendingImport() {
+  try {
+    const text = sessionStorage.getItem(PENDING_IMPORT_KEY);
+    sessionStorage.removeItem(PENDING_IMPORT_KEY);
+    return readStoredPending(text);
+  } catch {
+    return null;
+  }
+}
 
 /** Each render starts a new generation; a poll from an older one stops. */
 let generation = 0;
 
 /**
- * The view. `ctx`: { primary, today, announce(text), onImported() } from main.js.
+ * The view. `ctx`: { primary, today, me, announce(text), onImported() } from main.js.
  * Returns its nodes, like the other views.
  */
 export async function viewImport(ctx) {
@@ -377,31 +431,81 @@ export async function viewImport(ctx) {
     );
   }
 
-  showSource();
-  renderHistory();
-  // Back from a provider's page: #/import?job=<id> or ?error=<code>. The route drops them at once,
-  // so a reload does not show them again.
-  const back = oauthReturn(location.hash);
-  if (back) {
-    window.history.replaceState(null, "", `${location.pathname}${location.search}#/import`);
-    if (back.error) formError.textContent = oauthErrorText(back.error);
+  // ——— Back from a provider's page ———
+
+  /**
+   * «استيراد بيانات Notion إلى حسابك فهد؟» with «استيراد» and «إلغاء»; true for «استيراد».
+   * A provider link someone else started ends here in the account this browser is signed in to,
+   * and the server refuses it (404), so the question is what makes the person look.
+   */
+  function askToConfirm(back) {
+    let dialog = document.getElementById("import-confirm");
+    if (!dialog) {
+      dialog = h("dialog", { className: "sheet", id: "import-confirm", "aria-labelledby": "import-confirm-title", "aria-describedby": "import-confirm-text" });
+      document.body.append(dialog);
+    }
+    const yes = Button({ variant: "primary" }, "استيراد");
+    const no = Button({ variant: "quiet" }, "إلغاء");
+    dialog.replaceChildren(
+      h(
+        "div",
+        { className: "sheet-form" },
+        h("h2", { className: "title", id: "import-confirm-title" }, confirmQuestion(back.source, accountLabel(ctx.me))),
+        h("p", { className: "callout", id: "import-confirm-text" }, CONFIRM_NOTE),
+        h("div", { className: "sheet-actions" }, yes, no),
+      ),
+    );
+    return new Promise((resolve) => {
+      let answer = false;
+      yes.addEventListener("click", () => {
+        answer = true;
+        dialog.close();
+      });
+      no.addEventListener("click", () => dialog.close());
+      dialog.addEventListener("close", () => resolve(answer), { once: true });
+      dialog.showModal();
+      no.focus();
+    });
   }
-  let returned = null;
-  if (back?.job) {
-    returned = history.find((j) => j.id === back.job) ?? null;
-    if (!returned) {
-      try {
-        returned = (await importsApi.job(back.job)).job;
-        history = [returned, ...history];
-        renderHistory();
-      } catch {
-        returned = null;
+
+  async function confirmReturned(back) {
+    if (!(await askToConfirm(back))) {
+      formError.textContent = "لم يبدأ الاستيراد.";
+      return;
+    }
+    submit.disabled = true;
+    try {
+      const { job } = await importsApi.oauthConfirm(back.pending, back.token);
+      history = [job, ...history.filter((j) => j.id !== job.id)];
+      renderHistory();
+      follow(job, { focus: true });
+    } catch (error) {
+      if (error.status === 401) return; // main.js shows sign-in
+      formError.textContent = confirmErrorText(error);
+      if (error.code === "import_in_progress") {
+        runningJob = await findRunning();
+        followRunning.hidden = !runningJob;
       }
+    } finally {
+      submit.disabled = false;
     }
   }
-  // The import just started there, or one still running (started here earlier, or in the app), is followed at once.
-  const running = returned ?? history.find((j) => !isFinished(j));
-  if (running) queueMicrotask(() => follow(running, { focus: running === returned }));
+
+  showSource();
+  renderHistory();
+  // Back from a provider's page: #/import?pending=<id>&source=<id> (and Trello's &token=…), or
+  // ?error=<code>; or the same kept through sign-in. The route drops them at once, so a reload or
+  // a copied address does not carry them.
+  const inAddress = oauthReturn(location.hash);
+  if (inAddress) clearReturnFromAddress();
+  const kept = takePendingImport();
+  const back = inAddress ?? kept;
+  if (back?.error) formError.textContent = oauthErrorText(back.error);
+  // After main.js has shown the view: the question is a modal dialog over it.
+  if (back?.pending) setTimeout(() => confirmReturned(back), 0);
+  // One still running (started here earlier, or in the app) is followed at once.
+  const running = history.find((j) => !isFinished(j));
+  if (running) queueMicrotask(() => follow(running, { focus: false }));
 
   return [header, panel, sourceSection, historySection];
 }

@@ -56,12 +56,29 @@ public struct ImportSource: Decodable, Equatable, Hashable, Identifiable, Sendab
     }
 }
 
-/// Where the server's OAuth callback returns: `zimam://import-callback?job=<id>` once the import is
-/// queued, or `?error=<code>` when it is not (`denied`, `provider_error`, `exchange_failed`,
-/// `pro_required`, `import_in_progress`, `import_unavailable`).
+/// Where the server's OAuth callback returns: `zimam://import-callback?pending=<id>&source=<id>`
+/// when the provider agreed, or `?error=<code>` when it did not (`denied`, `provider_error`).
+/// Nothing has started yet: the app asks whether to import into the signed-in account
+/// («استيراد بيانات <المصدر> إلى حسابك …؟») and only then confirms (`APIClient.confirmOAuthImport`).
+/// Trello's token comes in the fragment (`#token=…`), never the query, and goes back in the confirm.
 public enum ImportCallback: Equatable, Sendable {
-    case job(String)
+    case pending(Pending)
     case failure(String)
+
+    public struct Pending: Equatable, Sendable {
+        /// The server's random id for the waiting import; single use, ten minutes.
+        public let id: String
+        /// The source's id ("notion"), for the question; nil from a server that does not send it.
+        public let source: String?
+        /// Trello's token from the fragment; nil for the other sources.
+        public let token: String?
+
+        public init(id: String, source: String? = nil, token: String? = nil) {
+            self.id = id
+            self.source = source
+            self.token = token
+        }
+    }
 
     /// The scheme ASWebAuthenticationSession waits for; the app's own (`ZimamWeb.appScheme`).
     public static let scheme = ZimamWeb.appScheme
@@ -70,9 +87,12 @@ public enum ImportCallback: Equatable, Sendable {
     /// Reads the callback; nil for any other URL.
     public init?(url: URL) {
         guard url.scheme?.lowercased() == Self.scheme, url.host?.lowercased() == Self.host,
-              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return nil }
-        if let job = items.first(where: { $0.name == "job" })?.value, Self.isJobId(job) {
-            self = .job(job.lowercased())
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let items = components.queryItems else { return nil }
+        if let id = items.first(where: { $0.name == "pending" })?.value, Self.isPendingId(id) {
+            let rawSource: String? = items.first(where: { $0.name == "source" })?.value
+            let source: String? = rawSource.flatMap { Self.isSourceId($0) ? $0 : nil }
+            self = .pending(Pending(id: id, source: source, token: Self.fragmentToken(components.percentEncodedFragment)))
         } else if let code = items.first(where: { $0.name == "error" })?.value, !code.isEmpty {
             self = .failure(code)
         } else {
@@ -80,9 +100,22 @@ public enum ImportCallback: Equatable, Sendable {
         }
     }
 
-    /// A UUID as the server writes it: 36 characters of hex digits and hyphens.
-    static func isJobId(_ text: String) -> Bool {
-        text.count == 36 && text.allSatisfy { $0 == "-" || $0.isHexDigit }
+    /// The server's pending id: base64url, 43 characters today.
+    static func isPendingId(_ text: String) -> Bool {
+        (20...200).contains(text.count) && text.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
+    }
+
+    static func isSourceId(_ text: String) -> Bool {
+        (1...40).contains(text.count) && text.allSatisfy { $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "-") }
+    }
+
+    /// `token=…` in the fragment (Trello), percent-decoded.
+    static func fragmentToken(_ fragment: String?) -> String? {
+        guard let fragment, !fragment.isEmpty,
+              let items = URLComponents(string: "zimam://x?\(fragment)")?.queryItems,
+              let token = items.first(where: { $0.name == "token" })?.value,
+              (1...500).contains(token.count) else { return nil }
+        return token
     }
 }
 
@@ -483,6 +516,54 @@ public enum ImportText {
             return "تعذّر بدء الاستيراد الآن. أعد المحاولة بعد قليل."
         default:
             return "تعذّر إكمال الربط بالمصدر. ابدأ الاستيراد مرة أخرى."
+        }
+    }
+
+    /// The provider's name in the confirmation, from the source id the callback carried.
+    public static func providerName(forSource id: String?) -> String? {
+        switch id ?? "" {
+        case "google-calendar": return "Google Calendar"
+        case "microsoft-todo": return "Microsoft To Do"
+        case "notion": return "Notion"
+        case "trello": return "Trello"
+        case "asana": return "Asana"
+        case "ticktick-api": return "TickTick"
+        default: return nil
+        }
+    }
+
+    /// The signed-in account as the confirmation names it: «فهد، fahad@example.com», or either alone.
+    public static func accountLabel(name: String?, email: String?) -> String? {
+        let parts = [name, email]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: "، ")
+    }
+
+    /// The question before an OAuth import starts: «استيراد بيانات Notion إلى حسابك فهد؟».
+    /// It names the account the data will go to, so data never lands in an account the user
+    /// does not recognise (a provider link someone else started).
+    public static func confirmQuestion(source: String?, account: String?) -> String {
+        let what = providerName(forSource: source).map { "بيانات \($0)" } ?? "البيانات"
+        guard let account else { return "استيراد \(what) إلى حسابك؟" }
+        return "استيراد \(what) إلى حسابك \(account)؟"
+    }
+
+    /// Under the question.
+    public static let confirmNote = "تأكّد أن هذا حسابك. إن لم تبدأ هذا الاستيراد بنفسك من زمام فاختر «إلغاء»."
+
+    /// Arabic text for a refused `POST /v1/imports/oauth/confirm`.
+    public static func confirmMessage(for error: Error) -> String {
+        let code = (error as? APIError)?.code ?? ""
+        switch code {
+        case "not_found":
+            return "انتهت صلاحية الطلب أو لا يخص حسابك. ابدأ الاستيراد مرة أخرى من حسابك في زمام."
+        case "expired":
+            return "انتهت صلاحية طلب الاستيراد أو استُعمل من قبل. ابدأ الاستيراد مرة أخرى."
+        case "invalid_token", "exchange_failed":
+            return oauthMessage("exchange_failed")
+        default:
+            return message(for: error)
         }
     }
 
