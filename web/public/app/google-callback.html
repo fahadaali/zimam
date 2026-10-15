@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>المتابعة بحساب قوقل | زمام</title>
+<link rel="icon" href="/design/app-icons/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/design/generated/tokens.css">
+<link rel="stylesheet" href="/styles/base.css">
+<link rel="stylesheet" href="/app/app.css">
+<!-- Google returns here with the ID token in the fragment; google-callback.js hands it to /app/. -->
+<script type="module" src="/app/google-callback.js"></script>
+</head>
+<body class="zm-root">
+<main class="signin">
+  <div class="signin-card zm-card">
+    <p class="callout" id="google-status" role="status">جارٍ إكمال الدخول بحساب قوقل…</p>
+    <a class="callout signin-home" href="/app/" id="google-back" hidden>العودة إلى زمام</a>
+  </div>
+</main>
+</body>
+</html>

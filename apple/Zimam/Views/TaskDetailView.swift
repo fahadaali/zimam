@@ -177,9 +177,10 @@ private struct DueSection: View {
                         .font(ZimamType.caption)
                         .foregroundStyle(ZimamColor.sand)
                 } else if location.coordinate == nil {
-                    Text("حدّد موقعك من الإعدادات لحساب وقت الصلاة.")
+                    Text("حدّد موقعك لحساب وقت الصلاة.")
                         .font(ZimamType.caption)
                         .foregroundStyle(ZimamColor.inkMuted)
+                    LocationRequestRows()
                 }
             }
         }

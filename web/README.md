@@ -65,8 +65,8 @@ npx wrangler deploy --dry-run
 
 ## تسجيل الدخول بحساب قوقل
 
-- Google Identity Services (`https://accounts.google.com/gsi/client`): زر Google المرسوم بأداته نفسها (شروط علامته التجارية)، بالعربية («المتابعة باستخدام Google»)، تحت زر أبل. المنطق في `public/app/lib/google.js` واختباره في `test/google.test.mjs`.
-- معرّف عميل الويب في الثابت `GOOGLE_CLIENT_ID` أعلى `public/app/main.js` (ليس سراً)، وهو أيضاً في `GOOGLE_CLIENT_IDS` في `api/wrangler.jsonc`. إن فرغ الثابت اختفى الزر. وفي Google Cloud يجب أن يكون أصل الموقع ضمن **Authorized JavaScript origins** لهذا العميل.
+- زرّنا «المتابعة بحساب قوقل» تحت «المتابعة بحساب أبل» بالمقاس والزوايا والخط نفسها، بحرف G الملوّن على خلفية بيضاء (رمادية داكنة في الثيم الداكن) كما تطلب Google، وبلا أي سكربت من Google. الضغط يفتح `https://accounts.google.com/o/oauth2/v2/auth` (`response_type=id_token`، `scope=openid email profile`، `prompt=select_account`) في نافذة منبثقة، ويرجع Google إلى `/app/google-callback` بالرمز في جزء الرابط بعد `#`. صفحة العودة (`public/app/google-callback.html` وسكربتها `google-callback.js`) تسلّم الرمز للصفحة التي فتحتها عبر `BroadcastChannel` من الأصل نفسه وعبر `postMessage` إن بقي الرابط بالنافذة الأم، ثم تُغلق. إن مُنعت النوافذ المنبثقة ذهبت الصفحة كلها إلى Google ورجعت إلى `/app/` فيكمل الدخول من `sessionStorage`. `state` عشوائي لكل ضغطة ويُتحقق منه عند العودة. المنطق الخالص في `public/app/lib/google.js` واختباره في `test/google.test.mjs`.
+- معرّف عميل الويب في الثابت `GOOGLE_CLIENT_ID` أعلى `public/app/main.js` (ليس سراً)، وهو أيضاً في `GOOGLE_CLIENT_IDS` في `api/wrangler.jsonc`. إن فرغ الثابت اختفى الزر. وفي Google Cloud يجب أن يكون `https://zimam-web.fahad2ao.workers.dev/app/google-callback` ضمن **Authorized redirect URIs** لهذا العميل (`docs/setup.md`).
 - كما في أبل: nonce عشوائي جديد لكل شاشة دخول ولكل محاولة، يُعطى Google تجزئته SHA-256، ويُرسل الخام مع رمز الهوية إلى `POST /v1/auth/google` مع `device: "web"`.
 - إن طابق بريدُ Google المتحقَّق منه حساباً دخل بأبل دخل المستخدم الحساب نفسه (القاعدة في `api/DEVELOPMENT.md`).
 
@@ -74,6 +74,6 @@ npx wrangler deploy --dry-run
 
 يُحفظ رمز الجلسة في `localStorage` ويُرسل `Authorization: Bearer`. اختير على `sessionStorage` لأن كليهما يقرؤه أي سكربت يعمل في الأصل نفسه، فلا يزيد `sessionStorage` الأمان، بل يفرض تسجيل الدخول في كل تبويب. الحماية الفعلية:
 
-- سياسة محتوى صارمة في `_headers`: لا سكربت مضمَّن ولا من طرف ثالث إلا سكربت أبل وسكربت Google (`https://accounts.google.com/gsi/client`، مع إطار زرّه وطلباته `https://accounts.google.com` وأنماطه `https://accounts.google.com/gsi/style`)، ولا أنماط مضمَّنة، و`frame-ancestors 'none'`، و`connect-src` للواجهة البرمجية ولأبل وGoogle فقط. Trusted Types في وضع الإبلاغ فقط حتى يُتأكد من عمل سكربتي أبل وGoogle معها.
+- سياسة محتوى صارمة في `_headers`: لا سكربت مضمَّن ولا من طرف ثالث إلا سكربت أبل، ولا أنماط مضمَّنة، و`frame-ancestors 'none'`، و`connect-src` للواجهة البرمجية ولأبل فقط؛ لا شيء من Google في الصفحة. Trusted Types في وضع الإبلاغ فقط حتى يُتأكد من عمل سكربت أبل معها. صفحة العودة من Google لها سياسة أضيق: سكربتها فقط، بلا طلبات وبلا مُحيل (`Referrer-Policy: no-referrer`)، ومع Trusted Types مفروضة.
 - الواجهة تُبنى بـ `textContent` و`createElement` فقط، ولا `innerHTML` في الكود.
 - الرمز معتم ويُلغى من الخادم: «تسجيل الخروج» يحذفه من الخادم ومن المتصفح، وأي رد 401 يمسحه ويعيد إلى شاشة الدخول.
