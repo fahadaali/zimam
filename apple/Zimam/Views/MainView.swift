@@ -55,6 +55,11 @@ struct MainView: View {
             TaskOpener.shared.pending = nil
             open(taskId: id)
         }
+        // «اليوم», «التقويم» or a day, opened from a widget (App/AppLinks.swift).
+        .onChange(of: PlaceOpener.shared.pending, initial: true) { _, link in
+            guard let link else { return }
+            open(place: link)
+        }
         .sheet(item: $newTask) { request in
             AddTaskView(due: request.due, projectId: request.projectId)
         }
@@ -208,6 +213,21 @@ struct MainView: View {
         case .projects: projectsPath.append(route)
         case .search: searchPath.append(route)
         }
+    }
+
+    /// Goes to «اليوم» or «التقويم» for a widget link. A day stays pending until `CalendarView`
+    /// selects it.
+    private func open(place link: AppLink) {
+        let item: SidebarItem = link == .today ? .today : .calendar
+        if PlaceOpener.shared.pendingDay == nil {
+            PlaceOpener.shared.pending = nil
+        }
+        if isRegular {
+            sidebarSelection.wrappedValue = item
+            return
+        }
+        tab = item.tab
+        if item == .today { todayPath = NavigationPath() } else { calendarPath = NavigationPath() }
     }
 
     private func toggleSelectedDone() {
