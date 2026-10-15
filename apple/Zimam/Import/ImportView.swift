@@ -42,6 +42,11 @@ struct ImportView: View {
             } label: {
                 SourceRow(id: AppleRemindersImport.sourceId, label: "", systemImage: "checklist")
             }
+            NavigationLink {
+                CalendarImportView()
+            } label: {
+                SourceRow(id: AppleCalendarImport.sourceId, label: "تقويم أبل", systemImage: "calendar")
+            }
             ForEach(serverSources) { source in
                 NavigationLink {
                     ImportSourceView(source: source, maxFileBytes: sources?.maxFileBytes ?? Self.fallbackMaxBytes) { job in

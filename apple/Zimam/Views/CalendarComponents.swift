@@ -88,6 +88,8 @@ struct MonthGrid: View {
     let tasksByDay: [String: [TaskItem]]
     let spans: [SpanItem]
     let onDrop: ([UUID], String) -> Bool
+    /// Apple Calendar's events, shown as outlined rings in their days.
+    var events: [ShownEvent] = []
 
     @Environment(\.dateFormatterZimam) private var formatter
     // Not private, so the memberwise initializer stays internal.
@@ -127,7 +129,8 @@ struct MonthGrid: View {
                                 spanCount: spans.filter { $0.span.contains(day.day) }.count,
                                 isToday: day.day == today, isSelected: day.day == selectedDay, minHeight: cellHeight,
                                 onSelect: { selectedDay = day.day },
-                                onDrop: { onDrop($0, day.day) })
+                                onDrop: { onDrop($0, day.day) },
+                                eventCount: events.filter { $0.span.contains(day.day) }.count)
                     } else {
                         Color.clear
                             .frame(maxWidth: .infinity, minHeight: cellHeight)
@@ -156,6 +159,8 @@ private struct DayCell: View {
     let minHeight: CGFloat
     let onSelect: () -> Void
     let onDrop: ([UUID]) -> Bool
+    /// Apple Calendar's events that day: outlined rings beside the task dots.
+    var eventCount = 0
 
     @Environment(\.dateFormatterZimam) private var formatter
     // Not private: a private @State would make the memberwise initializer private.
@@ -171,8 +176,11 @@ private struct DayCell: View {
                 Text(formatter.number(day.secondaryDay))
                     .font(ZimamType.caption)
                     .foregroundStyle(highlighted ? ZimamColor.brandInk : ZimamColor.inkMuted)
-                TaskDots(tasks: tasks)
-                    .padding(.top, ZimamSpacing.space1)
+                HStack(spacing: ZimamSpacing.space1) {
+                    TaskDots(tasks: tasks)
+                    if eventCount > 0 { EventMarks(count: eventCount) }
+                }
+                .padding(.top, ZimamSpacing.space1)
             }
             .padding(.vertical, ZimamSpacing.space1)
             .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .top)
@@ -205,6 +213,7 @@ private struct DayCell: View {
         if isToday { parts.append("اليوم") }
         let count = tasks.count + spanCount
         if count > 0 { parts.append(ArabicCount.tasks(count, locale: formatter.locale)) }
+        if eventCount > 0 { parts.append(ArabicCount.events(eventCount, locale: formatter.locale)) }
         return parts.joined(separator: "، ")
     }
 }
@@ -245,6 +254,9 @@ struct DayTasksSection: View {
     let onDrop: ([UUID]) -> Bool
     let onMove: (UUID) -> Void
     let onToggle: (TaskItem) -> Void
+    /// Apple Calendar's events that day, read only, above the tasks.
+    var events: [ShownEvent] = []
+    var onOpenEvent: (ShownEvent) -> Void = { _ in }
 
     @Environment(\.dateFormatterZimam) private var formatter
     // Not private: a private @State would make the memberwise initializer private.
@@ -261,6 +273,9 @@ struct DayTasksSection: View {
                 Text(heading.subtitle)
                     .font(ZimamType.caption)
                     .foregroundStyle(ZimamColor.inkMuted)
+            }
+            if !events.isEmpty {
+                DayEventsList(events: events, onOpen: onOpenEvent)
             }
             if tasks.isEmpty {
                 Text("لا مهام في هذا اليوم.")
@@ -344,6 +359,9 @@ struct WeekColumns: View {
     let onDrop: ([UUID], String) -> Bool
     let onMove: (UUID) -> Void
     let onComplete: (TaskItem) -> Void
+    /// Apple Calendar's events: all-day and spanning ones as outlined bars, timed ones in their columns.
+    var events: [ShownEvent] = []
+    var onOpenEvent: (ShownEvent) -> Void = { _ in }
 
     var body: some View {
         VStack(spacing: ZimamSpacing.space2) {
@@ -355,13 +373,16 @@ struct WeekColumns: View {
                                   onSelect: { selectedDay = day.day })
                 }
             }
+            EventLanes(days: days.map(\.day), events: events, spacing: ZimamSpacing.space2, onOpen: onOpenEvent)
             SpanLanes(days: days.map(\.day), columnOffset: 0, columnCount: days.count, spans: spans, maxLanes: 6,
                       laneHeight: ZimamSpacing.space11, spacing: ZimamSpacing.space2, interactive: true,
                       onMove: onMove, onComplete: onComplete)
             HStack(alignment: .top, spacing: ZimamSpacing.space2) {
                 ForEach(days) { day in
                     WeekColumn(tasks: tasksByDay[day.day] ?? [],
-                               onDrop: { onDrop($0, day.day) }, onMove: onMove, onComplete: onComplete)
+                               onDrop: { onDrop($0, day.day) }, onMove: onMove, onComplete: onComplete,
+                               events: events.filter { !$0.isWholeDay && $0.span.contains(day.day) },
+                               onOpenEvent: onOpenEvent)
                 }
             }
         }
@@ -429,18 +450,23 @@ struct WeekDayHeader: View {
     }
 }
 
-/// A day's one-day tasks in a sunken column that takes dropped tasks.
+/// A day's one-day tasks in a sunken column that takes dropped tasks, under the day's timed events.
 private struct WeekColumn: View {
     let tasks: [TaskItem]
     let onDrop: ([UUID]) -> Bool
     let onMove: (UUID) -> Void
     let onComplete: (TaskItem) -> Void
+    var events: [ShownEvent] = []
+    var onOpenEvent: (ShownEvent) -> Void = { _ in }
 
     // Not private: a private @State would make the memberwise initializer private.
     @State var isTargeted = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
+            ForEach(events) { item in
+                WeekEventCard(item: item) { onOpenEvent(item) }
+            }
             ForEach(tasks) { task in
                 WeekTaskCard(task: task, onMove: onMove, onComplete: { onComplete(task) })
             }

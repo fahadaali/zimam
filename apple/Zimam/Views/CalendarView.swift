@@ -32,13 +32,16 @@ struct CalendarView: View {
     @State private var moving: MoveRequest?
     /// Tasks completed here stay a second, so the completion can be undone.
     @State private var lingering: Set<UUID> = []
+    /// «أحداث التقويم»: its settings sheet, and the event whose details are open.
+    @State private var showingEventSettings = false
+    @State private var openEvent: ShownEvent?
 
     init() {}
 
     var body: some View {
         let collected = tasksByDay()
         let names = projectNames(projects)
-        content(byDay: collected.byDay, spans: collected.spans, names: names)
+        content(byDay: collected.byDay, spans: collected.spans, names: names, events: visibleEvents())
             .background(ZimamColor.surface)
             .overlay(alignment: .bottomTrailing) { AddTaskButton { showingAdd = true } }
             .sheet(isPresented: $showingAdd) { addTaskSheet }
@@ -52,6 +55,14 @@ struct CalendarView: View {
                     Button("اليوم") { selectedDay = today }
                         .accessibilityHint("يعود إلى اليوم في التقويم")
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    CalendarEventsMenu(showingSettings: $showingEventSettings)
+                }
+            }
+            .sheet(isPresented: $showingEventSettings) { CalendarEventsSettingsSheet() }
+            .sheet(item: $openEvent) { item in CalendarEventSheet(item: item) }
+            .task {
+                if CalendarEvents.shared.isShowing { CalendarEvents.shared.refresh() }
             }
             // A day opened from a widget (App/AppLinks.swift).
             .onChange(of: PlaceOpener.shared.pendingDay, initial: true) { _, day in
@@ -64,7 +75,8 @@ struct CalendarView: View {
     // MARK: Layout
 
     @ViewBuilder
-    private func content(byDay: [String: [TaskItem]], spans: [SpanItem], names: [UUID: String]) -> some View {
+    private func content(byDay: [String: [TaskItem]], spans: [SpanItem], names: [UUID: String],
+                         events: [ShownEvent]) -> some View {
         switch mode {
         case .month:
             if isRegular {
@@ -72,14 +84,14 @@ struct CalendarView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: ZimamSpacing.space4) {
                             header
-                            monthGrid(byDay, spans: spans)
+                            monthGrid(byDay, spans: spans, events: events)
                         }
                         .padding(margin)
                     }
                     .frame(maxWidth: .infinity)
                     Divider().overlay(ZimamColor.line)
                     ScrollView {
-                        selectedDaySection(byDay, spans: spans, names: names)
+                        selectedDaySection(byDay, spans: spans, names: names, events: events)
                             .padding(margin)
                             .padding(.bottom, ZimamSpacing.space11 + ZimamSpacing.space8)
                     }
@@ -90,9 +102,9 @@ struct CalendarView: View {
                     VStack(alignment: .leading, spacing: ZimamSpacing.space6) {
                         VStack(alignment: .leading, spacing: ZimamSpacing.space4) {
                             header
-                            monthGrid(byDay, spans: spans)
+                            monthGrid(byDay, spans: spans, events: events)
                         }
-                        selectedDaySection(byDay, spans: spans, names: names)
+                        selectedDaySection(byDay, spans: spans, names: names, events: events)
                     }
                     .padding(.horizontal, margin)
                     // Room for the add button over the last row.
@@ -107,7 +119,7 @@ struct CalendarView: View {
                     if isRegular {
                         WeekColumns(days: week, kind: kind, today: today, selectedDay: $selectedDay, tasksByDay: byDay,
                                     spans: spans, onDrop: reschedule, onMove: { moving = MoveRequest(id: $0) },
-                                    onComplete: complete)
+                                    onComplete: complete, events: events, onOpenEvent: { openEvent = $0 })
                     } else {
                         VStack(alignment: .leading, spacing: ZimamSpacing.space6) {
                             if spans.contains(where: { $0.span.overlaps(week.first?.day ?? "", week.last?.day ?? "") }) {
@@ -119,7 +131,8 @@ struct CalendarView: View {
                                 DayTasksSection(date: day.date, kind: kind,
                                                 tasks: dayList(day.day, byDay: byDay, spans: spans), names: names,
                                                 onDrop: { reschedule($0, to: day.day) },
-                                                onMove: { moving = MoveRequest(id: $0) }, onToggle: complete)
+                                                onMove: { moving = MoveRequest(id: $0) }, onToggle: complete,
+                                                events: dayEvents(day.day, events), onOpenEvent: { openEvent = $0 })
                             }
                         }
                     }
@@ -151,16 +164,18 @@ struct CalendarView: View {
         }
     }
 
-    private func monthGrid(_ byDay: [String: [TaskItem]], spans: [SpanItem]) -> some View {
+    private func monthGrid(_ byDay: [String: [TaskItem]], spans: [SpanItem], events: [ShownEvent]) -> some View {
         MonthGrid(grid: grid, days: grid.monthDays(containing: selectedNoon), today: today,
-                  selectedDay: $selectedDay, tasksByDay: byDay, spans: spans, onDrop: reschedule)
+                  selectedDay: $selectedDay, tasksByDay: byDay, spans: spans, onDrop: reschedule, events: events)
     }
 
-    private func selectedDaySection(_ byDay: [String: [TaskItem]], spans: [SpanItem], names: [UUID: String]) -> some View {
+    private func selectedDaySection(_ byDay: [String: [TaskItem]], spans: [SpanItem], names: [UUID: String],
+                                    events: [ShownEvent]) -> some View {
         DayTasksSection(date: grid.date(fromDay: selectedDay) ?? selectedNoon, kind: kind,
                         tasks: dayList(selectedDay, byDay: byDay, spans: spans), names: names,
                         onDrop: { reschedule($0, to: selectedDay) },
-                        onMove: { moving = MoveRequest(id: $0) }, onToggle: complete)
+                        onMove: { moving = MoveRequest(id: $0) }, onToggle: complete,
+                        events: dayEvents(selectedDay, events), onOpenEvent: { openEvent = $0 })
     }
 
     /// Previous or next month (or week). In a right-to-left layout the backward chevron points right.
@@ -268,6 +283,20 @@ struct CalendarView: View {
                 .map { $0.task }
         }
         return (byDay, spans.sorted { ($0.span.start, $0.span.end) < ($1.span.start, $1.span.end) })
+    }
+
+    // MARK: Calendar events
+
+    /// Apple Calendar's events on the days on screen, when «إظهار أحداث التقويم» is on.
+    private func visibleEvents() -> [ShownEvent] {
+        let visible = mode == .month ? grid.monthDays(containing: selectedNoon) : grid.weekDays(containing: selectedNoon)
+        guard let first = visible.first?.day, let last = visible.last?.day else { return [] }
+        return CalendarEvents.shared.events(from: first, to: last, timeZone: formatter.timeZone)
+    }
+
+    /// The events that touch `day`, in day order.
+    private func dayEvents(_ day: String, _ events: [ShownEvent]) -> [ShownEvent] {
+        events.filter { $0.span.contains(day) }
     }
 
     /// A day's list: the tasks that span it first, then the ones due that day.
