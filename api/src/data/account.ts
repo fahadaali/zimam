@@ -113,6 +113,8 @@ export async function deleteAccount(db: D1Database, access: Access, mutator: Mut
       `UPDATE invites SET revoked_at = ?2 WHERE created_by = ?1 AND accepted_at IS NULL AND revoked_at IS NULL`,
       `DELETE FROM project_members WHERE user_id = ?1`,
       `DELETE FROM external_refs WHERE user_id = ?1`,
+      // Their files in R2 go when the queue next sees the job missing, or by the bucket's lifecycle rule.
+      `DELETE FROM import_jobs WHERE user_id = ?1`,
       `DELETE FROM sessions WHERE user_id = ?1`,
       `UPDATE users SET apple_sub = 'deleted:' || id, email = NULL, name = NULL, settings = '{}',
          apple_refresh_token = NULL, apple_client_id = NULL, updated_at = ?2 WHERE id = ?1`,

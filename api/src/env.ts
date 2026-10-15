@@ -36,6 +36,10 @@ declare global {
       APNS_PRIVATE_KEY?: string;
       /** Realtime sync: one `UserChannel` Durable Object per user, holding their WebSockets. */
       USER_CHANNEL: DurableObjectNamespace<UserChannel>;
+      /** Producer for the zimam-imports queue (src/imports/queue.ts). */
+      IMPORTS: Queue;
+      /** R2 bucket zimam-imports: uploaded exports and parsed imports, deleted when the job ends. */
+      IMPORT_FILES: R2Bucket;
     }
   }
 }
