@@ -10,9 +10,15 @@ import ZimamKit
 struct CompleteTaskIntent: AppIntent {
     static var title: LocalizedStringResource = "إنجاز مهمة"
     static var description = IntentDescription("ينجز مهمة في زمام.")
+    /// Done in place, from Siri or a widget, without opening the app.
+    static var openAppWhenRun: Bool = false
 
-    @Parameter(title: "المهمة")
+    @Parameter(title: "المهمة", requestValueDialog: IntentDialog("أي مهمة؟"))
     var task: TaskEntity
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("أنجز \(\.$task)")
+    }
 
     init() {}
 

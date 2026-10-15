@@ -16,7 +16,9 @@ extension View {
 }
 
 /// A task row inside a list, with completion and swipe-to-delete wired to the store.
-/// Tapping the row opens the task's details.
+/// Tapping the row opens the task's details. On the iPad and the Mac it can be dragged onto a
+/// project or section in the sidebar; «نقل إلى مشروع…» (context menu and VoiceOver action)
+/// does the same everywhere, and is the way on the iPhone.
 struct TaskListItem: View {
     let task: TaskItem
     var projectName: String?
@@ -25,6 +27,7 @@ struct TaskListItem: View {
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
     @Environment(\.taskSelection) private var taskSelection
+    @State private var moving: ProjectMoveRequest?
 
     var body: some View {
         let store = Store(context: context, sync: sync)
@@ -41,6 +44,31 @@ struct TaskListItem: View {
         .listRowBackground(selected ? ZimamColor.brandSoft : ZimamColor.surfaceRaised)
         .swipeActions(edge: .trailing) {
             Button("حذف", role: .destructive) { store.delete(task) }
+        }
+        .modifier(ProjectMoveActions(task: task, moving: $moving))
+    }
+}
+
+/// Dragging a top-level task to the sidebar, and «نقل إلى مشروع…» without dragging.
+/// Subtasks move with their parent, so they have neither.
+private struct ProjectMoveActions: ViewModifier {
+    let task: TaskItem
+    @Binding var moving: ProjectMoveRequest?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if task.parentId == nil {
+            content
+                .draggable(TaskDragItem(id: task.id))
+                .contextMenu {
+                    Button("نقل إلى مشروع…", systemImage: "folder") { moving = ProjectMoveRequest(id: task.id) }
+                }
+                .accessibilityAction(named: "نقل إلى مشروع…") { moving = ProjectMoveRequest(id: task.id) }
+                .sheet(item: $moving) { request in
+                    MoveToProjectSheet(taskId: request.id)
+                }
+        } else {
+            content
         }
     }
 }

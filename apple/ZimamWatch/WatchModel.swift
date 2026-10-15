@@ -14,6 +14,8 @@ final class WatchModel {
     private(set) var isSignedIn: Bool
     private(set) var isLoading = false
     private(set) var errorMessage: String?
+    /// One line after adding a task that is not due today: «أُضيفت «مراجعة العقد»، غداً.»
+    private(set) var notice: String?
     private(set) var calendar: CalendarKind
     /// Top-level tasks due today and done, for the complications' ring (WatchGlance).
     @ObservationIgnored private var doneToday = 0
@@ -98,12 +100,35 @@ final class WatchModel {
         }
     }
 
-    /// Adds a task due today, typed or dictated.
+    /// Adds a task from what was typed or dictated. Online, the assistant reads the sentence
+    /// («ذكرني أراجع العقد بعد العصر بكرة»: title, day, time or prayer) as on the iPhone;
+    /// otherwise, or when it cannot help, the words become the title of a task due today.
     func add(title: String) async {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let record = TaskRecord(title: trimmed, dueDate: Self.today())
-        tasks.append(record)
+        let today = Self.today()
+        // Shown at once as said; the assistant's reading replaces it when it comes.
+        let placeholder = TaskRecord(title: trimmed, dueDate: today)
+        tasks.append(placeholder)
+        notice = nil
+        let reading = await api.readSpokenTask(trimmed, timeZone: formatter.timeZone)
+        if reading.problem == .signedOut {
+            signOut()
+            return
+        }
+        var record = reading.record(today: today, defaultDueDate: today)
+        record.id = placeholder.id
+        if let index = tasks.firstIndex(where: { $0.id == placeholder.id }) {
+            if let day = record.dueDate, day > today {
+                // Not today's: it leaves the list, and a line says when it is due.
+                tasks.remove(at: index)
+                if let date = formatter.date(fromDay: day) {
+                    notice = "أُضيفت «\(record.title)»، \(formatter.label(for: date))."
+                }
+            } else {
+                tasks[index] = record
+            }
+        }
         do {
             _ = try await api.push([.upsert(.task(record))])
             errorMessage = nil

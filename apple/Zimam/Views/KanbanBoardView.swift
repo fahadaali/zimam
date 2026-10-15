@@ -195,6 +195,8 @@ private struct KanbanColumnView: View {
 
     @State private var isTargeted = false
     @State private var targetedCard: UUID?
+    /// The card whose «نقل إلى مشروع…» sheet is open.
+    @State private var movingToProject: ProjectMoveRequest?
     @State private var adding = false
     @State private var newTitle = ""
     @FocusState private var fieldFocused: Bool
@@ -231,6 +233,9 @@ private struct KanbanColumnView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(column.name)
+        .sheet(item: $movingToProject) { request in
+            MoveToProjectSheet(taskId: request.id)
+        }
     }
 
     // MARK: Header
@@ -316,6 +321,7 @@ private struct KanbanColumnView: View {
                         Button(destination.name) { move(task, to: destination, at: destination.tasks.count) }
                     }
                 }
+                Button("نقل إلى مشروع…", systemImage: "folder") { movingToProject = ProjectMoveRequest(id: task.id) }
                 Button("حذف", systemImage: "trash", role: .destructive) { store.delete(task) }
             }
             // Dragging is not accessible: the same moves as VoiceOver actions.
@@ -332,6 +338,7 @@ private struct KanbanColumnView: View {
                 if index + 1 < column.tasks.count {
                     Button("نقل لأسفل") { move(task, to: column, at: index + 1) }
                 }
+                Button("نقل إلى مشروع…") { movingToProject = ProjectMoveRequest(id: task.id) }
             }
     }
 

@@ -3,7 +3,9 @@ import SwiftUI
 import ZimamKit
 
 /// The iPad and Mac sidebar, on the leading side (the right in Arabic): the day views, the
-/// inbox, the calendar and search, then the projects with their sections.
+/// inbox, the calendar and search, then the projects with their sections. A task dragged from
+/// a list, the board or the calendar onto the inbox, a project or a section moves there
+/// (`Store.move(_:toProject:section:)`); «نقل إلى مشروع…» on the task does the same without dragging.
 struct SidebarView: View {
     @Binding var selection: SidebarItem?
     let onSearch: () -> Void
@@ -11,6 +13,7 @@ struct SidebarView: View {
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }, sort: \ProjectItem.sortOrder)
     private var allProjects: [ProjectItem]
@@ -24,6 +27,8 @@ struct SidebarView: View {
     @State private var newName = ""
     @State private var joining = false
     @State private var sharing: ShareTarget?
+    /// The row a dragged task is over.
+    @State private var dropTarget: SidebarItem?
 
     init(selection: Binding<SidebarItem?>, onSearch: @escaping () -> Void) {
         _selection = selection
@@ -44,6 +49,7 @@ struct SidebarView: View {
                 row("القادم", systemImage: "calendar", item: .upcoming)
                 row("صندوق المهام", systemImage: "tray", item: .inbox,
                     count: open.filter { $0.projectId == nil }.count)
+                    .modifier(taskDrop(.inbox, name: "صندوق المهام", project: nil, section: nil))
                 row("التقويم", systemImage: "calendar.circle", item: .calendar)
                 row("البحث", systemImage: "magnifyingglass", item: .search)
             }
@@ -65,6 +71,8 @@ struct SidebarView: View {
                                 row(section.name, systemImage: "rectangle.split.3x1",
                                     item: .section(project: project.id, section: section.id),
                                     count: open.filter { $0.sectionId == section.id }.count)
+                                    .modifier(taskDrop(.section(project: project.id, section: section.id), name: section.name,
+                                                         project: project.id, section: section.id))
                             }
                         } label: {
                             projectRow(project, count: count)
@@ -119,9 +127,41 @@ struct SidebarView: View {
 
     private func projectRow(_ project: ProjectItem, count: Int) -> some View {
         row(project.name, systemImage: "folder", item: .project(project.id), count: count)
+            .modifier(taskDrop(.project(project.id), name: project.name, project: project.id, section: nil))
             .contextMenu {
                 Button("مشاركة", systemImage: "person.2") { sharing = ShareTarget(id: project.id) }
             }
+    }
+
+    // MARK: Dropping tasks
+
+    private func taskDrop(_ item: SidebarItem, name: String, project: UUID?, section: UUID?) -> SidebarDropTarget {
+        SidebarDropTarget(
+            isTargeted: dropTarget == item,
+            onTargeted: { targeted in
+                if targeted {
+                    dropTarget = item
+                } else if dropTarget == item {
+                    dropTarget = nil
+                }
+            },
+            onDrop: { items in moveDropped(items, to: name, project: project, section: section) }
+        )
+    }
+
+    /// Moves the dropped task. Subtasks follow their parent and are refused on their own.
+    private func moveDropped(_ items: [TaskDragItem], to name: String, project: UUID?, section: UUID?) -> Bool {
+        dropTarget = nil
+        guard let id = items.first?.id,
+              let task = tasks.first(where: { $0.id == id }),
+              task.parentId == nil else { return false }
+        if task.projectId == project && task.sectionId == section { return true }
+        withAnimation(reduceMotion ? nil : .default) {
+            Store(context: context, sync: sync).move(task, toProject: project, section: section)
+        }
+        let message: String = "نُقلت «\(task.title)» إلى \(name)"
+        AccessibilityNotification.Announcement(message).post()
+        return true
     }
 
     private func expansion(of projectId: UUID) -> Binding<Bool> {
@@ -131,5 +171,28 @@ struct SidebarView: View {
                 if isOpen { expanded.insert(projectId) } else { expanded.remove(projectId) }
             }
         )
+    }
+}
+
+/// A sidebar row that takes a dropped task, outlined with the focus ring while one is over it.
+private struct SidebarDropTarget: ViewModifier {
+    let isTargeted: Bool
+    let onTargeted: (Bool) -> Void
+    let onDrop: ([TaskDragItem]) -> Bool
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if isTargeted {
+                    RoundedRectangle(cornerRadius: ZimamRadius.radiusMd)
+                        .strokeBorder(ZimamColor.focusRing, lineWidth: ZimamLayout.focusRingWidth)
+                        .accessibilityHidden(true)
+                }
+            }
+            .dropDestination(for: TaskDragItem.self) { items, _ in
+                onDrop(items)
+            } isTargeted: { targeted in
+                onTargeted(targeted)
+            }
     }
 }

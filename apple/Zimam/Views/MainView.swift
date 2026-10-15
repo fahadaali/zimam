@@ -49,6 +49,12 @@ struct MainView: View {
             if regular { widen() } else { narrow() }
         }
         .focusedSceneValue(\.zimamActions, actions)
+        // A task opened from Siri, Shortcuts or Spotlight (OpenTaskIntent).
+        .onChange(of: TaskOpener.shared.pending, initial: true) { _, id in
+            guard let id else { return }
+            TaskOpener.shared.pending = nil
+            open(taskId: id)
+        }
         .sheet(item: $newTask) { request in
             AddTaskView(due: request.due, projectId: request.projectId)
         }
@@ -185,6 +191,22 @@ struct MainView: View {
         case .upcoming: return NewTaskRequest(due: .tomorrow, projectId: nil)
         case .project(let id), .section(let id, _): return NewTaskRequest(due: .unscheduled, projectId: id)
         case .inbox, .calendar, .search: return NewTaskRequest(due: .unscheduled, projectId: nil)
+        }
+    }
+
+    /// Shows a task's details: in the details column, or on top of the current tab.
+    private func open(taskId id: UUID) {
+        let route = TaskRoute(id: id)
+        if isRegular {
+            selectedTask.wrappedValue = route
+            return
+        }
+        switch tab {
+        case .today: todayPath.append(route)
+        case .upcoming: upcomingPath.append(route)
+        case .calendar: calendarPath.append(route)
+        case .projects: projectsPath.append(route)
+        case .search: searchPath.append(route)
         }
     }
 

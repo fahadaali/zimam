@@ -81,6 +81,8 @@ targets:
         ENABLE_RESOURCE_ACCESS_CALENDARS: YES
         # The import file picker (.fileImporter) on the Mac: read-only access to the chosen file.
         ENABLE_USER_SELECTED_FILES: readonly
+        # «إملاء» in the add screen on the Mac: the microphone (Zimam/App/SpeechDictation.swift).
+        ENABLE_RESOURCE_ACCESS_AUDIO_INPUT: YES
     info:
       path: Zimam/Resources/Info.plist
       properties:
@@ -126,6 +128,10 @@ targets:
         NSRemindersFullAccessUsageDescription: يقرأ زمام قوائم التذكيرات التي تختارها حين تطلب استيرادها، فيضيفها مشاريع ومهام في حسابك على زمام. لا يغيّر التذكيرات ولا يحذفها، ولا يقرؤها في غير الاستيراد.
         # «المهمة الجارية» (Shared/LiveActivity, ZimamWidgets/FocusLiveActivity.swift), iPhone only.
         NSSupportsLiveActivities: true
+        # «إملاء» in the add screen (Zimam/App/SpeechDictation.swift): speech to text, on the device
+        # when it supports Arabic, otherwise by Apple. The text, not the audio, goes to the assistant.
+        NSMicrophoneUsageDescription: يستمع زمام إلى الميكروفون حين تضغط «إملاء» فقط، لتقول المهمة بصوتك بدل كتابتها. يتوقف الاستماع حين تنتهي، ولا يحفظ زمام الصوت.
+        NSSpeechRecognitionUsageDescription: يحوّل زمام ما تمليه بصوتك إلى نص في حقل المهمة. يجري التحويل على جهازك إن كان يدعمه، وإلا تحوّله أبل في خوادمها. لا يحفظ زمام الصوت، ويُرسَل النص وحده إلى مساعد زمام ليقرأ موعد المهمة حين تكون متصلاً.
         ZimamAPIURL: $(ZIMAM_API_URL)
         # Sign in with Google reads its client from GIDClientID, and Google's sign-in page
         # returns to the reversed client ID scheme (handled by .onOpenURL in ZimamApp).
