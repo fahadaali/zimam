@@ -21,6 +21,7 @@ import { arabicNumber, parseDigits } from "./lib/numbers.js";
 import { prayerPhrase } from "./lib/prayer.js";
 import { createRealtime, realtimeUrl } from "./lib/realtime.js";
 import { viewImport } from "./import-view.js";
+import { rememberPendingJoin, takePendingJoin, viewJoin } from "./invite-view.js";
 import { PRIORITY_WORDS, groupByDay, isOpen, priorityKey, progressText, splitToday, taskCount } from "./lib/tasks.js";
 
 const APPLE_CLIENT_ID = "app.zimam.ios.web";
@@ -38,6 +39,7 @@ const els = {
   signinButton: $("signin-button"),
   signinError: $("signin-error"),
   googleButton: $("google-button"),
+  signinInvite: $("signin-invite"),
   shell: $("shell"),
   view: $("view"),
   main: $("main"),
@@ -90,6 +92,10 @@ function showSignIn(message = "") {
   els.signin.hidden = false;
   els.signinError.textContent = message;
   document.title = "تسجيل الدخول | زمام";
+  // An invite opened before sign-in (#/join/<code>): say so, and keep it through Google's whole-tab sign-in.
+  const route = parseRoute();
+  els.signinInvite.hidden = route.name !== "join";
+  if (route.name === "join") rememberPendingJoin(route.code);
   prepareNonce();
   prepareGoogle();
 }
@@ -276,6 +282,9 @@ async function start() {
   els.loading.hidden = true;
   els.signin.hidden = true;
   els.shell.hidden = false;
+  // Back from a sign-in that lost the hash (Google's whole-tab flow): return to the invite.
+  const pendingJoin = takePendingJoin();
+  if (pendingJoin && parseRoute().name !== "join") history.replaceState(null, "", pendingJoin);
   render({ focus: false });
   live.start();
 }
@@ -314,8 +323,9 @@ async function liveRefresh() {
     return;
   }
   await refreshProjects();
-  // The import view follows its job itself; re-rendering would reset the form mid-way.
-  if (parseRoute().name === "import") return;
+  // The import view follows its job itself; re-rendering would reset the form mid-way. The invite
+  // view is a single request and a button, so it stays as it is too.
+  if (parseRoute().name === "import" || parseRoute().name === "join") return;
   render({ focus: false });
 }
 
@@ -332,6 +342,7 @@ function parseRoute() {
   if (parts[0] === "inbox") return { name: "inbox" };
   if (parts[0] === "search") return { name: "search", q: params.get("q") ?? "" };
   if (parts[0] === "import") return { name: "import" };
+  if (parts[0] === "join") return { name: "join", code: parts[1] ?? "" };
   return { name: "today" };
 }
 
@@ -356,6 +367,17 @@ const VIEWS = {
   inbox: viewInbox,
   search: viewSearch,
   import: () => viewImport({ primary: primary(), today: state.today, announce, onImported: refreshProjects }),
+  join: ({ code }) =>
+    viewJoin({
+      code,
+      primary: primary(),
+      today: state.today,
+      announce,
+      onJoined: async (projectId) => {
+        await refreshProjects();
+        location.hash = `#/projects/${encodeURIComponent(projectId)}`;
+      },
+    }),
 };
 
 async function render({ focus = false } = {}) {

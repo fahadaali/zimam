@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["72V86SZ2XC.app.zimam.ios"],
+        "components": [
+          { "/": "/join", "comment": "Project invites: /join/#<code>" },
+          { "/": "/join/*", "comment": "Project invites, and the older /join/<code>" }
+        ]
+      }
+    ]
+  }
+}

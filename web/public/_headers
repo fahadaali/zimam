@@ -13,6 +13,12 @@
   Cross-Origin-Resource-Policy: same-origin
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
 
+# Universal links (invite links open the app): Apple fetches this file through its CDN and needs
+# it as JSON, without a redirect. Paths and app ID in the file; the domain in apple/project.yml.
+/.well-known/apple-app-site-association
+  Content-Type: application/json
+  Cache-Control: public, max-age=3600
+
 # The app: Apple's sign-in script and popup, and the API (workers.dev now, api.zimam.app later),
 # over HTTPS and over the realtime WebSocket (wss).
 # Apple's popup needs window.opener, hence same-origin-allow-popups. Trusted Types are report-only

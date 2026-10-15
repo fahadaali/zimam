@@ -8,7 +8,10 @@ import { fail, readJson } from "../http";
 import type { AppEnv } from "../types";
 import { loadVisible } from "./resources";
 
-const INVITE_URL = "https://zimam.app/join/";
+// The web join page (web/public/join/), with the code in the fragment so it never reaches a
+// server log. Becomes https://zimam.app/join/# with the domain, together with ZimamWeb.origin
+// in the app (apple/ZimamKit) and the apple-app-site-association file.
+const INVITE_URL = "https://zimam-web.fahad2ao.workers.dev/join/#";
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const RoleBody = z.object({ role: z.enum(MEMBER_ROLES) }).strict();
