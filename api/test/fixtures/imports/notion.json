@@ -1,0 +1,109 @@
+{
+  "databases": [
+    {
+      "database": {
+        "object": "database",
+        "id": "db-work",
+        "title": [{ "type": "text", "plain_text": "مهام العمل" }],
+        "properties": {
+          "المهمة": { "id": "title", "name": "المهمة", "type": "title" },
+          "الموعد": { "id": "d1", "name": "الموعد", "type": "date" },
+          "الحالة": {
+            "id": "s0", "name": "الحالة", "type": "status",
+            "status": {
+              "options": [
+                { "id": "s1", "name": "لم تبدأ" },
+                { "id": "s2", "name": "قيد العمل" },
+                { "id": "s3", "name": "انتهت" }
+              ],
+              "groups": [
+                { "name": "To-do", "option_ids": ["s1"] },
+                { "name": "In progress", "option_ids": ["s2"] },
+                { "name": "Complete", "option_ids": ["s3"] }
+              ]
+            }
+          },
+          "الأولوية": { "id": "p1", "name": "الأولوية", "type": "select" },
+          "الوسوم": { "id": "t1", "name": "الوسوم", "type": "multi_select" },
+          "ملاحظات": { "id": "n1", "name": "ملاحظات", "type": "rich_text" },
+          "Parent item": { "id": "r1", "name": "Parent item", "type": "relation" },
+          "المسؤول": { "id": "u1", "name": "المسؤول", "type": "people" },
+          "Created time": { "id": "c1", "name": "Created time", "type": "created_time" }
+        }
+      },
+      "pages": [
+        {
+          "object": "page", "id": "page-deck",
+          "properties": {
+            "المهمة": { "type": "title", "title": [{ "plain_text": "إعداد " }, { "plain_text": "العرض" }] },
+            "الموعد": { "type": "date", "date": { "start": "2026-10-18", "end": "2026-10-20", "time_zone": null } },
+            "الحالة": { "type": "status", "status": { "id": "s2", "name": "قيد العمل" } },
+            "الأولوية": { "type": "select", "select": { "name": "عالية" } },
+            "الوسوم": { "type": "multi_select", "multi_select": [{ "name": "عمل" }, { "name": "عميل" }] },
+            "ملاحظات": { "type": "rich_text", "rich_text": [{ "plain_text": "للعميل الجديد" }] },
+            "Parent item": { "type": "relation", "relation": [] },
+            "المسؤول": { "type": "people", "people": [] }
+          }
+        },
+        {
+          "object": "page", "id": "page-review",
+          "properties": {
+            "المهمة": { "type": "title", "title": [{ "plain_text": "مراجعة الشرائح" }] },
+            "الموعد": { "type": "date", "date": { "start": "2026-10-19T14:00:00.000+03:00", "end": null, "time_zone": null } },
+            "الحالة": { "type": "status", "status": { "id": "s3", "name": "انتهت" } },
+            "الأولوية": { "type": "select", "select": null },
+            "الوسوم": { "type": "multi_select", "multi_select": [] },
+            "Parent item": { "type": "relation", "relation": [{ "id": "page-deck" }] }
+          }
+        },
+        {
+          "object": "page", "id": "page-call",
+          "properties": {
+            "المهمة": { "type": "title", "title": [{ "plain_text": "مكالمة لندن" }] },
+            "الموعد": { "type": "date", "date": { "start": "2026-10-21T09:00:00.000", "end": null, "time_zone": "Europe/London" } },
+            "الحالة": { "type": "status", "status": { "id": "s1", "name": "لم تبدأ" } },
+            "الأولوية": { "type": "select", "select": { "name": "Medium" } }
+          }
+        },
+        {
+          "object": "page", "id": "page-trashed", "in_trash": true,
+          "properties": { "المهمة": { "type": "title", "title": [{ "plain_text": "مهمة محذوفة" }] } }
+        },
+        {
+          "object": "page", "id": "page-untitled",
+          "properties": { "المهمة": { "type": "title", "title": [] } }
+        }
+      ]
+    },
+    {
+      "database": {
+        "object": "database",
+        "id": "db-shopping",
+        "title": [{ "plain_text": "Shopping" }],
+        "properties": {
+          "Name": { "id": "title", "name": "Name", "type": "title" },
+          "Bought": { "id": "b1", "name": "Bought", "type": "checkbox" },
+          "Priority": { "id": "p1", "name": "Priority", "type": "select" }
+        }
+      },
+      "pages": [
+        {
+          "object": "page", "id": "page-milk",
+          "properties": {
+            "Name": { "type": "title", "title": [{ "plain_text": "حليب" }] },
+            "Bought": { "type": "checkbox", "checkbox": true },
+            "Priority": { "type": "select", "select": { "name": "High" } }
+          }
+        },
+        {
+          "object": "page", "id": "page-bread",
+          "properties": {
+            "Name": { "type": "title", "title": [{ "plain_text": "خبز" }] },
+            "Bought": { "type": "checkbox", "checkbox": false },
+            "Priority": { "type": "select", "select": { "name": "Low" } }
+          }
+        }
+      ]
+    }
+  ]
+}

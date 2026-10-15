@@ -48,13 +48,21 @@ struct ImportView: View {
                 SourceRow(id: AppleCalendarImport.sourceId, label: "تقويم أبل", systemImage: "calendar")
             }
             ForEach(serverSources) { source in
-                NavigationLink {
-                    ImportSourceView(source: source, maxFileBytes: sources?.maxFileBytes ?? Self.fallbackMaxBytes) { job in
-                        history.removeAll { $0.id == job.id }
-                        history.insert(job, at: 0)
+                if source.available {
+                    NavigationLink {
+                        ImportSourceView(source: source, maxFileBytes: sources?.maxFileBytes ?? Self.fallbackMaxBytes) { job in
+                            history.removeAll { $0.id == job.id }
+                            history.insert(job, at: 0)
+                        }
+                    } label: {
+                        SourceRow(id: source.id, label: source.label, systemImage: Self.icon(for: source))
                     }
-                } label: {
-                    SourceRow(id: source.id, label: source.label, systemImage: source.input == .token ? "key" : "doc.text")
+                } else {
+                    // An OAuth source the server is not set up for yet: listed, greyed, not opened.
+                    SourceRow(id: source.id, label: source.label, systemImage: Self.icon(for: source),
+                              subtitle: ImportText.unavailable)
+                        .foregroundStyle(ZimamColor.inkMuted)
+                        .accessibilityElement(children: .combine)
                 }
             }
             if sources == nil && isLoading {
@@ -91,6 +99,14 @@ struct ImportView: View {
         return "\(formatter.dual(date, withYear: otherYear))، \(formatter.time(date))"
     }
 
+    private static func icon(for source: ImportSource) -> String {
+        switch source.input {
+        case .token: "key"
+        case .oauth: "link"
+        default: "doc.text"
+        }
+    }
+
     private func load() async {
         isLoading = true
         defer { isLoading = false }
@@ -115,15 +131,17 @@ private struct SourceRow: View {
     let id: String
     let label: String
     let systemImage: String
+    /// In place of the source's own line («غير متاح الآن»).
+    var subtitle: String? = nil
 
     var body: some View {
         Label {
             VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
                 Text(ImportText.title(forSource: id, label: label))
                     .font(ZimamType.body)
-                let subtitle = ImportText.subtitle(forSource: id)
-                if !subtitle.isEmpty {
-                    Text(subtitle)
+                let line = self.subtitle ?? ImportText.subtitle(forSource: id)
+                if !line.isEmpty {
+                    Text(line)
                         .font(ZimamType.caption)
                         .foregroundStyle(ZimamColor.inkMuted)
                 }

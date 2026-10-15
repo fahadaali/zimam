@@ -37,6 +37,22 @@ public extension APIClient {
         return try Self.decodeJob(try await perform(request))
     }
 
+    /// `GET /v1/imports/oauth/:source/start?return=app`: the provider's page to open in
+    /// ASWebAuthenticationSession. Its callback returns to `zimam://import-callback` (`ImportCallback`).
+    /// Refused with `source_unavailable` (503), `import_in_progress` (409) or `pro_required` (403).
+    func startOAuthImport(source: String) async throws -> URL {
+        struct Response: Decodable { let url: String }
+        var components = URLComponents(url: baseURL.appendingPathComponent("v1/imports/oauth/\(source)/start"),
+                                       resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "return", value: "app")]
+        guard let requestURL = components?.url else { throw URLError(.badURL) }
+        var request = URLRequest(url: requestURL)
+        request.httpMethod = "GET"
+        let response = try JSONDecoder().decode(Response.self, from: try await perform(request))
+        guard let url = URL(string: response.url), url.scheme == "https" else { throw URLError(.badServerResponse) }
+        return url
+    }
+
     /// `GET /v1/imports`: the latest twenty, newest first.
     func imports() async throws -> [ImportJob] {
         struct Response: Decodable { let jobs: [ImportJob] }

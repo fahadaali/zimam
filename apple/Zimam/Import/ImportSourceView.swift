@@ -1,9 +1,11 @@
+import AuthenticationServices
 import SwiftUI
 import UniformTypeIdentifiers
 import ZimamKit
 
-/// One server source: how to export from the other app, then a file to upload or a token to
-/// paste. Once the server takes the job, the screen follows it (`ImportJobView`).
+/// One server source: how to export from the other app, then a file to upload, a token to
+/// paste, or the provider's OAuth page (ASWebAuthenticationSession, returning to
+/// `zimam://import-callback`). Once the server takes the job, the screen follows it (`ImportJobView`).
 struct ImportSourceView: View {
     let source: ImportSource
     let maxFileBytes: Int
@@ -11,6 +13,7 @@ struct ImportSourceView: View {
     let onStarted: (ImportJob) -> Void
 
     @Environment(SessionStore.self) private var session
+    @Environment(\.webAuthenticationSession) private var webAuthenticationSession
 
     @State private var job: ImportJob?
     @State private var choosingFile = false
@@ -56,6 +59,7 @@ struct ImportSourceView: View {
             switch source.input {
             case .file: fileSection
             case .token: tokenSection
+            case .oauth: oauthSection
             case .unsupported: EmptyView()
             }
 
@@ -140,6 +144,26 @@ struct ImportSourceView: View {
         }
     }
 
+    private var oauthSection: some View {
+        Section {
+            Button {
+                Task { await connect() }
+            } label: {
+                HStack(spacing: ZimamSpacing.space2) {
+                    if isStarting { ProgressView() }
+                    Text(isStarting ? "جارٍ الربط…" : ImportText.connect(source))
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.zimamPrimary)
+            .disabled(isStarting || !source.available)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets())
+        } footer: {
+            Text("يقرأ زمام بياناتك مرة واحدة بالإذن الذي تمنحه، ولا يحفظ إذن الوصول في التطبيق ولا في الخادم.")
+        }
+    }
+
     private var trimmedToken: String { token.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private var extensionsText: String {
@@ -209,6 +233,47 @@ struct ImportSourceView: View {
             started(try await session.api.startImport(source: source.id, token: value))
         } catch {
             await show(error)
+        }
+    }
+
+    /// Opens the provider's page; its consent ends at the server's callback, which queues the import
+    /// and returns to `zimam://import-callback?job=…` (or `?error=…`).
+    private func connect() async {
+        guard !isStarting else { return }
+        errorMessage = nil
+        runningJob = nil
+        needsPro = false
+        isStarting = true
+        defer { isStarting = false }
+        let callback: URL
+        do {
+            let url = try await session.api.startOAuthImport(source: source.id)
+            callback = try await webAuthenticationSession.authenticate(using: url, callbackURLScheme: ImportCallback.scheme)
+        } catch {
+            // Closing the provider's page is not an error.
+            if (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin { return }
+            if error is ASWebAuthenticationSessionError {
+                errorMessage = "تعذّر فتح صفحة الإذن. حاول مرة أخرى."
+                return
+            }
+            await show(error)
+            return
+        }
+        switch ImportCallback(url: callback) {
+        case .job(let id)?:
+            do {
+                started(try await session.api.importJob(id: id))
+            } catch {
+                errorMessage = "بدأ الاستيراد، وتعذّر عرض حالته الآن. تجده في «آخر عمليات الاستيراد»."
+            }
+        case .failure(let code)?:
+            needsPro = code == "pro_required"
+            errorMessage = ImportText.oauthMessage(code)
+            if code == "import_in_progress" {
+                runningJob = try? await session.api.imports().first { !$0.isFinished }
+            }
+        case nil:
+            errorMessage = ImportText.oauthMessage("")
         }
     }
 

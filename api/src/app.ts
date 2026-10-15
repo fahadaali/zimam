@@ -7,6 +7,7 @@ import { assistant } from "./routes/assistant";
 import { attachments } from "./routes/attachments";
 import { auth } from "./routes/auth";
 import { comments } from "./routes/comments";
+import { importOAuth, isOAuthCallback } from "./routes/import-oauth";
 import { imports } from "./routes/imports";
 import { invites } from "./routes/invites";
 import { me } from "./routes/me";
@@ -40,12 +41,14 @@ export function createApp(deps: Deps) {
   const signedIn = [
     "/v1/me", "/v1/me/*", "/v1/sync", "/v1/projects", "/v1/projects/*",
     "/v1/tasks", "/v1/tasks/*", "/v1/invites/*", "/v1/comments/*", "/v1/assistant/*",
-    "/v1/devices/*", "/v1/realtime/ticket", "/v1/imports", "/v1/imports/*",
+    "/v1/devices/*", "/v1/realtime/ticket", "/v1/imports",
     "/v1/attachments/*",
   ];
   for (const path of signedIn) {
     app.use(path, requireUser);
   }
+  // The OAuth providers return to the import callbacks without a session: their state names the user.
+  app.use("/v1/imports/*", (c, next) => (isOAuthCallback(c.req.path) ? next() : requireUser(c, next)));
   app.route("/v1/me", me);
   app.route("/v1/sync", sync);
   app.route("/v1/projects", projects);
@@ -57,6 +60,7 @@ export function createApp(deps: Deps) {
   app.route("/v1/assistant", assistant);
   app.route("/v1/devices", devices);
   app.route("/v1/realtime", realtime);
+  app.route("/v1/imports/oauth", importOAuth);
   app.route("/v1/imports", imports);
   // Signed-in per route: the App Store's notifications come without a session.
   app.route("/v1/subscriptions", subscriptions);

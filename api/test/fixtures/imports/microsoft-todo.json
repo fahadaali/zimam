@@ -1,0 +1,57 @@
+{
+  "lists": [
+    {
+      "list": { "id": "AAMkTasks", "displayName": "Tasks", "wellknownListName": "defaultList" },
+      "tasks": [
+        {
+          "id": "task-gift", "title": "شراء هدية", "importance": "high", "status": "notStarted",
+          "body": { "content": "لأخي", "contentType": "text" },
+          "categories": ["عائلة"],
+          "dueDateTime": { "dateTime": "2026-10-19T21:00:00.0000000", "timeZone": "UTC" },
+          "isReminderOn": true,
+          "reminderDateTime": { "dateTime": "2026-10-20T06:00:00.0000000", "timeZone": "UTC" },
+          "checklistItems": [
+            { "id": "step-choose", "displayName": "اختيار الهدية", "isChecked": true, "checkedDateTime": "2026-10-10T08:00:00Z" },
+            { "id": "step-wrap", "displayName": "تغليفها", "isChecked": false }
+          ]
+        },
+        { "id": "task-empty", "title": "  ", "importance": "normal", "status": "notStarted" }
+      ]
+    },
+    {
+      "list": { "id": "AAMkHome", "displayName": "البيت", "wellknownListName": "none" },
+      "tasks": [
+        {
+          "id": "task-ac", "title": "تنظيف المكيف", "importance": "normal", "status": "notStarted",
+          "body": { "content": "", "contentType": "text" },
+          "dueDateTime": { "dateTime": "2026-10-17T00:00:00.0000000", "timeZone": "UTC" },
+          "recurrence": {
+            "pattern": { "type": "weekly", "interval": 2, "daysOfWeek": ["saturday"], "firstDayOfWeek": "sunday", "index": "first" },
+            "range": { "type": "noEnd", "startDate": "2026-10-17", "endDate": "0001-01-01", "numberOfOccurrences": 0 }
+          }
+        },
+        {
+          "id": "task-rent", "title": "دفع الإيجار", "importance": "normal", "status": "notStarted",
+          "dueDateTime": { "dateTime": "2026-11-01T21:00:00.0000000", "timeZone": "UTC" },
+          "isReminderOn": true,
+          "reminderDateTime": { "dateTime": "2026-11-02T06:00:00.0000000", "timeZone": "UTC" },
+          "recurrence": {
+            "pattern": { "type": "relativeMonthly", "interval": 1, "daysOfWeek": ["monday"], "index": "first" },
+            "range": { "type": "noEnd", "startDate": "2026-11-02" }
+          }
+        },
+        {
+          "id": "task-done", "title": "تجديد الاشتراك", "importance": "low", "status": "completed",
+          "body": { "content": "<div>رقم <b>العميل</b>: ٤٥</div>", "contentType": "html" },
+          "completedDateTime": { "dateTime": "2026-10-01T10:00:00.0000000", "timeZone": "UTC" },
+          "startDateTime": { "dateTime": "2026-09-27T21:00:00.0000000", "timeZone": "UTC" },
+          "dueDateTime": { "dateTime": "2026-09-29T21:00:00.0000000", "timeZone": "UTC" }
+        }
+      ]
+    },
+    {
+      "list": { "id": "AAMkFlagged", "displayName": "Flagged email", "wellknownListName": "flaggedEmails" },
+      "tasks": []
+    }
+  ]
+}

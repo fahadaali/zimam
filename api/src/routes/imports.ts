@@ -13,6 +13,7 @@ import {
   MAX_UPLOAD_BYTES,
   uploadKey,
 } from "../imports/jobs";
+import { isOAuthSource, oauthAvailable } from "../imports/oauth";
 import { isSourceId, SOURCES } from "../imports/sources";
 import { requirePro } from "../subscriptions/entitlements";
 import type { AppEnv } from "../types";
@@ -28,7 +29,10 @@ const TokenBody = z.object({
   token: z.string().trim().min(8).max(500).regex(/^\S+$/),
 });
 
-/** GET /v1/imports/sources — what can be imported and how. */
+/**
+ * GET /v1/imports/sources — what can be imported and how. `available` is false for an OAuth
+ * source whose secrets are not set on this deployment: the apps show it greyed out.
+ */
 imports.get("/sources", (c) =>
   c.json({
     maxFileBytes: MAX_UPLOAD_BYTES,
@@ -37,6 +41,7 @@ imports.get("/sources", (c) =>
       label: s.label,
       input: s.input,
       extensions: s.input === "file" ? s.extensions : undefined,
+      available: isOAuthSource(s.id) ? oauthAvailable(c.env, s.id) : true,
     })),
   }),
 );
@@ -87,6 +92,7 @@ imports.post("/", requirePro, async (c) => {
     const raw = (await readJson(c)) as { source?: unknown } | undefined;
     if (!isSourceId(raw?.source)) return fail(c, 400, "invalid_source", "Unknown import source");
     if (SOURCES[raw.source].input === "file") return fail(c, 400, "invalid", "Upload this source's file as multipart/form-data");
+    if (SOURCES[raw.source].input === "oauth") return fail(c, 400, "invalid_source", "This source connects through GET /v1/imports/oauth/:source/start");
     const body = TokenBody.safeParse(raw);
     if (!body.success) return fail(c, 400, "invalid", "token is required");
     token = body.data.token;

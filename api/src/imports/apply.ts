@@ -303,6 +303,8 @@ export class Importer {
           tags: t.tags,
           dueDate: t.dueDate,
           dueTime: t.dueTime,
+          // Only from sources that know start days; otherwise Zimam keeps the user's.
+          ...(t.startDate !== undefined ? { startDate: t.startDate } : {}),
           // What the source has no field for stays as the user set it.
           duePrayer: (existing?.due_prayer as string | null) ?? null,
           duePrayerOffset: (existing?.due_prayer_offset as number | null) ?? null,
@@ -338,6 +340,7 @@ function same(entity: ImportEntity, d: Record<string, unknown>, row: Row): boole
         eq(d.projectId, row.project_id) && eq(d.sectionId, row.section_id) && eq(d.parentId, row.parent_id) &&
         eq(d.title, row.title) && eq(d.notes, row.notes) && eq(d.status, row.status) && eq(d.priority, row.priority) &&
         JSON.stringify(d.tags) === row.tags && eq(d.dueDate, row.due_date) && eq(d.dueTime, row.due_time) &&
+        (d.startDate === undefined || eq(d.startDate, row.start_date)) &&
         eq(d.recurrence, row.recurrence) && eq(d.sortOrder, row.sort_order) &&
         (d.completedAt === null || eq(d.completedAt, row.completed_at))
       );

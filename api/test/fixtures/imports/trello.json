@@ -1,0 +1,37 @@
+{
+  "boards": [
+    {
+      "id": "board-home", "name": "تجديد البيت", "closed": false,
+      "lists": [
+        { "id": "list-done", "name": "تم", "pos": 32768, "closed": false },
+        { "id": "list-todo", "name": "للعمل", "pos": 16384, "closed": false },
+        { "id": "list-old", "name": "قديم", "pos": 65536, "closed": true }
+      ],
+      "cards": [
+        {
+          "id": "card-paint", "name": "دهان الغرفة", "desc": "لون أبيض مطفي", "closed": false,
+          "due": "2026-10-20T06:00:00.000Z", "dueComplete": false, "start": "2026-10-18T09:00:00.000Z",
+          "idList": "list-todo", "pos": 16384,
+          "labels": [{ "name": "عاجل", "color": "red" }, { "name": "", "color": "green" }]
+        },
+        {
+          "id": "card-tools", "name": "شراء الأدوات", "desc": "", "closed": false,
+          "due": null, "dueComplete": true, "start": null, "idList": "list-done", "pos": 16384, "labels": []
+        },
+        {
+          "id": "card-old", "name": "بطاقة في قائمة مؤرشفة", "closed": false, "idList": "list-old", "pos": 1, "labels": []
+        }
+      ],
+      "checklists": [
+        {
+          "id": "checklist-1", "idCard": "card-paint", "name": "قبل الدهان", "pos": 1,
+          "checkItems": [
+            { "id": "item-cover", "name": "تغطية الأثاث", "state": "incomplete", "pos": 2 },
+            { "id": "item-buy", "name": "شراء الطلاء", "state": "complete", "pos": 1 }
+          ]
+        }
+      ]
+    },
+    { "id": "board-closed", "name": "مؤرشفة", "closed": true, "lists": [], "cards": [], "checklists": [] }
+  ]
+}

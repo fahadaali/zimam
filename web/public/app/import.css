@@ -36,6 +36,14 @@
   color: var(--brand-ink);
 }
 
+/* An OAuth source the server cannot start yet (its secrets are not set): greyed, «غير متاح الآن». */
+.import-choice-unavailable {
+  border-color: var(--line);
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+  cursor: not-allowed;
+}
+
 .import-howto {
   margin-block: var(--space-4);
 }

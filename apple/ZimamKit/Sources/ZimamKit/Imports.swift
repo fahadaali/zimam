@@ -1,9 +1,9 @@
 import Foundation
 
-// Imports from other apps (api/DEVELOPMENT.md, «الاستيراد»). The server reads the file or the
-// Todoist token on its queue and writes the records through sync, so the app only starts a job,
-// follows it, and shows what happened. Apple Reminders are imported on the device instead
-// (AppleReminders.swift).
+// Imports from other apps (api/DEVELOPMENT.md, «الاستيراد»). The server reads the file, the
+// Todoist token, or a provider's API after its OAuth flow, on its queue, and writes the records
+// through sync, so the app only starts a job, follows it, and shows what happened. Apple Reminders
+// are imported on the device instead (AppleReminders.swift).
 
 /// `GET /v1/imports/sources`: what the server can import, and the upload limit.
 public struct ImportSources: Decodable, Equatable, Sendable {
@@ -17,28 +17,33 @@ public struct ImportSources: Decodable, Equatable, Sendable {
 }
 
 public struct ImportSource: Decodable, Equatable, Hashable, Identifiable, Sendable {
-    /// How the source is read: an uploaded file, or a token the user pastes.
-    /// Sources the app does not know yet (OAuth later) decode as `.unsupported` and are hidden.
+    /// How the source is read: an uploaded file, a token the user pastes, or the provider's
+    /// OAuth flow (the server's; the app opens it in ASWebAuthenticationSession).
+    /// Kinds this version does not know decode as `.unsupported` and are hidden.
     public enum Input: String, Sendable {
-        case file, token, unsupported
+        case file, token, oauth, unsupported
     }
 
-    /// Stable id: "todoist-csv", "todoist-api", "ticktick-csv", "google-tasks", "csv".
+    /// Stable id: "todoist-csv", "todoist-api", "ticktick-csv", "google-tasks", "csv",
+    /// "google-calendar", "microsoft-todo", "notion", "trello", "asana", "ticktick-api".
     public let id: String
     /// The provider's name as the server gives it ("Todoist", "TickTick").
     public let label: String
     public let input: Input
     /// Lowercase with the dot (".csv"), for file sources.
     public let extensions: [String]
+    /// False for an OAuth source the server is not set up for yet: shown greyed, «غير متاح الآن».
+    public let available: Bool
 
-    public init(id: String, label: String, input: Input, extensions: [String] = []) {
+    public init(id: String, label: String, input: Input, extensions: [String] = [], available: Bool = true) {
         self.id = id
         self.label = label
         self.input = input
         self.extensions = extensions
+        self.available = available
     }
 
-    private enum CodingKeys: String, CodingKey { case id, label, input, extensions }
+    private enum CodingKeys: String, CodingKey { case id, label, input, extensions, available }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -46,6 +51,38 @@ public struct ImportSource: Decodable, Equatable, Hashable, Identifiable, Sendab
         label = try c.decode(String.self, forKey: .label)
         input = Input(rawValue: try c.decode(String.self, forKey: .input)) ?? .unsupported
         extensions = (try c.decodeIfPresent([String].self, forKey: .extensions) ?? []).map { $0.lowercased() }
+        // Servers before OAuth sources do not send it: everything they list can start.
+        available = try c.decodeIfPresent(Bool.self, forKey: .available) ?? true
+    }
+}
+
+/// Where the server's OAuth callback returns: `zimam://import-callback?job=<id>` once the import is
+/// queued, or `?error=<code>` when it is not (`denied`, `provider_error`, `exchange_failed`,
+/// `pro_required`, `import_in_progress`, `import_unavailable`).
+public enum ImportCallback: Equatable, Sendable {
+    case job(String)
+    case failure(String)
+
+    /// The scheme ASWebAuthenticationSession waits for; the app's own (`ZimamWeb.appScheme`).
+    public static let scheme = ZimamWeb.appScheme
+    public static let host = "import-callback"
+
+    /// Reads the callback; nil for any other URL.
+    public init?(url: URL) {
+        guard url.scheme?.lowercased() == Self.scheme, url.host?.lowercased() == Self.host,
+              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return nil }
+        if let job = items.first(where: { $0.name == "job" })?.value, Self.isJobId(job) {
+            self = .job(job.lowercased())
+        } else if let code = items.first(where: { $0.name == "error" })?.value, !code.isEmpty {
+            self = .failure(code)
+        } else {
+            return nil
+        }
+    }
+
+    /// A UUID as the server writes it: 36 characters of hex digits and hyphens.
+    static func isJobId(_ text: String) -> Bool {
+        text.count == 36 && text.allSatisfy { $0 == "-" || $0.isHexDigit }
     }
 }
 
@@ -315,6 +352,8 @@ public enum ImportText {
             return message(for: .empty, locale: locale)
         case "invalid_source":
             return "هذا المصدر غير متاح. حدّث التطبيق ثم حاول مرة أخرى."
+        case "source_unavailable":
+            return "هذا المصدر غير متاح الآن. حاول لاحقاً أو اختر مصدراً آخر."
         case "invalid":
             return "تعذّر قراءة الطلب. تحقّق من الملف أو الرمز ثم حاول مرة أخرى."
         case "import_in_progress":
@@ -410,8 +449,40 @@ public enum ImportText {
         case "ticktick-csv": return "ملف النسخة الاحتياطية CSV"
         case "google-tasks": return "ملف Tasks.json من Google Takeout"
         case "csv": return "أي جدول بصيغة CSV"
+        case "google-calendar": return "أحداث تقاويمك مهاماً"
+        case "microsoft-todo": return "القوائم والمهام بحساب Microsoft"
+        case "notion": return "قاعدة بيانات مهام"
+        case "trello": return "اللوحات والبطاقات"
+        case "asana": return "المشاريع والأقسام والمهام"
+        case "ticktick-api": return "القوائم والمهام المفتوحة مباشرة"
         case AppleRemindersImport.sourceId: return "من هذا الجهاز مباشرة"
         default: return ""
+        }
+    }
+
+    /// Under an OAuth source the server cannot start yet.
+    public static let unavailable = "غير متاح الآن"
+
+    /// The button that opens the provider's page: «الربط بـ Notion».
+    public static func connect(_ source: ImportSource) -> String {
+        "الربط بـ \(source.label)"
+    }
+
+    /// Arabic text for the error code the OAuth callback returned with (`ImportCallback.failure`).
+    public static func oauthMessage(_ code: String) -> String {
+        switch code {
+        case "denied":
+            return "لم يكتمل الإذن، فلم يبدأ الاستيراد. ابدأ مرة أخرى ووافق على الإذن إن أردت النقل."
+        case "provider_error":
+            return "رفض المصدر طلب الإذن. حاول مرة أخرى بعد قليل."
+        case "pro_required":
+            return "الاستيراد من هذا المصدر من مزايا «زمام الاحترافية». تذكيرات أبل تبقى مجانية."
+        case "import_in_progress":
+            return "يجري استيراد آخر الآن. انتظر حتى ينتهي ثم ابدأ استيراداً جديداً."
+        case "import_unavailable":
+            return "تعذّر بدء الاستيراد الآن. أعد المحاولة بعد قليل."
+        default:
+            return "تعذّر إكمال الربط بالمصدر. ابدأ الاستيراد مرة أخرى."
         }
     }
 
@@ -423,6 +494,12 @@ public enum ImportText {
         case "ticktick-csv": return "TickTick"
         case "google-tasks": return "Google Tasks"
         case "csv": return "ملف CSV"
+        case "google-calendar": return "Google Calendar"
+        case "microsoft-todo": return "Microsoft To Do"
+        case "notion": return "Notion"
+        case "trello": return "Trello"
+        case "asana": return "Asana"
+        case "ticktick-api": return "TickTick: الربط بالحساب"
         case AppleRemindersImport.sourceId: return "تذكيرات أبل"
         default: return label
         }
@@ -441,6 +518,18 @@ public enum ImportText {
             return "من Google Takeout (takeout.google.com) اختر «Tasks» وحده ثم صدّر، وفك ضغط الملف واختر Tasks.json. كل قائمة تصير مشروعاً."
         case "csv":
             return "أي جدول صفّه الأول أسماء الأعمدة: العنوان (إلزامي)، والملاحظات، والتاريخ، والوقت، والمشروع، والقسم، والأولوية، والحالة، والوسوم. احفظه من Excel أو Numbers أو Google Sheets بصيغة CSV."
+        case "google-calendar":
+            return "تنتقل إلى Google لتأذن لزمام بقراءة تقويمك، ثم تعود هنا. يصير كل تقويم ظاهر في Google Calendar مشروعاً، وكل حدث من آخر ٣٠ يوماً إلى سنة قادمة مهمة في موعده. لا يتغيّر شيء في تقويمك."
+        case "microsoft-todo":
+            return "تنتقل إلى Microsoft لتأذن لزمام بقراءة مهامك، ثم تعود هنا. تصير كل قائمة مشروعاً، وقائمة «المهام» صندوق الوارد، وتُنقل الأهمية والمواعيد والتذكيرات والخطوات والمنجزة."
+        case "notion":
+            return "تنتقل إلى Notion وتختار قاعدة بيانات المهام (أو الصفحة التي فيها) لتشاركها مع زمام، ثم تعود هنا. تصير كل قاعدة مشروعاً: العنوان، والتاريخ، والحالة أو مربع الإنجاز، والأولوية، والوسوم."
+        case "trello":
+            return "تنتقل إلى Trello لتأذن لزمام بالقراءة، ثم تعود هنا. تصير كل لوحة مشروع كانبان، وقوائمها أعمدة، وبطاقاتها مهام بمواعيدها وتسمياتها وقوائم التحقق."
+        case "asana":
+            return "تنتقل إلى Asana لتأذن لزمام بالقراءة، ثم تعود هنا. تُنقل المشاريع غير المؤرشفة بأقسامها ومهامها والمهام الفرعية والمواعيد والمنجزة."
+        case "ticktick-api":
+            return "تنتقل إلى TickTick لتأذن لزمام بقراءة مهامك، ثم تعود هنا. تُنقل القوائم وأعمدة الكانبان والمهام المفتوحة والتكرار والتذكيرات. وللمهام المنجزة استعمل ملف النسخة الاحتياطية."
         case AppleRemindersImport.sourceId:
             return "تُقرأ القوائم التي تختارها من تذكيرات أبل على هذا الجهاز، فتصير كل قائمة مشروعاً في زمام. لا يُغيَّر شيء في التذكيرات نفسها."
         default:

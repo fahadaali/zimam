@@ -1,6 +1,8 @@
-// #/import: move tasks from Todoist, TickTick, Google Tasks or a CSV file into Zimam.
+// #/import: move tasks from Todoist, TickTick, Google Tasks, a CSV file, or (through their OAuth
+// flows) Google Calendar, Microsoft To Do, Notion, Trello, Asana and TickTick into Zimam.
 // The server does the work (POST /v1/imports, then its queue); this view uploads the file or sends
-// the token once, follows the job until it ends, and lists the latest imports.
+// the token once, or opens the provider's page in this tab (the server's callback returns to
+// #/import?job=<id>), follows the job until it ends, and lists the latest imports.
 // Plain DOM through h() and textContent; nothing here parses HTML.
 import { request } from "./lib/api.js";
 import { Button, h } from "./lib/components.js";
@@ -10,13 +12,19 @@ import {
   acceptList,
   checkFile,
   checkToken,
+  connectLabel,
   countRows,
   extensionsText,
+  firstAvailable,
   importErrorText,
+  isAvailable,
   isFinished,
   jobDate,
   limitText,
   nextPollDelay,
+  oauthErrorText,
+  oauthReturn,
+  oauthStartPath,
   progressPercent,
   progressText,
   sourceHowTo,
@@ -39,6 +47,7 @@ const importsApi = {
     return request("POST", "/v1/imports", form);
   },
   startWithToken: (source, token) => request("POST", "/v1/imports", { source, token }),
+  oauthStart: (source) => request("GET", oauthStartPath(source, location.origin)),
 };
 
 /** Each render starts a new generation; a poll from an older one stops. */
@@ -65,10 +74,12 @@ export async function viewImport(ctx) {
 
   // ——— Choosing a source ———
 
-  let selected = sources[0] ?? null;
+  let selected = firstAvailable(sources);
   const choices = h("div", { className: "choices import-sources" });
   for (const source of sources) {
-    const input = h("input", { type: "radio", name: "import-source", value: source.id, checked: source === selected });
+    // An OAuth source whose secrets the server lacks: shown, greyed, and not selectable.
+    const available = isAvailable(source);
+    const input = h("input", { type: "radio", name: "import-source", value: source.id, checked: source === selected, disabled: !available });
     input.addEventListener("change", () => {
       selected = source;
       showSource();
@@ -76,9 +87,14 @@ export async function viewImport(ctx) {
     choices.append(
       h(
         "label",
-        { className: "choice import-choice" },
+        { className: `choice import-choice${available ? "" : " import-choice-unavailable"}` },
         input,
-        h("span", { className: "import-choice-text" }, h("span", { className: "callout" }, sourceTitle(source)), h("span", { className: "caption muted" }, sourceSubtitle(source.id))),
+        h(
+          "span",
+          { className: "import-choice-text" },
+          h("span", { className: "callout" }, sourceTitle(source)),
+          h("span", { className: "caption muted" }, available ? sourceSubtitle(source.id) : "غير متاح الآن"),
+        ),
       ),
     );
   }
@@ -108,6 +124,7 @@ export async function viewImport(ctx) {
 
   const formError = h("p", { className: "callout field-error", id: "import-error", role: "alert" });
   const followRunning = Button({ variant: "secondary", hidden: true }, "متابعة الاستيراد الجاري");
+  const submitLabel = () => (selected?.input === "oauth" ? connectLabel(selected) : "بدء الاستيراد");
   const submit = Button({ variant: "primary", type: "submit" }, "بدء الاستيراد");
   const form = h(
     "form",
@@ -124,7 +141,8 @@ export async function viewImport(ctx) {
     howTo.textContent = selected ? sourceHowTo(selected.id) : "";
     const isFile = selected?.input === "file";
     fileField.hidden = !isFile;
-    tokenField.hidden = isFile;
+    tokenField.hidden = selected?.input !== "token";
+    submit.textContent = submitLabel();
     fileInput.value = "";
     fileInput.setAttribute("accept", acceptList(selected));
     fileHint.textContent = `${limitText(maxFileBytes)} الأنواع: ${extensionsText(selected?.extensions ?? [])}.`;
@@ -156,6 +174,10 @@ export async function viewImport(ctx) {
     if (!selected || submit.disabled) return;
     formError.textContent = "";
     followRunning.hidden = true;
+    if (selected.input === "oauth") {
+      await connect(selected);
+      return;
+    }
     let start;
     if (selected.input === "file") {
       const file = fileInput.files?.[0];
@@ -198,9 +220,28 @@ export async function viewImport(ctx) {
       }
     } finally {
       submit.disabled = false;
-      submit.textContent = "بدء الاستيراد";
+      submit.textContent = submitLabel();
     }
   });
+
+  /** Asks the server for the provider's page and goes there in this tab; the callback returns to #/import. */
+  async function connect(source) {
+    submit.disabled = true;
+    submit.textContent = "جارٍ الانتقال…";
+    try {
+      const { url } = await importsApi.oauthStart(source.id);
+      location.assign(url);
+    } catch (error) {
+      submit.disabled = false;
+      submit.textContent = submitLabel();
+      if (error.status === 401) return; // main.js shows sign-in
+      formError.textContent = importErrorText(error, { input: "oauth" });
+      if (error.code === "import_in_progress") {
+        runningJob = await findRunning();
+        followRunning.hidden = !runningJob;
+      }
+    }
+  }
 
   async function findRunning() {
     try {
@@ -338,9 +379,29 @@ export async function viewImport(ctx) {
 
   showSource();
   renderHistory();
-  // An import still running (started here earlier, or in the app) is followed at once.
-  const running = history.find((j) => !isFinished(j));
-  if (running) queueMicrotask(() => follow(running));
+  // Back from a provider's page: #/import?job=<id> or ?error=<code>. The route drops them at once,
+  // so a reload does not show them again.
+  const back = oauthReturn(location.hash);
+  if (back) {
+    window.history.replaceState(null, "", `${location.pathname}${location.search}#/import`);
+    if (back.error) formError.textContent = oauthErrorText(back.error);
+  }
+  let returned = null;
+  if (back?.job) {
+    returned = history.find((j) => j.id === back.job) ?? null;
+    if (!returned) {
+      try {
+        returned = (await importsApi.job(back.job)).job;
+        history = [returned, ...history];
+        renderHistory();
+      } catch {
+        returned = null;
+      }
+    }
+  }
+  // The import just started there, or one still running (started here earlier, or in the app), is followed at once.
+  const running = returned ?? history.find((j) => !isFinished(j));
+  if (running) queueMicrotask(() => follow(running, { focus: running === returned }));
 
   return [header, panel, sourceSection, historySection];
 }

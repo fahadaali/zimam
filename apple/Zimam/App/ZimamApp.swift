@@ -64,6 +64,8 @@ struct ZimamApp: App {
             RootView()
                 // The join sheet for an invite link (App/InviteLinks.swift); inside the environment below.
                 .inviteLinkSheet()
+                // An import's OAuth callback opened outside its web session (Import/ImportLinks.swift).
+                .importLinkSheet()
                 .environment(session)
                 .environment(sync)
                 .environment(location)
@@ -77,10 +79,12 @@ struct ZimamApp: App {
                 // Google's sign-in page returns here through the reversed client ID scheme, the
                 // widgets through zimam://task/<id>, zimam://day/<day>, zimam://today and
                 // zimam://calendar (App/AppLinks.swift), and «فتح في التطبيق» on the web join page
-                // through zimam://join/<code>.
+                // through zimam://join/<code>. An import's OAuth flow returns through
+                // zimam://import-callback?job=<id> (Import/ImportLinks.swift).
                 .onOpenURL { url in
                     if SessionStore.handleOpenURL(url) { return }
                     if AppLinks.open(url) { return }
+                    if ImportLinks.shared.open(url) { return }
                     InviteLinks.shared.open(url)
                 }
                 // Universal links: https://<site>/join/#<code> (Associated Domains in project.yml).

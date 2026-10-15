@@ -45,6 +45,11 @@ export interface ImportedTask {
   dueDate: string | null;
   /** Local "HH:mm". */
   dueTime: string | null;
+  /**
+   * The first day of a task that spans days, "2026-10-18", before its `dueDate`. Absent: the
+   * source has no such field, and Zimam keeps what the user set. Null: the task spans no days.
+   */
+  startDate?: string | null;
   /** RFC 5545 RRULE without the "RRULE:" prefix. */
   recurrence: string | null;
   /** Only when the source marks the task completed. */
@@ -96,6 +101,11 @@ const WARNING_TEXT = {
   remindersSkipped: "تذكيرات لم تُنقل لأنها على مهام متكررة أو منجزة أو بلا موعد",
   sectionsDropped: "أقسام في صندوق الوارد لا تُنقل، فبقيت مهامها في الصندوق بلا قسم",
   deletedSkipped: "مهام محذوفة في المصدر تُركت",
+  archivedSkipped: "عناصر مؤرشفة أو في سلة المحذوفات تُركت",
+  calendarsSkipped: "تقاويم العطل وأعياد الميلاد لم تُنقل",
+  seriesExpanded: "مواعيد متكررة لا يعبّر عنها تكرار زمام، فنُقلت مرّاتها في المدة مهاماً منفصلة",
+  flaggedEmailsSkipped: "قائمة الرسائل المعلَّمة في Outlook لم تُنقل لأنها رسائل لا مهام",
+  databasesSkipped: "قواعد بيانات Notion بلا عمود عنوان لم تُنقل",
 } as const;
 
 export type WarningKind = keyof typeof WARNING_TEXT;
@@ -138,7 +148,10 @@ export function fitTask(t: ImportedTask): ImportedTask {
     if (notes && notes.length > LIMITS.notes) notes = `${notes.slice(0, LIMITS.notes - 1)}…`;
   }
   const tags = [...new Set(t.tags.map((tag) => tag.trim().slice(0, LIMITS.tag).trim()).filter(Boolean))].slice(0, LIMITS.tags);
-  return { ...t, title, notes, tags };
+  const out = { ...t, title, notes, tags };
+  // A start day only before a due day: Zimam refuses one on or after it, or without one.
+  if (out.startDate != null && (out.dueDate === null || out.startDate >= out.dueDate)) out.startDate = null;
+  return out;
 }
 
 export function fitName(name: string, max: number): string {

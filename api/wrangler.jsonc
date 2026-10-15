@@ -52,7 +52,13 @@
     // the personal trial: everyone uses everything, and the app shows the plan without blocking.
     "SUBSCRIPTIONS_ENFORCED": "false",
     // Comma-separated user ids or emails treated as pro whatever their subscription (the owner).
-    "PRO_USERS": ""
+    "PRO_USERS": "",
+    // Imports through OAuth (src/imports/oauth.ts). Google Calendar uses the web client above; its
+    // secret and every other provider's credentials are secrets (docs/setup.md, «الاستيراد بإذن OAuth»):
+    // GOOGLE_CLIENT_SECRET, MS_CLIENT_ID, MS_CLIENT_SECRET, NOTION_CLIENT_ID, NOTION_CLIENT_SECRET,
+    // TRELLO_API_KEY, ASANA_CLIENT_ID, ASANA_CLIENT_SECRET, TICKTICK_CLIENT_ID, TICKTICK_CLIENT_SECRET.
+    // A source without its secrets is listed as unavailable. Never put them here.
+    "GOOGLE_WEB_CLIENT_ID": "404741015373-ukucah8482ofiuvd9lb4cn4pgqvnfm75.apps.googleusercontent.com"
   },
   // Pushes the reminders beyond the app's local notification window (src/push/reminders.ts).
   "triggers": { "crons": ["*/5 * * * *"] },
