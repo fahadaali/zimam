@@ -21,7 +21,8 @@ interface OwnedProject {
  *   tasks assigned to them become unassigned, and their reminders go.
  * - Inbox tasks, reminders and the comments they wrote are deleted everywhere.
  *   Tasks they created in projects that live on stay with those projects.
- * - Invites they created are revoked, and every session ends.
+ * - Invites they created are revoked, every session ends, and their sign-in
+ *   identities (Apple, Google) are unlinked, so signing in again starts afresh.
  * - Deleted rows stay as tombstones for sync, but their text is cleared, and
  *   the user row is anonymised (other rows still reference its id).
  *
@@ -116,6 +117,8 @@ export async function deleteAccount(db: D1Database, access: Access, mutator: Mut
       // Their files in R2 go when the queue next sees the job missing, or by the bucket's lifecycle rule.
       `DELETE FROM import_jobs WHERE user_id = ?1`,
       `DELETE FROM sessions WHERE user_id = ?1`,
+      // Their Apple and Google accounts are no longer linked: signing in with them again starts a fresh account.
+      `DELETE FROM identities WHERE user_id = ?1`,
       `UPDATE users SET apple_sub = 'deleted:' || id, email = NULL, name = NULL, settings = '{}',
          apple_refresh_token = NULL, apple_client_id = NULL, updated_at = ?2 WHERE id = ?1`,
     ].map((sql) => (sql.includes("?2") ? db.prepare(sql).bind(userId, now) : db.prepare(sql).bind(userId))),

@@ -146,7 +146,7 @@ assistant.get("/summary", async (c) => {
   const today = dayIn(settings.timeZone, now);
   const date = query.data.date ?? today;
 
-  const agenda = await new Assistant(c.env, c.var.deps.appleKeys).getAgenda(c.var.userId, { from: date, days: 1 });
+  const agenda = await new Assistant(c.env, { apple: c.var.deps.appleKeys, google: c.var.deps.googleKeys }).getAgenda(c.var.userId, { from: date, days: 1 });
   if (!agenda.ok) return fail(c, 401, agenda.error.code, agenda.error.message);
   const day = agenda.value.days[0]!;
   const prayers = day.prayers;

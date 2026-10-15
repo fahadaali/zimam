@@ -7,13 +7,21 @@ import { createWorker } from "../src/index";
 const ORIGIN = env.MCP_ORIGIN;
 const REDIRECT = "https://claude.ai/api/mcp/auth_callback";
 
-/** Records calls and accepts the Apple token "good" when it was signed for this consent page. */
+/**
+ * Records calls. Accepts the Apple token "good:<handle>" (user-1) and the Google token
+ * "google:<handle>" (user-2) only for the consent page they were signed for.
+ */
 class FakeBackend implements ZimamBackend {
   calls: { method: string; userId: string; args: unknown }[] = [];
 
   async signInWithApple(identityToken: string, nonce: string) {
     return identityToken === `good:${nonce}`
       ? { ok: true as const, value: { userId: "user-1", name: "فهد" } }
+      : { ok: false as const, error: { code: "invalid_token", message: "rejected" } };
+  }
+  async signInWithGoogle(idToken: string, nonce: string) {
+    return idToken === `google:${nonce}`
+      ? { ok: true as const, value: { userId: "user-2", name: "نورة" } }
       : { ok: false as const, error: { code: "invalid_token", message: "rejected" } };
   }
   private record<T>(method: string, userId: string, args: unknown, value: T): Promise<Outcome<T>> {
@@ -56,9 +64,9 @@ beforeEach(() => {
   worker = createWorker(() => shared);
 });
 
-async function send(path: string, init: RequestInit = {}) {
+async function send(path: string, init: RequestInit = {}, vars: Partial<typeof env> = {}) {
   const ctx = createExecutionContext();
-  const response = await worker.fetch(new Request(`${ORIGIN}${path}`, { redirect: "manual", ...init }), env, ctx);
+  const response = await worker.fetch(new Request(`${ORIGIN}${path}`, { redirect: "manual", ...init }), { ...env, ...vars }, ctx);
   await waitOnExecutionContext(ctx);
   return response;
 }
@@ -83,7 +91,16 @@ async function registerClient() {
 }
 
 /** Runs the browser part of the flow and returns the redirect back to the client. */
-async function authorize(clientId: string, options: { scopes?: string[]; decision?: "approve" | "deny"; token?: (handle: string) => string } = {}) {
+async function authorize(
+  clientId: string,
+  options: {
+    scopes?: string[];
+    decision?: "approve" | "deny";
+    provider?: "apple" | "google";
+    token?: (handle: string) => string;
+    vars?: Partial<typeof env>;
+  } = {},
+) {
   const verifier = crypto.randomUUID() + crypto.randomUUID();
   const challenge = base64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
   const query = new URLSearchParams({
@@ -96,7 +113,7 @@ async function authorize(clientId: string, options: { scopes?: string[]; decisio
     scope: "tasks:read tasks:write",
     resource: `${ORIGIN}/mcp`,
   });
-  const page = await send(`/authorize?${query}`);
+  const page = await send(`/authorize?${query}`, {}, options.vars);
   expect(page.status).toBe(200);
   const html = await page.text();
   const handle = html.match(/name="handle" value="([^"]+)"/)![1]!;
@@ -108,8 +125,9 @@ async function authorize(clientId: string, options: { scopes?: string[]; decisio
   const form = new URLSearchParams({
     handle,
     decision: options.decision ?? "approve",
-    id_token: (options.token ?? ((h) => `good:${h}`))(handle),
+    id_token: (options.token ?? ((h) => (options.provider === "google" ? `google:${h}` : `good:${h}`)))(handle),
   });
+  if (options.provider) form.set("provider", options.provider);
   for (const scope of options.scopes ?? ["tasks:read", "tasks:write"]) form.append("scope", scope);
   const response = await send("/authorize", {
     method: "POST",
@@ -137,9 +155,9 @@ async function exchange(clientId: string, location: string, verifier: string) {
   return (await response.json()) as { access_token: string; scope: string };
 }
 
-async function connect(scopes?: string[]) {
+async function connect(scopes?: string[], provider?: "apple" | "google") {
   const clientId = await registerClient();
-  const { response, verifier } = await authorize(clientId, { scopes });
+  const { response, verifier } = await authorize(clientId, { scopes, provider });
   expect(response.status).toBe(302);
   return (await exchange(clientId, response.headers.get("Location")!, verifier)).access_token;
 }
@@ -185,6 +203,33 @@ describe("Zimam MCP server", () => {
     expect(html).toContain("ربط Claude بحسابك في زمام");
     expect(html).toContain("claude.ai");
     expect(html).toContain("appleid.auth.js");
+    expect(html).toContain("https://accounts.google.com/gsi/client");
+    expect(html).toContain("المتابعة بحساب قوقل");
+    expect(html).toContain(env.GOOGLE_WEB_CLIENT_ID);
+  });
+
+  it("hides Sign in with Google when no web client ID is configured", async () => {
+    const clientId = await registerClient();
+    const { html } = await authorize(clientId, { decision: "deny", vars: { GOOGLE_WEB_CLIENT_ID: "" } });
+    expect(html).toContain("appleid.auth.js");
+    expect(html).not.toContain("accounts.google.com");
+    expect(html).not.toContain("قوقل");
+  });
+
+  it("links an account through Sign in with Google", async () => {
+    const token = await connect(undefined, "google");
+    await initialize(token);
+    await rpc(token, "tools/call", { name: "list_projects", arguments: {} });
+    expect(backend.calls.at(-1)).toEqual({ method: "listProjects", userId: "user-2", args: {} });
+  });
+
+  it("refuses a Google token that was not issued for this consent page, or an Apple token posted as Google", async () => {
+    const clientId = await registerClient();
+    const other = await authorize(clientId, { provider: "google", token: () => "google:another-page" });
+    expect(other.response.status).toBe(401);
+    expect(await other.response.text()).toContain("حساب قوقل");
+    const mixed = await authorize(clientId, { provider: "google", token: (h) => `good:${h}` });
+    expect(mixed.response.status).toBe(401);
   });
 
   it("links an account through Sign in with Apple and serves all seven tools", async () => {

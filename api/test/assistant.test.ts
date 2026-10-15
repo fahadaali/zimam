@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { Assistant } from "../src/assistant";
-import { appleToken, call, signIn, testAppleKeys, uuid } from "./helpers";
+import { appleToken, call, signIn, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
 
-const assistant = new Assistant(env, testAppleKeys);
+const assistant = new Assistant(env, { apple: testAppleKeys, google: testGoogleKeys });
 
 function value<T>(outcome: { ok: true; value: T } | { ok: false; error: { code: string; message: string } }): T {
   if (!outcome.ok) throw new Error(`${outcome.error.code}: ${outcome.error.message}`);

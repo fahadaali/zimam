@@ -12,6 +12,11 @@ declare global {
       APPLE_KEY_ID?: string;
       /** Secret (`wrangler secret put`): the Sign in with Apple key, the .p8 file's PEM text. */
       APPLE_PRIVATE_KEY?: string;
+      /**
+       * Comma-separated Google OAuth client IDs whose ID tokens sign in (iOS, web). Not secrets.
+       * Empty turns Sign in with Google off (503 `google_unavailable`).
+       */
+      GOOGLE_CLIENT_IDS: string;
       /** Comma-separated browser origins allowed to call the API. */
       ALLOWED_ORIGINS: string;
       /** In-app assistant provider: "anthropic" or "deepseek". */

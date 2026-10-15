@@ -12,7 +12,7 @@ export function apiBase(hostname = location.hostname) {
 // The session token lives in localStorage so the app stays signed in across tabs and restarts, like
 // the Apple app. sessionStorage would not make it safer: script that runs in this origin (the only
 // way to read either store) can read both. What protects it is the strict CSP in public/_headers
-// (no inline or third-party script except Apple's sign-in), DOM built with textContent only, and an
+// (no inline or third-party script except Apple's and Google's sign-in), DOM built with textContent only, and an
 // opaque token the server can revoke: signing out deletes it on the server and here.
 export const session = {
   get() {
@@ -53,7 +53,8 @@ export class ApiError extends Error {
 /** Arabic text for the API's stable English error codes. */
 const MESSAGES = {
   unauthorized: "انتهت الجلسة. سجّل الدخول مرة أخرى.",
-  invalid_token: "تعذّر التحقق من حساب أبل. حاول مرة أخرى.",
+  invalid_token: "تعذّر التحقق من حسابك. حاول مرة أخرى.",
+  google_unavailable: "تسجيل الدخول بحساب قوقل غير متاح الآن. استعمل حساب أبل.",
   invalid: "تحقق من البيانات المدخلة ثم حاول مرة أخرى.",
   forbidden: "لا تملك صلاحية هذا التعديل.",
   not_found: "لم نجد هذا العنصر، وربما حُذف.",
@@ -94,7 +95,7 @@ export async function request(method, path, body) {
   const data = await response.json().catch(() => null);
   if (!response.ok) {
     const code = data?.error?.code ?? (response.status === 401 ? "unauthorized" : "internal");
-    if (response.status === 401 && path !== "/v1/auth/apple") {
+    if (response.status === 401 && path !== "/v1/auth/apple" && path !== "/v1/auth/google") {
       session.clear();
       onUnauthorized();
     }
@@ -112,6 +113,7 @@ const query = (params) => {
 
 export const api = {
   signIn: (identityToken, nonce) => request("POST", "/v1/auth/apple", { identityToken, nonce, device: "web" }),
+  signInWithGoogle: (idToken, nonce) => request("POST", "/v1/auth/google", { idToken, nonce, device: "web" }),
   signOut: () => request("POST", "/v1/auth/logout"),
   me: () => request("GET", "/v1/me"),
   projects: () => request("GET", "/v1/projects"),

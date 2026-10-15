@@ -20,10 +20,19 @@ settings:
     CODE_SIGN_STYLE: Automatic
     # The API worker. Becomes https://api.zimam.app once the domain is attached.
     ZIMAM_API_URL: "https://zimam.fahad2ao.workers.dev"
+    # Sign in with Google: the iOS OAuth client (it serves the Mac too) and its reversed form,
+    # the URL scheme Google returns to. Public values, not secrets. Empty hides the Google button.
+    # The API accepts this client in GOOGLE_CLIENT_IDS (api/wrangler.jsonc).
+    GOOGLE_IOS_CLIENT_ID: "404741015373-r3p4od9ko0qd99hocpg3r7gv1arju4ge.apps.googleusercontent.com"
+    GOOGLE_REVERSED_CLIENT_ID: "com.googleusercontent.apps.404741015373-r3p4od9ko0qd99hocpg3r7gv1arju4ge"
 
 packages:
   ZimamKit:
     path: ZimamKit
+  # Sign in with Google (iOS and macOS), the app target only. 9.x supports a custom nonce.
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "9.2.0"
 
 targets:
   Zimam:
@@ -40,6 +49,8 @@ targets:
         buildPhase: resources
     dependencies:
       - package: ZimamKit
+      - package: GoogleSignIn
+        product: GoogleSignIn
       # Embedded in Zimam.app/PlugIns on iPhone, iPad and Mac.
       - target: ZimamWidgets
       # Embedded in Zimam.app/Watch ("Embed Watch Content"), iOS only.
@@ -94,6 +105,13 @@ targets:
         NSLocationWhenInUseUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، فتصلك المهام والتذكيرات المرتبطة بالصلاة في وقتها. يبقى الموقع على جهازك ولا يُرسل إلى أي خادم.
         NSLocationUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، فتصلك المهام والتذكيرات المرتبطة بالصلاة في وقتها. يبقى الموقع على جهازك ولا يُرسل إلى أي خادم.
         ZimamAPIURL: $(ZIMAM_API_URL)
+        # Sign in with Google reads its client from GIDClientID, and Google's sign-in page
+        # returns to the reversed client ID scheme (handled by .onOpenURL in ZimamApp).
+        GIDClientID: $(GOOGLE_IOS_CLIENT_ID)
+        CFBundleURLTypes:
+          - CFBundleURLName: google
+            CFBundleURLSchemes:
+              - $(GOOGLE_REVERSED_CLIENT_ID)
     entitlements:
       path: Zimam/Resources/Zimam.entitlements
       properties:
@@ -103,6 +121,9 @@ targets:
         aps-environment: development
         # The local store and the settings the widgets read (see Shared/Model/ZimamStore.swift).
         com.apple.security.application-groups: [group.app.zimam.ios]
+        # Google Sign-In keeps its tokens in the Keychain; on the Mac it needs the app's own
+        # group listed first (GoogleSignIn-iOS README). On iOS this is already the default group.
+        keychain-access-groups: [$(AppIdentifierPrefix)app.zimam.ios]
 
   # Home Screen, Lock Screen and Mac desktop widgets: today's tasks from the shared store,
   # completed in place with CompleteTaskIntent.

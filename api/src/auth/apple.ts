@@ -9,6 +9,8 @@ export const appleKeys: JWTVerifyGetKey = createRemoteJWKSet(new URL("https://ap
 export interface AppleIdentity {
   sub: string;
   email: string | null;
+  /** Apple verifies every address it gives; the claim is `true` or `"true"`. */
+  emailVerified: boolean;
   /** The client the token was issued to (bundle id or web Services ID); Apple's token endpoints need it. */
   audience: string;
 }
@@ -33,5 +35,7 @@ export async function verifyAppleToken(
   if (nonce !== undefined && payload.nonce !== (await sha256Hex(nonce))) throw new Error("Nonce mismatch");
   // jwtVerify already checked that one of the token's audiences is ours.
   const audience = [payload.aud ?? []].flat().find((aud) => audiences.includes(aud))!;
-  return { sub: payload.sub, email: typeof payload.email === "string" ? payload.email : null, audience };
+  const email = typeof payload.email === "string" && payload.email !== "" ? payload.email : null;
+  const emailVerified = email !== null && (payload.email_verified === true || payload.email_verified === "true");
+  return { sub: payload.sub, email, emailVerified, audience };
 }

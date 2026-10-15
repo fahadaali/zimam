@@ -1,13 +1,16 @@
 import AuthenticationServices
 import CryptoKit
 import Foundation
+import GoogleSignIn
 import Observation
 import ZimamKit
 #if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
 #endif
 
-/// Sign in with Apple, the Zimam session token, and the API client that uses it.
+/// Sign in with Apple or Google, the Zimam session token, and the API client that uses it.
 @MainActor
 @Observable
 final class SessionStore {
@@ -17,6 +20,8 @@ final class SessionStore {
     private(set) var isSignedIn: Bool
     private(set) var user: User?
     var errorMessage: String?
+    /// True while Google's sign-in sheet or the server exchange is running, so the button waits.
+    private(set) var isSigningInWithGoogle = false
     let api: APIClient
 
     @ObservationIgnored private var pendingNonce: String?
@@ -60,15 +65,95 @@ final class SessionStore {
                 let response = try await api.signInWithApple(
                     identityToken: identityToken, nonce: pendingNonce, name: name, device: Self.deviceName,
                     authorizationCode: authorizationCode)
-                Keychain.write(response.token, for: Self.tokenAccount)
-                user = response.user
-                Self.saveCachedUser(response.user)
-                isSignedIn = true
+                begin(response)
             } catch {
                 errorMessage = "تعذّر الاتصال بزمام. تحقّق من الإنترنت وحاول مرة أخرى."
             }
             pendingNonce = nil
         }
+    }
+
+    // MARK: Sign in with Google
+
+    /// Whether Sign in with Google is set up: `GIDClientID` in Info.plist, from the
+    /// `GOOGLE_IOS_CLIENT_ID` build setting in project.yml. Empty hides the button.
+    nonisolated static var isGoogleConfigured: Bool {
+        let clientID = Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String
+        return !(clientID ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Presents Google's sign-in (a web sheet over the current window), then exchanges the ID
+    /// token for a Zimam session. As with Apple, Google signs the SHA-256 of a fresh nonce and
+    /// the server checks it against the raw one. A first Google sign-in whose verified email
+    /// matches an existing account joins that account on the server.
+    func signInWithGoogle() async {
+        guard Self.isGoogleConfigured, !isSigningInWithGoogle else { return }
+        errorMessage = nil
+        isSigningInWithGoogle = true
+        defer { isSigningInWithGoogle = false }
+
+        let nonce = Self.randomNonce()
+        let result: GIDSignInResult
+        do {
+            #if os(iOS)
+            guard let presenter = Self.presentingViewController() else {
+                errorMessage = "تعذّر تسجيل الدخول بحساب قوقل. حاول مرة أخرى."
+                return
+            }
+            result = try await GIDSignIn.sharedInstance.signIn(
+                withPresenting: presenter, hint: nil, additionalScopes: nil, nonce: Self.sha256(nonce))
+            #else
+            guard let window = NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first(where: \.isVisible) else {
+                errorMessage = "تعذّر تسجيل الدخول بحساب قوقل. حاول مرة أخرى."
+                return
+            }
+            result = try await GIDSignIn.sharedInstance.signIn(
+                withPresenting: window, hint: nil, additionalScopes: nil, nonce: Self.sha256(nonce))
+            #endif
+        } catch {
+            if (error as? GIDSignInError)?.code == .canceled { return }
+            errorMessage = "تعذّر تسجيل الدخول بحساب قوقل. حاول مرة أخرى."
+            return
+        }
+
+        guard let idToken = result.user.idToken?.tokenString else {
+            errorMessage = "تعذّر تسجيل الدخول بحساب قوقل. حاول مرة أخرى."
+            return
+        }
+        do {
+            let response = try await api.signInWithGoogle(
+                idToken: idToken, nonce: nonce, name: result.user.profile?.name, device: Self.deviceName)
+            begin(response)
+        } catch {
+            errorMessage = "تعذّر الاتصال بزمام. تحقّق من الإنترنت وحاول مرة أخرى."
+        }
+    }
+
+    /// Google's sign-in page returns to the app through the reversed client ID URL scheme.
+    @discardableResult
+    nonisolated static func handleOpenURL(_ url: URL) -> Bool {
+        GIDSignIn.sharedInstance.handle(url)
+    }
+
+    #if os(iOS)
+    /// The front-most view controller of the active window, which Google presents its sheet over.
+    private static func presentingViewController() -> UIViewController? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        var controller = scene?.keyWindow?.rootViewController ?? scene?.windows.first?.rootViewController
+        while let presented = controller?.presentedViewController {
+            controller = presented
+        }
+        return controller
+    }
+    #endif
+
+    /// Keeps a new session from either provider.
+    private func begin(_ response: SignInResponse) {
+        Keychain.write(response.token, for: Self.tokenAccount)
+        user = response.user
+        Self.saveCachedUser(response.user)
+        isSignedIn = true
     }
 
     func loadUser() async {
@@ -138,12 +223,16 @@ final class SessionStore {
         } catch {
             return false
         }
+        // Also ends Zimam's access to the Google account, if this device signed in with Google.
+        try? await GIDSignIn.sharedInstance.disconnect()
         endSession()
         return true
     }
 
     /// Called when the server rejects the token (expired or revoked).
     func endSession() {
+        // Forgets the Google account on this device, so the next Google sign-in asks again.
+        GIDSignIn.sharedInstance.signOut()
         Keychain.delete(Self.tokenAccount)
         user = nil
         Self.saveCachedUser(nil)

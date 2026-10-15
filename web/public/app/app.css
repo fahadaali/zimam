@@ -38,6 +38,18 @@
   inline-size: 100%;
 }
 
+/* Google's own button (its branding rules); the row keeps a 44px target and centres it. */
+.signin-google {
+  min-block-size: var(--space-11);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.signin-google[hidden] {
+  display: none;
+}
+
 .signin-home {
   align-self: flex-start;
   display: inline-flex;

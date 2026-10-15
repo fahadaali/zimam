@@ -20,9 +20,10 @@ async function sha256Hex(text: string): Promise<string> {
 }
 
 /**
- * GET shows the consent page; POST either declines, or verifies the Apple identity token
- * from the page and completes the grant for that Zimam user. The nonce Apple signs is the
- * SHA-256 of the consent handle, so a token only works for the page it was issued on.
+ * GET shows the consent page; POST either declines, or verifies the Apple or Google
+ * (`provider=google`) identity token from the page and completes the grant for that Zimam
+ * user. The nonce either provider signs is the SHA-256 of the consent handle, so a token
+ * only works for the page it was issued on.
  */
 async function authorize(request: Request, env: Env, backend: ZimamBackend): Promise<Response> {
   const oauth = env.OAUTH_PROVIDER;
@@ -42,9 +43,12 @@ async function authorize(request: Request, env: Env, backend: ZimamBackend): Pro
       return new Response(null, { status: 302, headers: denied.headers });
     }
 
-    const signIn = await backend.signInWithApple(String(form.get("id_token") ?? ""), handle);
+    const idToken = String(form.get("id_token") ?? "");
+    const google = form.get("provider") === "google";
+    const signIn = google ? await backend.signInWithGoogle(idToken, handle) : await backend.signInWithApple(idToken, handle);
     if (!signIn.ok) {
-      return html(messagePage("تعذّر تسجيل الدخول", "لم نتمكن من التحقق من حساب أبل. ارجع إلى التطبيق وابدأ الربط من جديد."), 401);
+      const account = google ? "قوقل" : "أبل";
+      return html(messagePage("تعذّر تسجيل الدخول", `لم نتمكن من التحقق من حساب ${account}. ارجع إلى التطبيق وابدأ الربط من جديد.`), 401);
     }
     const scope = [...new Set([SCOPES.read, ...form.getAll("scope").map(String)])].filter((s) =>
       (Object.values(SCOPES) as string[]).includes(s),

@@ -60,6 +60,8 @@ struct ZimamApp: App {
                 .font(ZimamType.body)
                 .foregroundStyle(ZimamColor.ink)
                 .tint(ZimamColor.brand)
+                // Google's sign-in page returns here through the reversed client ID scheme.
+                .onOpenURL { url in _ = SessionStore.handleOpenURL(url) }
         }
         .modelContainer(container)
     }

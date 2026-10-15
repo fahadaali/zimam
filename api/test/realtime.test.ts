@@ -6,7 +6,7 @@ import { sha256Hex } from "../src/auth/crypto";
 import { SIGNED_OUT } from "../src/realtime/channel";
 import { channelRealtime, type Realtime } from "../src/realtime/notify";
 import { ZimamService } from "../src/service";
-import { addMember, call, fakeAi, pullAll, signIn, testAppleKeys, uuid } from "./helpers";
+import { addMember, call, fakeAi, pullAll, signIn, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
 
 type User = Awaited<ReturnType<typeof signIn>>;
 
@@ -34,7 +34,7 @@ class FakeRealtime implements Realtime {
 }
 
 const fake = new FakeRealtime();
-const base = { appleKeys: testAppleKeys, ai: () => fakeAi, appleTokens: () => null };
+const base = { appleKeys: testAppleKeys, googleKeys: testGoogleKeys, ai: () => fakeAi, appleTokens: () => null };
 const fakeApp = createApp({ ...base, realtime: () => fake });
 const realApp = createApp({ ...base, realtime: (e) => channelRealtime(e.USER_CHANNEL) });
 type App = typeof realApp;

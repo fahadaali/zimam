@@ -67,6 +67,19 @@ public final class APIClient: @unchecked Sendable {
         return try await send("POST", "v1/auth/apple", body: body)
     }
 
+    /// Exchanges a Google ID token for a Zimam session (`POST /v1/auth/google`). `nonce` is the
+    /// raw value whose SHA-256 (hex) went into the Google request. A first Google sign-in whose
+    /// verified email matches an existing account joins it on the server.
+    public func signInWithGoogle(idToken: String, nonce: String?, name: String?, device: String?) async throws -> SignInResponse {
+        struct Body: Encodable {
+            let idToken: String
+            let nonce: String?
+            let name: String?
+            let device: String?
+        }
+        return try await send("POST", "v1/auth/google", body: Body(idToken: idToken, nonce: nonce, name: name, device: device))
+    }
+
     public func signOut() async throws {
         let _: Empty = try await send("POST", "v1/auth/logout")
     }
