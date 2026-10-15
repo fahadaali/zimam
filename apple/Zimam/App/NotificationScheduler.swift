@@ -137,17 +137,36 @@ final class NotificationScheduler {
     /// «إنجاز» completes the task; «تأجيل ساعة» adds a one-off reminder an hour from now.
     /// Both sync right away, since the app may be in the background.
     private func handle(action: String, taskId: UUID?) async {
-        guard let taskId, let task = fetchTask(taskId) else { return }
+        guard action == Self.doneAction || action == Self.snoozeAction, let taskId else { return }
+        // A reminder pushed by the server may name a task this device has not pulled yet.
+        if fetchTask(taskId) == nil { await sync.sync() }
+        guard let task = fetchTask(taskId) else { return }
         let store = Store(context: context, sync: sync)
         switch action {
         case Self.doneAction:
             if !task.isDone { store.toggleDone(task) }
+            await removeDelivered(taskId: taskId)
         case Self.snoozeAction:
             store.addTimeReminder(to: task.id, at: Date().addingTimeInterval(3600))
         default:
             return
         }
         await sync.sync()
+        // Reschedule now, not after the debounce: the app may be suspended as soon as the action
+        // finishes, and the snoozed reminder must be pending (and a done task's ones gone) by then.
+        pending?.cancel()
+        await apply()
+    }
+
+    /// Clears the task's other reminders from Notification Center once it is done.
+    private func removeDelivered(taskId: UUID) async {
+        let center = UNUserNotificationCenter.current()
+        let delivered = await center.deliveredNotifications()
+        let ids = delivered
+            // Pushed reminders carry the server's lowercase id, so compare as UUIDs.
+            .filter { ($0.request.content.userInfo["taskId"] as? String).flatMap(UUID.init(uuidString:)) == taskId }
+            .map(\.request.identifier)
+        if !ids.isEmpty { center.removeDeliveredNotifications(withIdentifiers: ids) }
     }
 
     private func fetchTask(_ id: UUID) -> TaskItem? {

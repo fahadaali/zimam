@@ -73,6 +73,10 @@ private struct TaskDetailForm: View {
                     .onSubmit(saveText)
             }
 
+            #if os(iOS)
+            // «المهمة الجارية»: a Live Activity with a timer (FocusSection.swift).
+            FocusSection(task: task, projectName: projects.first { $0.id == task.projectId }?.name)
+            #endif
             DueSection(task: task, store: store)
             DetailsSection(task: task, projects: projects, store: store)
             RecurrenceSection(task: task, store: store)

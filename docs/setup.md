@@ -115,12 +115,15 @@ npx wrangler r2 bucket lifecycle add zimam-imports expire-leftovers --expire-day
 | النوع | المعرّف | الإمكانات |
 | --- | --- | --- |
 | App Group | `group.app.zimam.ios` | — |
+| App Group (الساعة) | `group.app.zimam.ios.watch` | — |
 | App ID (التطبيق) | `app.zimam.ios` | Sign in with Apple، وPush Notifications، وApp Groups مع اختيار `group.app.zimam.ios` |
 | App ID (الويدجت) | `app.zimam.ios.widgets` | App Groups مع اختيار `group.app.zimam.ios` |
-| App ID (الساعة) | `app.zimam.ios.watchkitapp` | لا شيء إضافي |
+| App ID (الساعة) | `app.zimam.ios.watchkitapp` | App Groups مع اختيار `group.app.zimam.ios.watch` |
+| App ID (تعقيدات الساعة) | `app.zimam.ios.watchkitapp.widgets` | App Groups مع اختيار `group.app.zimam.ios.watch` |
 
 - الويدجت يعمل على الآيفون والآيباد والماك. على الماك يجب أن يكون App ID التطبيق والويدجت مفعّلاً لهما App Groups في ملف التوقيع، وإلا سأل النظام المستخدم عن السماح بالوصول إلى بيانات التطبيقات الأخرى.
-- الساعة لا تحتاج App Group ولا مجموعة Keychain: تأخذ الجلسة من الآيفون عبر WatchConnectivity وتحفظها في Keychain الخاص بها.
+- الساعة لا تحتاج مجموعة Keychain: تأخذ الجلسة من الآيفون عبر WatchConnectivity وتحفظها في Keychain الخاص بها. ومجموعة `group.app.zimam.ios.watch` خاصة بها (لا تعبر إلى الآيفون): يكتب فيها تطبيق الساعة ما تعرضه التعقيدات.
+- النشاط الحي «المهمة الجارية» لا يحتاج إمكانية في App ID: يكفي `NSSupportsLiveActivities` في Info.plist التطبيق (من `project.yml`)، وواجهته في هدف الويدجت `app.zimam.ios.widgets`.
 - بعد الترقية يبدأ المخزن المحلي فارغاً في مجموعة التطبيقات، وتعيد أول مزامنة كل البيانات من الخادم.
 
 ### إشعارات الخادم (APNs)

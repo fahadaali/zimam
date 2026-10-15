@@ -15,6 +15,8 @@ final class WatchModel {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
     private(set) var calendar: CalendarKind
+    /// Top-level tasks due today and done, for the complications' ring (WatchGlance).
+    @ObservationIgnored private var doneToday = 0
 
     @ObservationIgnored let api: APIClient
     @ObservationIgnored private let link = PhoneLink()
@@ -50,6 +52,10 @@ final class WatchModel {
             let open = try await api.listTasks(status: "open", dueTo: Self.today(), limit: 200)
             tasks = open.filter { $0.parentId == nil }
             errorMessage = nil
+            if let done = try? await api.listTasks(status: "done", dueFrom: Self.today(), dueTo: Self.today(), limit: 200) {
+                doneToday = done.filter { $0.parentId == nil }.count
+            }
+            publishGlance()
         } catch let error as APIError where error.isUnauthorized {
             signOut()
         } catch {
@@ -76,6 +82,8 @@ final class WatchModel {
                 try? await Task.sleep(for: .seconds(1))
                 tasks.removeAll { $0.id == task.id }
                 finishing.remove(task.id)
+                if task.dueDate == Self.today() { doneToday += 1 }
+                publishGlance()
             } else {
                 // Changed or deleted elsewhere: show what the server has now.
                 finishing.remove(task.id)
@@ -99,6 +107,7 @@ final class WatchModel {
         do {
             _ = try await api.push([.upsert(.task(record))])
             errorMessage = nil
+            publishGlance()
         } catch let error as APIError where error.isUnauthorized {
             signOut()
         } catch {
@@ -130,6 +139,13 @@ final class WatchModel {
         isSignedIn = false
         tasks = []
         finishing = []
+        doneToday = 0
+        publishGlance()
+    }
+
+    /// Hands today's tasks to the complications (WatchGlance.swift).
+    private func publishGlance() {
+        WatchGlance.publish(tasks: tasks, doneCount: doneToday, isSignedIn: isSignedIn, calendar: calendar)
     }
 
     // MARK: Helpers

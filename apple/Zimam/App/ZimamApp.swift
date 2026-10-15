@@ -29,6 +29,10 @@ struct ZimamApp: App {
         sync.onDataChanged = { [notifications] in
             notifications.reschedule()
             ZimamShared.reloadWidgets()
+            #if os(iOS)
+            // «المهمة الجارية» ends once its task is done or deleted, wherever that happened.
+            FocusActivity.endFinished(in: ZimamStore.shared.mainContext)
+            #endif
         }
         location.onChange = { [notifications, session, location] in
             notifications.reschedule()
