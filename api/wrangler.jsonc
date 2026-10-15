@@ -14,7 +14,7 @@
   ],
   "vars": {
     // Sign in with Apple audiences: the app bundle id and the web Services ID.
-    "APPLE_AUDIENCES": "app.zimam.Zimam,app.zimam.web",
+    "APPLE_AUDIENCES": "app.zimam.ios,app.zimam.ios.web",
     // Signs the Sign in with Apple client secret, to keep and later revoke Apple's
     // refresh token. The key is secret: `npx wrangler secret put APPLE_KEY_ID` and
     // `npx wrangler secret put APPLE_PRIVATE_KEY`. Never put them here.

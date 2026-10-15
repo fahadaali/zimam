@@ -20,6 +20,6 @@
   "vars": {
     "MCP_ORIGIN": "https://zimam-mcp.fahad2ao.workers.dev",
     // Sign in with Apple Services ID for the web.
-    "APPLE_WEB_CLIENT_ID": "app.zimam.web"
+    "APPLE_WEB_CLIENT_ID": "app.zimam.ios.web"
   }
 }

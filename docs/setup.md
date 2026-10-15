@@ -51,7 +51,7 @@
 | Build command | فارغ |
 | Deploy command | `npx wrangler deploy` |
 
-3. **Sign in with Apple للويب:** في حساب المطوّر، افتح Services ID `app.zimam.web`، وفعّل Sign in with Apple، واختر `app.zimam.Zimam` تطبيقاً أساسياً، وأضف:
+3. **Sign in with Apple للويب:** في حساب المطوّر، افتح Services ID `app.zimam.ios.web`، وفعّل Sign in with Apple، واختر `app.zimam.ios` تطبيقاً أساسياً، وأضف:
    - Domain: `zimam-mcp.fahad2ao.workers.dev`
    - Return URL: `https://zimam-mcp.fahad2ao.workers.dev/authorize`
 4. **الربط في كلود:** Settings ← Connectors ← Add custom connector، بالرابط `https://zimam-mcp.fahad2ao.workers.dev/mcp`. وفي ChatGPT: فعّل وضع المطوّر (Developer mode) من الإعدادات، ثم أضف موصلاً بنفس الرابط.
@@ -70,7 +70,7 @@
 | Build command | `npm run build` |
 | Deploy command | `npx wrangler deploy` |
 
-2. **Sign in with Apple للويب:** في Services ID `app.zimam.web` أضف:
+2. **Sign in with Apple للويب:** في Services ID `app.zimam.ios.web` أضف:
    - Domain: `zimam-web.fahad2ao.workers.dev`
    - Return URL: `https://zimam-web.fahad2ao.workers.dev/app`
 
@@ -82,9 +82,9 @@
 
 في [developer.apple.com](https://developer.apple.com/account) (بعد حسم: حساب شخصي أم كيان تجاري):
 
-1. **Identifiers ← App IDs**: المعرّف `app.zimam.Zimam`، مع تفعيل Sign in with Apple وPush Notifications وApp Groups.
-2. **Identifiers ← Services IDs**: المعرّف `app.zimam.web` لتسجيل الدخول من الموقع، مع النطاق `zimam.app`.
-3. **App Groups**: `group.app.zimam` لمشاركة البيانات بين التطبيق والويدجت.
+1. **Identifiers ← App IDs**: المعرّف `app.zimam.ios`، مع تفعيل Sign in with Apple وPush Notifications وApp Groups.
+2. **Identifiers ← Services IDs**: المعرّف `app.zimam.ios.web` لتسجيل الدخول من الموقع، مع النطاق `zimam.app`.
+3. **App Groups**: `group.app.zimam.ios` لمشاركة البيانات بين التطبيق والويدجت.
 
 ### المعرّفات الخاصة بالويدجت والساعة
 
@@ -92,10 +92,10 @@
 
 | النوع | المعرّف | الإمكانات |
 | --- | --- | --- |
-| App Group | `group.app.zimam` | — |
-| App ID (التطبيق) | `app.zimam.Zimam` | Sign in with Apple، وPush Notifications، وApp Groups مع اختيار `group.app.zimam` |
-| App ID (الويدجت) | `app.zimam.Zimam.widgets` | App Groups مع اختيار `group.app.zimam` |
-| App ID (الساعة) | `app.zimam.Zimam.watchkitapp` | لا شيء إضافي |
+| App Group | `group.app.zimam.ios` | — |
+| App ID (التطبيق) | `app.zimam.ios` | Sign in with Apple، وPush Notifications، وApp Groups مع اختيار `group.app.zimam.ios` |
+| App ID (الويدجت) | `app.zimam.ios.widgets` | App Groups مع اختيار `group.app.zimam.ios` |
+| App ID (الساعة) | `app.zimam.ios.watchkitapp` | لا شيء إضافي |
 
 - الويدجت يعمل على الآيفون والآيباد والماك. على الماك يجب أن يكون App ID التطبيق والويدجت مفعّلاً لهما App Groups في ملف التوقيع، وإلا سأل النظام المستخدم عن السماح بالوصول إلى بيانات التطبيقات الأخرى.
 - الساعة لا تحتاج App Group ولا مجموعة Keychain: تأخذ الجلسة من الآيفون عبر WatchConnectivity وتحفظها في Keychain الخاص بها.
@@ -105,7 +105,7 @@
 
 التطبيق يجدول إشعارات الأيام الأربعة عشر القادمة على الجهاز، وما بعدها يرسله الخادم عبر APNs (التفاصيل في `api/DEVELOPMENT.md`). يحتاج ذلك مفتاحاً واحداً من حساب المطوّر:
 
-1. **Identifiers ← App IDs ← `app.zimam.Zimam`**: فعّل **Push Notifications** واحفظ. لا حاجة لشهادات الإشعارات، فالخادم يستعمل المفتاح. يحدّث Xcode ملفات التوقيع في البناء التالي، والتطبيق يطلب الإمكانية بـ `aps-environment` في `apple/project.yml`.
+1. **Identifiers ← App IDs ← `app.zimam.ios`**: فعّل **Push Notifications** واحفظ. لا حاجة لشهادات الإشعارات، فالخادم يستعمل المفتاح. يحدّث Xcode ملفات التوقيع في البناء التالي، والتطبيق يطلب الإمكانية بـ `aps-environment` في `apple/project.yml`.
 2. **Keys ← +**: اسم مثل `Zimam APNs`، وفعّل **Apple Push Notification service (APNs)**، ومن **Configure** اختر البيئتين (Sandbox & Production) ونطاق الفريق، ثم **Continue ← Register**.
 3. نزّل ملف `AuthKey_XXXXXXXXXX.p8` (يُنزَّل مرة واحدة فقط) وانسخ **Key ID** من صفحة المفتاح. احفظ الملف في مدير كلمات المرور، ولا تضعه في المستودع ولا ترسله في المحادثة.
 4. من داخل `api/` أضف السرّين:
@@ -151,7 +151,7 @@ claude mcp add xcode -- xcrun mcpbridge
 تشترط مراجعة App Store (البند 5.1.1(v)) أن يُلغي حذفُ الحساب ربطَه بـ Sign in with Apple. يفعل الخادم ذلك بمفتاح من حسابك، ودونه يتم الدخول والحذف لكن لا يُلغى الربط عند Apple.
 
 1. في [developer.apple.com](https://developer.apple.com/account): **Certificates, Identifiers & Profiles ← Keys ← +**.
-2. سمّه `Zimam Sign in with Apple`، وفعّل **Sign in with Apple**، ثم **Configure** واختر `app.zimam.Zimam` معرّفاً أساسياً، ثم **Save ← Continue ← Register**.
+2. سمّه `Zimam Sign in with Apple`، وفعّل **Sign in with Apple**، ثم **Configure** واختر `app.zimam.ios` معرّفاً أساسياً، ثم **Save ← Continue ← Register**.
 3. نزّل ملف المفتاح `AuthKey_XXXXXXXXXX.p8`. يُنزَّل مرة واحدة فقط، فاحفظه في مكان آمن خارج المستودع. وانسخ **Key ID** (عشرة أحرف).
 4. معرّف الفريق `72V86SZ2XC` موجود في `api/wrangler.jsonc` (`APPLE_TEAM_ID`)، وليس سراً. إن تغيّر الفريق فغيّره هناك.
 5. من داخل `api/` أضف السرّين (لا يُلصقان في المحادثة ولا يدخلان المستودع):
@@ -162,7 +162,7 @@ npx wrangler secret put APPLE_KEY_ID          # الصق Key ID
 npx wrangler secret put APPLE_PRIVATE_KEY < AuthKey_XXXXXXXXXX.p8   # نص الملف كاملاً مع سطري BEGIN وEND
 ```
 
-المفتاح نفسه يخدم التطبيق (`app.zimam.Zimam`) والويب (`app.zimam.web`) ما دام Services ID مربوطاً بالتطبيق الأساسي كما في خطوة خادم MCP. وللتطوير المحلي ضعهما في `api/.dev.vars` (لا يُرفع إلى المستودع)، والمفتاح في سطر واحد مع `\n` مكان فواصل الأسطر.
+المفتاح نفسه يخدم التطبيق (`app.zimam.ios`) والويب (`app.zimam.ios.web`) ما دام Services ID مربوطاً بالتطبيق الأساسي كما في خطوة خادم MCP. وللتطوير المحلي ضعهما في `api/.dev.vars` (لا يُرفع إلى المستودع)، والمفتاح في سطر واحد مع `\n` مكان فواصل الأسطر.
 
 ## طريقة العمل بعد الربط
 

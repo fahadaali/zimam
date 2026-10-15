@@ -38,7 +38,7 @@ const deleteMe = (user: User) => call("DELETE", "/v1/me", { token: user.token })
 const userRow = (id: string) => env.DB.prepare(`SELECT * FROM users WHERE id = ?`).bind(id).first<Record<string, unknown>>();
 
 /** Signs in through the app with an authorization code, as SessionStore does. */
-async function signInWithCode(sub: string, code: string, audience = "app.zimam.Zimam") {
+async function signInWithCode(sub: string, code: string, audience = "app.zimam.ios") {
   const res = await call("POST", "/v1/auth/apple", {
     body: { identityToken: await appleToken(sub, { audience }), authorizationCode: code },
   });
@@ -223,24 +223,24 @@ describe("Sign in with Apple tokens", () => {
     const sub = `apple-${uuid()}`;
     fakeApple.codes.set("code-1", { refreshToken: "refresh-1", sub });
     const user = await signInWithCode(sub, "code-1");
-    expect(fakeApple.exchanged).toEqual([{ code: "code-1", clientId: "app.zimam.Zimam" }]);
-    expect(await userRow(user.userId)).toMatchObject({ apple_refresh_token: "refresh-1", apple_client_id: "app.zimam.Zimam" });
+    expect(fakeApple.exchanged).toEqual([{ code: "code-1", clientId: "app.zimam.ios" }]);
+    expect(await userRow(user.userId)).toMatchObject({ apple_refresh_token: "refresh-1", apple_client_id: "app.zimam.ios" });
     // The code and refresh token never reach the client.
     const me = await call("GET", "/v1/me", { token: user.token });
     expect(JSON.stringify(me.body)).not.toContain("refresh-1");
 
     expect((await call("DELETE", "/v1/me", { token: user.token })).status).toBe(204);
-    expect(fakeApple.revoked).toEqual([{ refreshToken: "refresh-1", clientId: "app.zimam.Zimam" }]);
+    expect(fakeApple.revoked).toEqual([{ refreshToken: "refresh-1", clientId: "app.zimam.ios" }]);
     expect(await userRow(user.userId)).toMatchObject({ apple_refresh_token: null, apple_client_id: null });
   });
 
   it("uses the client the identity token was issued to", async () => {
     const sub = `apple-${uuid()}`;
     fakeApple.codes.set("web-code", { refreshToken: "web-refresh", sub });
-    const user = await signInWithCode(sub, "web-code", "app.zimam.web");
-    expect(fakeApple.exchanged).toEqual([{ code: "web-code", clientId: "app.zimam.web" }]);
+    const user = await signInWithCode(sub, "web-code", "app.zimam.ios.web");
+    expect(fakeApple.exchanged).toEqual([{ code: "web-code", clientId: "app.zimam.ios.web" }]);
     await call("DELETE", "/v1/me", { token: user.token });
-    expect(fakeApple.revoked).toEqual([{ refreshToken: "web-refresh", clientId: "app.zimam.web" }]);
+    expect(fakeApple.revoked).toEqual([{ refreshToken: "web-refresh", clientId: "app.zimam.ios.web" }]);
   });
 
   it("still signs in when the code is rejected or belongs to someone else", async () => {
@@ -296,18 +296,18 @@ describe("Apple token client", () => {
     const idToken = new UnsecuredJWT({}).setSubject("apple-sub").encode();
     const { apple, publicKey, requests } = await client([Response.json({ refresh_token: "r1", id_token: idToken })]);
 
-    expect(await apple.exchangeCode("the-code", "app.zimam.Zimam")).toEqual({ refreshToken: "r1", sub: "apple-sub" });
+    expect(await apple.exchangeCode("the-code", "app.zimam.ios")).toEqual({ refreshToken: "r1", sub: "apple-sub" });
     const [request] = requests;
     expect(request!.url).toBe("https://appleid.apple.com/auth/token");
     expect(Object.fromEntries(request!.form)).toMatchObject({
-      client_id: "app.zimam.Zimam",
+      client_id: "app.zimam.ios",
       code: "the-code",
       grant_type: "authorization_code",
     });
     const secret = request!.form.get("client_secret")!;
     expect(decodeProtectedHeader(secret)).toMatchObject({ alg: "ES256", kid: "KEY123" });
     const { payload } = await jwtVerify(secret, publicKey, { issuer: "72V86SZ2XC", audience: "https://appleid.apple.com" });
-    expect(payload.sub).toBe("app.zimam.Zimam");
+    expect(payload.sub).toBe("app.zimam.ios");
     expect(payload.exp! - payload.iat!).toBeLessThanOrEqual(15_777_000);
   });
 
@@ -316,14 +316,14 @@ describe("Apple token client", () => {
       new Response(null, { status: 200 }),
       Response.json({ error: "invalid_grant" }, { status: 400 }),
     ]);
-    await apple.revoke("r1", "app.zimam.web");
+    await apple.revoke("r1", "app.zimam.ios.web");
     expect(requests[0]!.url).toBe("https://appleid.apple.com/auth/revoke");
     expect(Object.fromEntries(requests[0]!.form)).toMatchObject({
-      client_id: "app.zimam.web",
+      client_id: "app.zimam.ios.web",
       token: "r1",
       token_type_hint: "refresh_token",
     });
-    await expect(apple.exchangeCode("used", "app.zimam.Zimam")).rejects.toThrow(AppleTokenError);
+    await expect(apple.exchangeCode("used", "app.zimam.ios")).rejects.toThrow(AppleTokenError);
   });
 
   it("is off until the key secrets are set", () => {

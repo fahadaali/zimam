@@ -6,7 +6,7 @@ import WidgetKit
 enum ZimamShared {
     /// The App Group that holds the local store and the few settings the widgets read.
     /// Register it in the developer account (see docs/setup.md).
-    static let appGroup = "group.app.zimam"
+    static let appGroup = "group.app.zimam.ios"
 
     /// Settings shared with the widgets. Falls back to the process's own defaults if the
     /// App Group is missing from the build's entitlements.

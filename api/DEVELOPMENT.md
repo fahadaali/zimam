@@ -83,7 +83,7 @@ npm run db:migrate:local
 
 | الطريقة | ما تفعله |
 | --- | --- |
-| `signInWithApple(identityToken, nonce)` | تتحقق من رمز Apple الصادر للويب (`app.zimam.web`) وترجع مستخدم زمام |
+| `signInWithApple(identityToken, nonce)` | تتحقق من رمز Apple الصادر للويب (`app.zimam.ios.web`) وترجع مستخدم زمام |
 | `listTasks`، `createTask`، `updateTask`، `completeTask` | المهام بنفس صلاحيات التطبيق وسجل المزامنة |
 | `listProjects` | المشاريع مع الدور وعدد المهام |
 | `getAgenda({ from?, days? })` | الأيام بالتقويمين، وأوقات الصلاة إن حفظ المستخدم موقعه، ومهام كل يوم، والمتأخرة |
@@ -150,7 +150,7 @@ npx wrangler d1 migrations apply zimam --remote   # جدول ai_usage
 
 ### رمز Sign in with Apple
 
-يرسل التطبيق عند الدخول `authorizationCode` الذي يعطيه Apple. يستبدله الخادم من `https://appleid.apple.com/auth/token` برمز تحديث (`refresh_token`)، ويحفظه في سطر المستخدم (`apple_refresh_token`) مع المعرّف الذي صدر له رمز الهوية (`apple_client_id`: `app.zimam.Zimam` للتطبيق أو `app.zimam.web` للويب). ويتحقق أن الرمز للمستخدم نفسه (`sub`). وعند حذف الحساب يُلغى من `https://appleid.apple.com/auth/revoke` ويُمسح.
+يرسل التطبيق عند الدخول `authorizationCode` الذي يعطيه Apple. يستبدله الخادم من `https://appleid.apple.com/auth/token` برمز تحديث (`refresh_token`)، ويحفظه في سطر المستخدم (`apple_refresh_token`) مع المعرّف الذي صدر له رمز الهوية (`apple_client_id`: `app.zimam.ios` للتطبيق أو `app.zimam.ios.web` للويب). ويتحقق أن الرمز للمستخدم نفسه (`sub`). وعند حذف الحساب يُلغى من `https://appleid.apple.com/auth/revoke` ويُمسح.
 
 - `client_secret` رمز JWT بـ ES256 يوقّعه الخادم بمفتاح Sign in with Apple عند كل طلب: `iss` معرّف الفريق، و`sub` معرّف العميل، و`aud` `https://appleid.apple.com`، وصلاحيته خمس دقائق.
 - معرّف الفريق `APPLE_TEAM_ID` ليس سراً، وهو في `wrangler.jsonc`. معرّف المفتاح `APPLE_KEY_ID` والمفتاح نفسه `APPLE_PRIVATE_KEY` (نص ملف `.p8`) سرّان فقط، وطريقة إنشائهما في `docs/setup.md`.

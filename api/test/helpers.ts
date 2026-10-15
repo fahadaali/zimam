@@ -97,7 +97,7 @@ export async function appleToken(sub: string, o: AppleTokenOptions = {}) {
     .setProtectedHeader({ alg: "RS256", kid: "test-key" })
     .setSubject(sub)
     .setIssuer(o.issuer ?? "https://appleid.apple.com")
-    .setAudience(o.audience ?? "app.zimam.Zimam")
+    .setAudience(o.audience ?? "app.zimam.ios")
     .setIssuedAt()
     .setExpirationTime(o.expiresIn ?? "10m")
     .sign(o.key ?? privateKey);
