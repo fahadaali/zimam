@@ -176,7 +176,7 @@ xcodegen          # يولّد Zimam.xcodeproj من project.yml
 open Zimam.xcodeproj
 ```
 
-المرجع هو `apple/project.yml`. المشروع المولَّد `Zimam.xcodeproj` يدخل المستودع معه حتى يجده Xcode Cloud، لكنه لا يُعدَّل يدوياً: أي تغيير في الأهداف أو الإعدادات يكون في `project.yml` ثم يُعاد تشغيل `xcodegen`. في Xcode اختر فريقك من **Signing & Capabilities** مرة واحدة.
+المرجع هو `apple/project.yml`. المشروع المولَّد `Zimam.xcodeproj` لا يدخل المستودع، ويولّده Xcode Cloud بنفسه (`apple/ci_scripts/ci_post_clone.sh`)، ولا يُعدَّل يدوياً: أي تغيير في الأهداف أو الإعدادات يكون في `project.yml` ثم يُعاد تشغيل `xcodegen`. في Xcode اختر فريقك من **Signing & Capabilities** مرة واحدة.
 
 ### ٣. Claude Code على الماك مع Xcode
 
@@ -188,7 +188,7 @@ claude mcp add xcode -- xcrun mcpbridge
 
 ### ٤. Xcode Cloud
 
-في Xcode: **Product ← Xcode Cloud ← Create Workflow**، واربطه بـ `fahadaali/zimam`، وابدأ البناء عند كل دمج إلى `main`، ثم ارفع البناء إلى TestFlight.
+في Xcode: **Product ← Xcode Cloud ← Create Workflow**، واربطه بـ `fahadaali/zimam`، وابدأ البناء عند كل دمج إلى `main`، ثم ارفع البناء إلى TestFlight. الخطوات كاملة، ومعها إضافة المختبِرين، في `docs/release.md`.
 
 ### ٥. مفتاح Sign in with Apple (لحذف الحساب)
 
@@ -232,7 +232,7 @@ curl -s https://app-site-association.cdn-apple.com/a/v1/zimam-web.fahad2ao.worke
 الصفحتان `web/public/privacy/` و`web/public/terms/` **مسودتان** كُتبتا من الكود، وفي أعلى كل منهما تنبيه بذلك. قبل الإطلاق:
 
 1. راجعهما مع مستشار قانوني، واملأ ما بين المعقوفين: البريد الإلكتروني للتواصل، واسم المشغّل (شخص أم كيان تجاري)، وموقع تخزين البيانات، ومدة سجلات بوابة الذكاء الاصطناعي، وبنود السن والمسؤولية والنظام الواجب التطبيق. ثم احذف التنبيه وصنف `placeholder`.
-2. في App Store Connect: **App Privacy ← Privacy Policy URL** بالقيمة `https://zimam-web.fahad2ao.workers.dev/privacy/` (لاحقاً `https://zimam.app/privacy/`)، واملأ «تفاصيل الخصوصية» بما تذكره السياسة. وإن اعتمدت شروطاً خاصة بدل اتفاقية أبل القياسية فضع رابط `/terms/` في **License Agreement**.
+2. في App Store Connect: **App Privacy ← Privacy Policy URL** بالقيمة `https://zimam-web.fahad2ao.workers.dev/privacy/` (لاحقاً `https://zimam.app/privacy/`)، واملأ «تفاصيل الخصوصية» بما تذكره السياسة، والإجابات جاهزة في `docs/appstore/privacy-label.md`. وإن اعتمدت شروطاً خاصة بدل اتفاقية أبل القياسية فضع رابط `/terms/` في **License Agreement**.
 3. أي تغيير فيما يجمعه الخادم أو يرسله (حقل جديد، مزوّد جديد) يُحدَّث معه نص السياسة في الطلب نفسه.
 
 ### ٨. اشتراكات «زمام الاحترافية»

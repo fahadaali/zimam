@@ -1,5 +1,6 @@
-# Source of truth for the Xcode project. Run `xcodegen` in this folder after
-# every change, and commit the regenerated Zimam.xcodeproj with it.
+# Source of truth for the Xcode project. Run `xcodegen` in this folder after every change.
+# The generated Zimam.xcodeproj and the Info.plist and .entitlements files are not committed:
+# Xcode Cloud generates them with ci_scripts/ci_post_clone.sh (docs/release.md).
 name: Zimam
 options:
   bundleIdPrefix: app.zimam.ios
@@ -12,6 +13,10 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
+    # The version every bundle carries (app, widgets, watch app, complications): each Info.plist
+    # below reads CFBundleShortVersionString and CFBundleVersion from these two, because
+    # XcodeGen otherwise writes a fixed "1.0" and "1". Raise MARKETING_VERSION for each release;
+    # Xcode Cloud replaces CURRENT_PROJECT_VERSION with its build number (ci_pre_xcodebuild.sh).
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     # Your Apple Developer Team ID (Membership details). Set it here, not in Xcode,
@@ -38,6 +43,9 @@ targets:
   Zimam:
     type: application
     supportedDestinations: [iOS, macOS]
+    # Each target's folder holds its PrivacyInfo.xcprivacy (copied as a resource): the UserDefaults
+    # reasons App Store Connect requires on upload, and for the app the data in the App Privacy
+    # label (docs/appstore/privacy-label.md). Keep the two in step.
     sources:
       - path: Zimam
         # StoreKit testing only (the scheme below); not copied into the app.
@@ -89,6 +97,10 @@ targets:
         CFBundleDisplayName: زمام
         CFBundleDevelopmentRegion: ar
         CFBundleLocalizations: [ar]
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Export compliance: only Apple's own encryption (HTTPS, Keychain, CryptoKit hashing), which
+        # is exempt, so App Store Connect does not ask for documents (docs/appstore/listing.md).
         ITSAppUsesNonExemptEncryption: false
         LSApplicationCategoryType: public.app-category.productivity
         UILaunchScreen: {}
@@ -192,6 +204,8 @@ targets:
         CFBundleDisplayName: زمام
         CFBundleDevelopmentRegion: ar
         CFBundleLocalizations: [ar]
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
         UIAppFonts:
@@ -239,6 +253,9 @@ targets:
         CFBundleDisplayName: زمام
         CFBundleDevelopmentRegion: ar
         CFBundleLocalizations: [ar]
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
         WKApplication: true
         WKCompanionAppBundleIdentifier: app.zimam.ios
         WKRunsIndependentlyOfCompanionApp: false
@@ -287,6 +304,8 @@ targets:
         CFBundleDisplayName: زمام
         CFBundleDevelopmentRegion: ar
         CFBundleLocalizations: [ar]
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
         UIAppFonts:

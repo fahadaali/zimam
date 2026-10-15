@@ -11,7 +11,9 @@ xcodegen            # يولّد Zimam.xcodeproj من project.yml
 open Zimam.xcodeproj
 ```
 
-- المرجع هو `project.yml`. يُعاد تشغيل `xcodegen` بعد أي تعديل عليه، ويُرفع `Zimam.xcodeproj` المولَّد معه حتى يجده Xcode Cloud. لا يُعدَّل المشروع من Xcode مباشرة لأن التوليد التالي يمسح التعديل.
+- المرجع هو `project.yml`. يُعاد تشغيل `xcodegen` بعد أي تعديل عليه. المشروع المولَّد `Zimam.xcodeproj` وملفات Info.plist والإمكانات لا تدخل المستودع (`.gitignore`)، ويولّدها Xcode Cloud بنفسه عبر `ci_scripts/ci_post_clone.sh`. لا يُعدَّل المشروع من Xcode مباشرة لأن التوليد التالي يمسح التعديل.
+- الإصدار في `MARKETING_VERSION` داخل `project.yml`، ورقم البناء يضعه Xcode Cloud (`ci_scripts/ci_pre_xcodebuild.sh`)، وتقرؤهما ملفات Info.plist للأهداف الأربعة فتتطابق. والنشر إلى TestFlight في `docs/release.md`.
+- لكل هدف ملف `PrivacyInfo.xcprivacy` في مجلده (أسباب استعمال `UserDefaults`، وما يجمعه التطبيق)، يطابق «تفاصيل الخصوصية» في `docs/appstore/privacy-label.md`.
 - ضع معرّف فريقك (Team ID) في `DEVELOPMENT_TEAM` داخل `project.yml`، لا في Xcode.
 - عنوان الخادم في `ZIMAM_API_URL` داخل `project.yml`.
 - الدخول بحساب قوقل: معرّف عميل iOS في `GOOGLE_IOS_CLIENT_ID` وصيغته المعكوسة في `GOOGLE_REVERSED_CLIENT_ID` داخل `project.yml`، ومنهما `GIDClientID` ونوع الرابط (URL scheme) في Info.plist. إن فرغ `GOOGLE_IOS_CLIENT_ID` اختفى زر قوقل. زر قوقل يتبع شروط علامة Google (ألوانها وشعارها `GoogleLogo` من حزمة GoogleSignIn-iOS)، وهو الاستثناء الوحيد من رموز التصميم.
