@@ -5,6 +5,11 @@ import WidgetKit
 struct ZimamWidgetBundle: WidgetBundle {
     var body: some Widget {
         TodayWidget()
+        #if os(iOS)
+        // The Lock Screen (LockScreenWidget.swift) and «المهمة الجارية» (FocusLiveActivity.swift).
+        LockScreenWidget()
+        FocusLiveActivity()
+        #endif
     }
 }
 

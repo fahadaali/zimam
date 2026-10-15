@@ -120,6 +120,8 @@ targets:
         NSLocationUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، فتصلك المهام والتذكيرات المرتبطة بالصلاة في وقتها. يبقى الموقع على جهازك، إلا إن فعّلت أوقات الصلاة في كلود وChatGPT فيُحفظ في خادم زمام موقع تقريبي على مستوى المدينة.
         # Apple Reminders import (Zimam/Import/RemindersImporter.swift): read only when the user imports.
         NSRemindersFullAccessUsageDescription: يقرأ زمام قوائم التذكيرات التي تختارها حين تطلب استيرادها، فيضيفها مشاريع ومهام في حسابك على زمام. لا يغيّر التذكيرات ولا يحذفها، ولا يقرؤها في غير الاستيراد.
+        # «المهمة الجارية» (Shared/LiveActivity, ZimamWidgets/FocusLiveActivity.swift), iPhone only.
+        NSSupportsLiveActivities: true
         ZimamAPIURL: $(ZIMAM_API_URL)
         # Sign in with Google reads its client from GIDClientID, and Google's sign-in page
         # returns to the reversed client ID scheme (handled by .onOpenURL in ZimamApp).
@@ -156,6 +158,8 @@ targets:
     supportedDestinations: [iOS, macOS]
     sources:
       - path: ZimamWidgets
+      # The accessory views, shared with the watch complications (iPhone Lock Screen only).
+      - path: Glance
       - path: Shared
       - path: Common
       - path: ../design/generated/ZimamTokens.swift
@@ -211,6 +215,8 @@ targets:
         buildPhase: resources
     dependencies:
       - package: ZimamKit
+      # The complications, embedded in the watch app's PlugIns.
+      - target: ZimamWatchWidgets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.zimam.ios.watchkitapp
@@ -238,3 +244,53 @@ targets:
           - thmanyahserifdisplay-Bold.otf
           - thmanyahserifdisplay-Black.otf
         ZimamAPIURL: $(ZIMAM_API_URL)
+    # The watch's own App Group: the app writes what the complications show (WatchGlance.swift).
+    entitlements:
+      path: ZimamWatch/ZimamWatch.entitlements
+      properties:
+        com.apple.security.application-groups: [group.app.zimam.ios.watch]
+
+  # Apple Watch complications (WidgetKit, watchOS 11): the next task and today's count in the
+  # circular, rectangular, inline and corner families. They read the snapshot the watch app
+  # saves in group.app.zimam.ios.watch; the views are the iPhone Lock Screen's (Glance/).
+  ZimamWatchWidgets:
+    type: app-extension
+    platform: watchOS
+    deploymentTarget: "11.0"
+    sources:
+      - path: ZimamWatchWidgets
+      - path: Glance
+      - path: Common
+      - path: ../design/generated/ZimamTokens.swift
+      - path: ../design/fonts/apple
+        buildPhase: resources
+    dependencies:
+      - package: ZimamKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.zimam.ios.watchkitapp.widgets
+        PRODUCT_NAME: ZimamWatchWidgets
+        SKIP_INSTALL: YES
+    info:
+      path: ZimamWatchWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: زمام
+        CFBundleDevelopmentRegion: ar
+        CFBundleLocalizations: [ar]
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        UIAppFonts:
+          - thmanyahsans-Light.otf
+          - thmanyahsans-Regular.otf
+          - thmanyahsans-Medium.otf
+          - thmanyahsans-Bold.otf
+          - thmanyahsans-Black.otf
+          - thmanyahserifdisplay-Light.otf
+          - thmanyahserifdisplay-Regular.otf
+          - thmanyahserifdisplay-Medium.otf
+          - thmanyahserifdisplay-Bold.otf
+          - thmanyahserifdisplay-Black.otf
+    entitlements:
+      path: ZimamWatchWidgets/ZimamWatchWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.app.zimam.ios.watch]
