@@ -2,7 +2,8 @@ import SwiftData
 import SwiftUI
 import ZimamKit
 
-/// Open tasks due today or overdue. A task completed here stays for a second so it can be undone.
+/// Open tasks due today or overdue, with the assistant's summary of the day on request.
+/// A task completed here stays for a second so it can be undone.
 struct TodayView: View {
     @Environment(\.dateFormatterZimam) private var formatter
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder), SortDescriptor(\TaskItem.createdAt)])
@@ -25,6 +26,8 @@ struct TodayView: View {
         let names = projectNames(projects)
         List {
             Section {
+                // «ملخص اليوم» from the assistant; hidden offline.
+                DaySummaryRow()
                 if items.isEmpty { EmptyLine(text: "لا مهام اليوم. يومك لك.") }
                 ForEach(items) { task in
                     TaskListItem(task: task, projectName: task.projectId.flatMap { names[$0] }, onCompleted: linger)

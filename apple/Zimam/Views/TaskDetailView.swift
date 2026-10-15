@@ -78,6 +78,10 @@ private struct TaskDetailForm: View {
             RecurrenceSection(task: task, store: store)
             SubtasksSection(task: task, subtasks: subtasks, store: store)
             RemindersSection(task: task, reminders: reminders, store: store)
+            // Comments are for the members of a shared project; they live on the server.
+            if let projectId = task.projectId {
+                TaskCommentsSection(task: task, projectId: projectId)
+            }
 
             Section {
                 Button("حذف المهمة", systemImage: "trash", role: .destructive) { confirmingDelete = true }
@@ -255,6 +259,10 @@ private struct DetailsSection: View {
                     Text("صندوق المهام").tag(UUID?.none)
                     ForEach(projects) { Text($0.name).tag(Optional($0.id)) }
                 }
+            }
+            // Tasks in a project can be assigned to one of its members.
+            if let projectId = task.projectId {
+                AssigneePicker(task: task, projectId: projectId, store: store)
             }
         }
     }
@@ -438,6 +446,8 @@ private struct SubtasksSection: View {
                     .buttonStyle(.zimamQuiet)
                     .disabled(trimmed.isEmpty)
             }
+            // The assistant proposes steps; nothing is added before «إضافة».
+            SubtaskBreakdown(task: task, store: store)
         }
     }
 

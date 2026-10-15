@@ -11,6 +11,8 @@ struct ProjectsView: View {
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }) private var tasks: [TaskItem]
     @State private var naming = false
     @State private var newName = ""
+    @State private var joining = false
+    @State private var sharing: ShareTarget?
 
     init() {}
 
@@ -27,6 +29,9 @@ struct ProjectsView: View {
                     NavigationLink(value: project.id) {
                         ProjectCard(name: project.name, done: own.filter(\.isDone).count, total: own.count)
                     }
+                    .contextMenu {
+                        Button("مشاركة", systemImage: "person.2") { sharing = ShareTarget(id: project.id) }
+                    }
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 }
@@ -40,7 +45,12 @@ struct ProjectsView: View {
             ToolbarItem {
                 Button("مشروع جديد", systemImage: "plus") { naming = true }
             }
+            ToolbarItem {
+                Button("الانضمام بدعوة", systemImage: "person.badge.plus") { joining = true }
+            }
         }
+        .sheet(isPresented: $joining) { JoinProjectView() }
+        .sheet(item: $sharing) { target in ShareProjectView(projectId: target.id) }
         .alert("مشروع جديد", isPresented: $naming) {
             TextField("اسم المشروع", text: $newName)
             Button("إلغاء", role: .cancel) { newName = "" }
@@ -53,8 +63,16 @@ struct ProjectsView: View {
     }
 }
 
+/// The project a share sheet is open for.
+struct ShareTarget: Identifiable {
+    let id: UUID
+}
+
 struct ProjectDetailView: View {
     let projectId: UUID
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var sharing = false
 
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder), SortDescriptor(\TaskItem.createdAt)])
     private var tasks: [TaskItem]
@@ -88,5 +106,12 @@ struct ProjectDetailView: View {
         .zimamList()
         .overlay(alignment: .bottomTrailing) { AddTaskButton { showingAdd = true } }
         .sheet(isPresented: $showingAdd) { AddTaskView(projectId: projectId) }
+        .toolbar {
+            ToolbarItem {
+                Button("مشاركة", systemImage: "person.2") { sharing = true }
+            }
+        }
+        // Leaving the project closes this screen too; its tasks leave with the next pull.
+        .sheet(isPresented: $sharing) { ShareProjectView(projectId: projectId, onLeft: { dismiss() }) }
     }
 }
