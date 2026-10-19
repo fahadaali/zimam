@@ -106,7 +106,8 @@ export async function dueReminders(db: D1Database, from: number, to: number): Pr
   const surelyCoveredSince = to - LOCAL_WINDOW_MS;
   const candidates: Candidate[] = [];
 
-  // Time reminders fire at `at`, read as whole seconds.
+  // Time reminders fire at `at`, read as whole seconds. So does a location reminder with a time,
+  // unless the place came first (`fired_at`): it fires once, at whichever comes first.
   const time = await db
     .prepare(
       `SELECT r.id AS reminder_id, r.user_id, unixepoch(r.at) * 1000 AS fire_at, r.updated_at AS changed_at,
@@ -114,7 +115,8 @@ export async function dueReminders(db: D1Database, from: number, to: number): Pr
        FROM reminders r
        JOIN tasks t ON t.id = r.task_id
        LEFT JOIN projects p ON p.id = t.project_id
-       WHERE r.kind = 'time' AND r.deleted_at IS NULL
+       WHERE (r.kind = 'time' OR (r.kind = 'location' AND r.at IS NOT NULL AND r.fired_at IS NULL))
+         AND r.deleted_at IS NULL
          AND unixepoch(r.at) > ?1 AND unixepoch(r.at) <= ?2
          AND t.deleted_at IS NULL AND t.status <> 'done'
          AND ${NEEDS_PUSH("r.user_id", "r.updated_at")}`,

@@ -4,7 +4,7 @@ import { AiError, ANTHROPIC_MODEL, AnthropicProvider, DeepSeekProvider, provider
 import { DEFAULT_MONTHLY_LIMIT, monthOf, planMonthlyLimit, resetDate } from "../src/ai/quota";
 import { addDays, dayIn, dayOfHijri, hijriParts } from "../src/data/dates";
 import type { Env } from "../src/env";
-import { call, fakeAi, signIn, uuid } from "./helpers";
+import { call, fakeAi, push, signIn, uuid } from "./helpers";
 
 const GATEWAY = "https://gateway.ai.cloudflare.com/v1/302d00b357e2c90ed474d13642708b30/zimam";
 
@@ -21,6 +21,7 @@ function suggestion(fields: Record<string, unknown> = {}) {
     priority: "none",
     tags: [],
     projectId: null,
+    place: null,
     ...fields,
   };
 }
@@ -100,6 +101,44 @@ describe("POST /v1/assistant/parse", () => {
     fakeAi.answer(suggestion({ title: "شراء الخبز", dueTime: "21:30", projectId: home.toUpperCase(), priority: "high" }));
     const res = await call("POST", "/v1/assistant/parse", { token, body: { text: "اشتر الخبز الساعة ٩:٣٠ مشروع البيت", now: NOW } });
     expect(res.body).toEqual({ title: "شراء الخبز", dueDate: "2026-10-13", dueTime: "21:30", priority: "high", tags: [], projectId: home });
+  });
+
+  it("ties the reminder to one of the user's saved places, or names an unsaved one", async () => {
+    const a = await signIn();
+    const b = await signIn();
+    const home = uuid();
+    const theirs = uuid();
+    const place = (id: string, name: string) => ({
+      op: "upsert",
+      entity: "place",
+      data: { id, name, latitude: 24.7, longitude: 46.6, radius: 200, updatedAt: 1000 },
+    });
+    await push(a.token, [place(home, "البيت")]);
+    await push(b.token, [place(theirs, "الاستراحة")]);
+
+    fakeAi.answer(
+      suggestion({ title: "شراء الخبز", dueTime: "17:00", place: { placeId: home.toUpperCase(), name: "بيتي", trigger: "arrive" } }),
+    );
+    let res = await call("POST", "/v1/assistant/parse", {
+      token: a.token,
+      body: { text: "ذكرني أشتري خبز إذا وصلت البيت أو الساعة ٥", now: NOW },
+    });
+    expect(res.body).toEqual({
+      title: "شراء الخبز",
+      dueDate: "2026-10-13",
+      dueTime: "17:00",
+      priority: "none",
+      tags: [],
+      place: { placeId: home, name: "البيت", trigger: "arrive" },
+    });
+    const [request] = fakeAi.requests;
+    expect(request!.prompt).toContain(`PLACES (id | name):\n${home} | البيت`);
+    expect(request!.prompt).not.toContain(theirs);
+
+    // Someone else's place, or one not saved, comes back by name only.
+    fakeAi.answer(suggestion({ title: "إطفاء المكيف", place: { placeId: theirs, name: "الاستراحة", trigger: "leave" } }));
+    res = await call("POST", "/v1/assistant/parse", { token: a.token, body: { text: "إذا طلعت من الاستراحة طفّ المكيف", now: NOW } });
+    expect(res.body).toEqual({ title: "إطفاء المكيف", priority: "none", tags: [], place: { name: "الاستراحة", trigger: "leave" } });
   });
 
   it("converts Hijri dates on the server with Umm al-Qura", async () => {

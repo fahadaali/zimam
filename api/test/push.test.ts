@@ -213,6 +213,22 @@ describe("Reminder pushes", () => {
     expect(record!.source).toBe(`reminder-${later}`);
   });
 
+  it("pushes a location reminder's time unless the place came first", async () => {
+    const now = Date.UTC(2027, 1, 14, 6, 0, 0);
+    const user = await userWithDevice();
+    const waiting = await addTask(user.token, { title: "شراء الخبز" });
+    const arrived = await addTask(user.token, { title: "سقي الزرع" });
+    const place = { latitude: 24.7136, longitude: 46.6753, radius: 200, name: "البيت", trigger: "arrive" };
+    await addReminder(user.token, waiting, { kind: "location", location: place, at: iso(now - 2 * MINUTE) });
+    await addReminder(user.token, arrived, { kind: "location", location: place, at: iso(now - 2 * MINUTE), firedAt: now - HOUR });
+    // A place alone is never pushed: only the device knows where it is.
+    await addReminder(user.token, arrived, { kind: "location", location: place });
+
+    const fake = new FakePush();
+    expect(await sendDueReminders(env.DB, fake, now)).toMatchObject({ due: 1, sent: 1 });
+    expect(fake.to(user.apns)[0]!.payload.taskId).toBe(waiting);
+  });
+
   it("leaves to the device what it scheduled locally", async () => {
     const now = Date.UTC(2027, 1, 3, 9, 0, 0);
     const fireAt = now - MINUTE;

@@ -19,7 +19,7 @@ interface OwnedProject {
  *   leaves it like any removed member.
  * - The user leaves every other project the same way (`removeMemberStatements`):
  *   tasks assigned to them become unassigned, and their reminders go.
- * - Inbox tasks, reminders, the comments they wrote and the files they attached are
+ * - Inbox tasks, reminders, saved places, the comments they wrote and the files they attached are
  *   deleted everywhere (the files leave R2 on the next purge). Tasks they created in
  *   projects that live on stay with those projects.
  * - Their App Store entitlements are deleted; the subscription itself is Apple's, and
@@ -100,6 +100,10 @@ export async function deleteAccount(db: D1Database, access: Access, mutator: Mut
       `INSERT INTO changes (entity, entity_id, project_id, user_id, at)
        SELECT 'reminder', id, NULL, user_id, ?2 FROM reminders WHERE user_id = ?1 AND deleted_at IS NULL`,
       `UPDATE reminders SET deleted_at = ?2, updated_at = ?2 WHERE user_id = ?1 AND deleted_at IS NULL`,
+      // Saved places are personal too.
+      `INSERT INTO changes (entity, entity_id, project_id, user_id, at)
+       SELECT 'place', id, NULL, user_id, ?2 FROM places WHERE user_id = ?1 AND deleted_at IS NULL`,
+      `UPDATE places SET deleted_at = ?2, updated_at = ?2 WHERE user_id = ?1 AND deleted_at IS NULL`,
       // Comments, logged to the audience of their task.
       `INSERT INTO changes (entity, entity_id, project_id, user_id, at)
        SELECT 'comment', c.id, t.project_id, CASE WHEN t.project_id IS NULL THEN t.owner_id END, ?2
@@ -122,6 +126,7 @@ export async function deleteAccount(db: D1Database, access: Access, mutator: Mut
       `UPDATE sections SET name = '' WHERE project_id IN (${ownedGone})`,
       `UPDATE projects SET name = '' WHERE owner_id = ?1 AND deleted_at IS NOT NULL`,
       `UPDATE reminders SET location = NULL WHERE user_id = ?1`,
+      `UPDATE places SET name = '', latitude = 0, longitude = 0 WHERE user_id = ?1`,
       `UPDATE comments SET body = '' WHERE deleted_at IS NOT NULL AND ${theirComments()}`,
       `UPDATE attachments SET file_name = '' WHERE deleted_at IS NOT NULL AND ${theirAttachments()}`,
       `UPDATE invites SET revoked_at = ?2 WHERE created_by = ?1 AND accepted_at IS NULL AND revoked_at IS NULL`,
