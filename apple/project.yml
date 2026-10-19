@@ -66,8 +66,10 @@ targets:
     # A shared "Zimam" scheme whose Run uses the local StoreKit configuration: purchases of
     # «زمام الاحترافية» in the simulator or from Xcode are local (no App Store, no server
     # verification). Untick it in Edit Scheme → Run → Options to test against the sandbox.
+    # Its Test action runs the app's unit tests (ZimamTests below).
     scheme:
       storeKitConfiguration: Zimam/Resources/Zimam.storekit
+      testTargets: [ZimamTests]
     dependencies:
       - package: ZimamKit
       - package: GoogleSignIn
@@ -182,6 +184,30 @@ targets:
         # apple-app-site-association lists 72V86SZ2XC.app.zimam.ios for /join/*. Needs Associated
         # Domains on the App ID (docs/setup.md). Becomes applinks:zimam.app with the domain.
         com.apple.developer.associated-domains: ["applinks:zimam-web.fahad2ao.workers.dev"]
+
+  # The app's unit tests (Swift Testing), hosted in the app on iPhone, iPad and Mac: Store edits on
+  # an in-memory SwiftData container, Lingering, and ProjectMembers over a stubbed URLSession.
+  # ZimamKit's own tests stay in its package (`swift test`).
+  ZimamTests:
+    type: bundle.unit-test
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: ZimamTests
+    dependencies:
+      - target: Zimam
+      # `@testable import Zimam` loads the modules the app imports, so the test bundle needs them too.
+      - package: ZimamKit
+      - package: GoogleSignIn
+        product: GoogleSignIn
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.zimam.ios.tests
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+        # The app's executable on either platform: Zimam.app/Zimam on iOS,
+        # Zimam.app/Contents/MacOS/Zimam on the Mac (as Xcode's multiplatform template sets it).
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Zimam.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Zimam"
+        BUNDLE_LOADER: "$(TEST_HOST)"
 
   # Home Screen, Lock Screen and Mac desktop widgets: today's tasks from the shared store,
   # completed in place with CompleteTaskIntent.

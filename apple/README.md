@@ -37,6 +37,7 @@ open Zimam.xcodeproj
 | `ZimamWatch/` | تطبيق ساعة أبل |
 | `ZimamWatchWidgets/` | تعقيدات ساعة أبل (WidgetKit): المهمة التالية وعدد مهام اليوم |
 | `Glance/` | واجهات الويدجت الملحقة (accessory) المشتركة بين شاشة قفل الآيفون وتعقيدات الساعة |
+| `ZimamTests/` | اختبارات التطبيق بـ Swift Testing (هدف `ZimamTests` يعمل داخل التطبيق على الآيفون والماك): تعديلات `Store` على مخزن SwiftData في الذاكرة، و`Lingering`، و`ProjectMembers` مع شبكة وهمية (`StubURLProtocol`) لا تتصل بالخادم. تشغيلها من Xcode بـ ⌘U في مخطط `Zimam`، أو: `xcodebuild test -project Zimam.xcodeproj -scheme Zimam -destination 'platform=iOS Simulator,name=iPhone 17'` (وللماك `-destination 'platform=macOS'`) |
 
 يُضاف لكل هدف (التطبيق والويدجت والساعة) `../design/generated/ZimamTokens.swift` وخطوط ثمانية من `../design/fonts/apple/` مع قائمتها في `UIAppFonts`. أيقونة التطبيق وشعاره منسوخان في `Zimam/Resources/Assets.xcassets`، وأيقونة الساعة في `ZimamWatch/Assets.xcassets`.
 
