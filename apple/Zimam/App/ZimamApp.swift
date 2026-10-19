@@ -39,6 +39,8 @@ struct ZimamApp: App {
             #endif
             // Open tasks in Spotlight, for system search, Siri and Apple Intelligence.
             TaskSpotlight.shared.scheduleUpdate()
+            // Saved places in Siri's phrases («ذكرني في زمام إذا وصلت البيت»).
+            ZimamShortcuts.updateAppShortcutParameters()
         }
         location.onChange = { [notifications, session, location] in
             notifications.reschedule()

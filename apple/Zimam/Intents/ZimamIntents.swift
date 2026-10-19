@@ -125,6 +125,18 @@ struct ZimamShortcuts: AppShortcutsProvider {
             shortTitle: "مهمة بجملة",
             systemImageName: "text.bubble"
         )
+        // One parameter per phrase: the saved place, so Siri knows «البيت» and «العمل».
+        AppShortcut(
+            intent: AddPlaceReminderIntent(),
+            phrases: [
+                "ذكرني في \(.applicationName) إذا وصلت \(\.$place)",
+                "ذكرني في \(.applicationName) عند الوصول إلى \(\.$place)",
+                "ذكرني في \(.applicationName) لما أوصل \(\.$place)",
+                "تذكير مكان في \(.applicationName)",
+            ],
+            shortTitle: "تذكير عند مكان",
+            systemImageName: "mappin.and.ellipse"
+        )
         AppShortcut(
             intent: TodayTasksIntent(),
             phrases: [
