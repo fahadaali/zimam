@@ -96,20 +96,6 @@ struct ShareProjectView: View {
             .onChange(of: online) { _, isOnline in
                 if isOnline { Task { await load() } }
             }
-            .confirmationDialog("إزالة العضو؟", isPresented: removingBinding, titleVisibility: .visible) {
-                Button("إزالة", role: .destructive) {
-                    if let member = removing { remove(member) }
-                }
-                Button("إلغاء", role: .cancel) {}
-            } message: {
-                Text("تختفي مهام المشروع من أجهزته، وتُلغى إسناداته فيه.")
-            }
-            .confirmationDialog("مغادرة المشروع؟", isPresented: $confirmingLeave, titleVisibility: .visible) {
-                Button("مغادرة", role: .destructive, action: leave)
-                Button("إلغاء", role: .cancel) {}
-            } message: {
-                Text("تختفي مهام المشروع من أجهزتك، ولا تعود إلا بدعوة جديدة.")
-            }
         }
     }
 
@@ -128,6 +114,13 @@ struct ShareProjectView: View {
                     onRole: { role in changeRole(of: member, to: role) },
                     onRemove: { removing = member }
                 )
+                // On the member's row, so on the iPad the dialog points at it.
+                .confirmationDialog("إزالة العضو؟", isPresented: removingBinding(for: member), titleVisibility: .visible) {
+                    Button("إزالة", role: .destructive) { remove(member) }
+                    Button("إلغاء", role: .cancel) {}
+                } message: {
+                    Text("تختفي مهام المشروع من أجهزته، وتُلغى إسناداته فيه.")
+                }
             }
             if loaded && members.count <= 1 && isOwner {
                 Text("لم تشارك هذا المشروع بعد. أنشئ دعوة وأرسلها لمن تريد.")
@@ -187,6 +180,12 @@ struct ShareProjectView: View {
             }
             .frame(minHeight: ZimamSpacing.space11)
             .disabled(!online || working)
+            .confirmationDialog("مغادرة المشروع؟", isPresented: $confirmingLeave, titleVisibility: .visible) {
+                Button("مغادرة", role: .destructive, action: leave)
+                Button("إلغاء", role: .cancel) {}
+            } message: {
+                Text("تختفي مهام المشروع من أجهزتك، ولا تعود إلا بدعوة جديدة.")
+            }
         } footer: {
             if let role = myRole {
                 Text("دورك في هذا المشروع: \(role.arabicName).")
@@ -194,8 +193,8 @@ struct ShareProjectView: View {
         }
     }
 
-    private var removingBinding: Binding<Bool> {
-        Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })
+    private func removingBinding(for member: ProjectMember) -> Binding<Bool> {
+        Binding(get: { removing?.id == member.id }, set: { if !$0, removing?.id == member.id { removing = nil } })
     }
 
     // MARK: Requests

@@ -52,6 +52,11 @@ struct TaskCommentsSection: View {
                     isMine: comment.authorId != nil && comment.authorId == me,
                     onDelete: { deleting = comment }
                 )
+                // On the row that asked, so on the iPad the dialog points at it.
+                .confirmationDialog("حذف التعليق؟", isPresented: deletingBinding(for: comment), titleVisibility: .visible) {
+                    Button("حذف", role: .destructive) { delete(comment) }
+                    Button("إلغاء", role: .cancel) {}
+                }
             }
             if let problem {
                 Label(problem, systemImage: "exclamationmark.circle")
@@ -79,12 +84,6 @@ struct TaskCommentsSection: View {
                 if isOnline { reload(quietly: false) }
             }
             .onDisappear { reloading?.cancel() }
-            .confirmationDialog("حذف التعليق؟", isPresented: deletingBinding, titleVisibility: .visible) {
-                Button("حذف", role: .destructive) {
-                    if let comment = deleting { delete(comment) }
-                }
-                Button("إلغاء", role: .cancel) {}
-            }
         }
     }
 
@@ -93,8 +92,8 @@ struct TaskCommentsSection: View {
         return ProjectMembers.displayName(name, userId: comment.authorId, me: me)
     }
 
-    private var deletingBinding: Binding<Bool> {
-        Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
+    private func deletingBinding(for comment: TaskComment) -> Binding<Bool> {
+        Binding(get: { deleting?.id == comment.id }, set: { if !$0, deleting?.id == comment.id { deleting = nil } })
     }
 
     private func reload(quietly: Bool) {

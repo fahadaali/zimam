@@ -36,7 +36,6 @@ struct KanbanBoardView: View {
     @State private var addingSection = false
     @State private var sectionName = ""
     @State private var renaming: SectionItem?
-    @State private var deleting: SectionItem?
 
     init(projectId: UUID, title: String, sections: [SectionItem], tasks: [TaskItem], openTask: @escaping (UUID) -> Void) {
         self.projectId = projectId
@@ -101,8 +100,7 @@ struct KanbanBoardView: View {
                             onRename: { section in
                                 sectionName = section.name
                                 renaming = section
-                            },
-                            onDelete: { section in deleting = section }
+                            }
                         )
                     }
                     addSectionButton
@@ -129,12 +127,6 @@ struct KanbanBoardView: View {
                 sectionName = ""
             }
         }
-        .confirmationDialog("حذف القسم؟", isPresented: isDeleting, titleVisibility: .visible, presenting: deleting) { section in
-            Button("حذف القسم", role: .destructive) { store.delete(section) }
-            Button("إلغاء", role: .cancel) {}
-        } message: { _ in
-            Text("تبقى مهامه في المشروع بلا قسم.")
-        }
     }
 
     private var addSectionButton: some View {
@@ -159,9 +151,6 @@ struct KanbanBoardView: View {
         Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
     }
 
-    private var isDeleting: Binding<Bool> {
-        Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
-    }
 
     /// A completed card stays for a second so it can be undone, then leaves the board.
     private func linger(_ id: UUID) {
@@ -196,7 +185,6 @@ private struct KanbanColumnView: View {
     let openTask: (UUID) -> Void
     let onCompleted: (UUID) -> Void
     let onRename: (SectionItem) -> Void
-    let onDelete: (SectionItem) -> Void
 
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
@@ -208,6 +196,7 @@ private struct KanbanColumnView: View {
     /// The card whose «نقل إلى مشروع…» sheet is open.
     @State private var movingToProject: ProjectMoveRequest?
     @State private var adding = false
+    @State private var confirmingDelete = false
     @State private var newTitle = ""
     @FocusState private var fieldFocused: Bool
 
@@ -291,7 +280,7 @@ private struct KanbanColumnView: View {
                 Button("تأخير القسم") { store.moveSection(section, by: 1) }
             }
             Divider()
-            Button("حذف القسم", systemImage: "trash", role: .destructive) { onDelete(section) }
+            Button("حذف القسم", systemImage: "trash", role: .destructive) { confirmingDelete = true }
         } label: {
             Image(systemName: "ellipsis")
                 .font(ZimamType.body)
@@ -303,6 +292,13 @@ private struct KanbanColumnView: View {
         .buttonStyle(.plain)
         .fixedSize()
         .accessibilityLabel("خيارات القسم \(section.name)")
+        // On the menu that asked, so on the iPad the dialog points at the column.
+        .confirmationDialog("حذف القسم؟", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("حذف القسم", role: .destructive) { store.delete(section) }
+            Button("إلغاء", role: .cancel) {}
+        } message: {
+            Text("تبقى مهامه في المشروع بلا قسم.")
+        }
     }
 
     // MARK: Cards
