@@ -28,7 +28,9 @@ final class PlaceMonitor {
     /// The places to watch, kept until the monitor is ready.
     private var wanted: [WatchedPlace] = []
 
-    private static let monitorName = "zimam.places"
+    /// Letters and digits only: CoreLocation rejects any other name ("Monitor name is not valid")
+    /// with an exception that stops the app at launch, as "zimam.places" did in TestFlight build 4.
+    private static let monitorName = "ZimamPlaces"
     /// Inside or outside, per region id: the app is relaunched for each crossing, so this lives
     /// in defaults. A crossing is a change from the last known side; the first reading of a new
     /// region only records it, so registering a place while there does not remind.
