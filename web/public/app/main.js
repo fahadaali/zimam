@@ -526,7 +526,8 @@ async function toggleTask(task, li, row, { leaveWhenDone }) {
 function leave(li, task) {
   if (isOpen(task) || !li.isConnected) return;
   li.classList.add("is-leaving");
-  setTimeout(() => removeItem(li), matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : FADE);
+  // A fade, not a movement, so it stays with Reduce Motion as in the app.
+  setTimeout(() => removeItem(li), FADE);
 }
 
 /** Removes a task from its list, keeping keyboard focus nearby, and tidies an emptied list. */

@@ -15,7 +15,9 @@ final class NetworkMonitor {
     @ObservationIgnored private let monitor = NWPathMonitor()
 
     private init() {
-        monitor.pathUpdateHandler = { [weak self] path in
+        // Called on the monitor's queue: @Sendable, so it is not tied to the main actor (a call
+        // from that queue would stop the app); it hops there to update.
+        monitor.pathUpdateHandler = { @Sendable [weak self] path in
             let online = path.status == .satisfied
             Task { @MainActor in
                 guard let self, self.isOnline != online else { return }

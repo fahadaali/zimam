@@ -110,7 +110,12 @@ public struct TaskComment: Codable, Equatable, Sendable, Identifiable {
 public enum InviteCode {
     /// The link shared for a new invite.
     public static func link(for code: String) -> URL {
-        URL(string: "\(ZimamWeb.origin.absoluteString)/join/#\(code)")!
+        // The code comes from the server; as the fragment of URLComponents any character it
+        // should not hold is percent-encoded, where URL(string:) would return nil.
+        var components = URLComponents(url: ZimamWeb.origin, resolvingAgainstBaseURL: false)!
+        components.path = "/join/"
+        components.fragment = code
+        return components.url!
     }
 
     /// Whether a URL that opened the app is an invite: a universal link to `/join` on a Zimam

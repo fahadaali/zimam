@@ -602,13 +602,14 @@ final class CurrentPlaceReader {
     }
 }
 
-/// CoreLocation's delegate for `CurrentPlaceReader`; its callbacks hop to the main actor.
-private final class PlaceReaderDelegate: NSObject, CLLocationManagerDelegate {
+/// CoreLocation's delegate for `CurrentPlaceReader`; its callbacks hop to the main actor, and
+/// it is not tied to it, so a call from another thread cannot stop the app.
+nonisolated private final class PlaceReaderDelegate: NSObject, CLLocationManagerDelegate {
     var onLocation: (@MainActor (Double, Double, Double) -> Void)?
     var onFailure: (@MainActor (CLError.Code?) -> Void)?
     var onAuthorizationChange: (@MainActor (CLAuthorizationStatus) -> Void)?
 
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         // A negative accuracy marks an invalid reading.
         guard let location = locations.last(where: { $0.horizontalAccuracy >= 0 }) else { return }
         let latitude = location.coordinate.latitude
@@ -618,13 +619,13 @@ private final class PlaceReaderDelegate: NSObject, CLLocationManagerDelegate {
         Task { @MainActor in handler?(latitude, longitude, accuracy) }
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         let code = (error as? CLError)?.code
         let handler = onFailure
         Task { @MainActor in handler?(code) }
     }
 
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let status = manager.authorizationStatus
         let handler = onAuthorizationChange
         Task { @MainActor in handler?(status) }

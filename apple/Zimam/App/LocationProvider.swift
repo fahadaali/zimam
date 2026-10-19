@@ -246,13 +246,14 @@ final class LocationProvider {
 
 /// CoreLocation's delegate, kept apart so the observable provider stays a plain class.
 /// The manager is created on the main thread, so its callbacks arrive there; they still hop
-/// to the main actor explicitly.
-private final class LocationDelegate: NSObject, CLLocationManagerDelegate {
+/// to the main actor explicitly, and the delegate is not tied to it, so a call from elsewhere
+/// cannot stop the app.
+nonisolated private final class LocationDelegate: NSObject, CLLocationManagerDelegate {
     var onLocation: (@MainActor (Double, Double) -> Void)?
     var onFailure: (@MainActor (CLError.Code?) -> Void)?
     var onAuthorizationChange: (@MainActor (CLAuthorizationStatus) -> Void)?
 
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         // A negative accuracy marks an invalid reading.
         guard let location = locations.last(where: { $0.horizontalAccuracy >= 0 }) else { return }
         let latitude = location.coordinate.latitude
@@ -261,13 +262,13 @@ private final class LocationDelegate: NSObject, CLLocationManagerDelegate {
         Task { @MainActor in handler?(latitude, longitude) }
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         let code = (error as? CLError)?.code
         let handler = onFailure
         Task { @MainActor in handler?(code) }
     }
 
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let status = manager.authorizationStatus
         let handler = onAuthorizationChange
         Task { @MainActor in handler?(status) }

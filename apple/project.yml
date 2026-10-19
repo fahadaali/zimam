@@ -191,7 +191,7 @@ targets:
         com.apple.developer.associated-domains: ["applinks:zimam-web.fahad2ao.workers.dev"]
 
   # The app's unit tests (Swift Testing), hosted in the app on iPhone, iPad and Mac: Store edits on
-  # an in-memory SwiftData container, Lingering, and ProjectMembers over a stubbed URLSession.
+  # an in-memory SwiftData container, Lingering, and ProjectMembers and SyncEngine over a stubbed URLSession.
   # ZimamKit's own tests stay in its package (`swift test`).
   ZimamTests:
     type: bundle.unit-test
@@ -233,6 +233,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.zimam.ios.widgets
+        # WidgetKit calls the timeline providers on its own threads, so the main actor is not the
+        # default here (with it, such a call would stop the extension). Swift 6 checks still apply.
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
         PRODUCT_NAME: ZimamWidgets
         TARGETED_DEVICE_FAMILY: "1,2"
         # Installed inside the app, so the archive stays an app archive.
@@ -337,6 +340,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.zimam.ios.watchkitapp.widgets
+        # WidgetKit calls the timeline providers on its own threads, so the main actor is not the
+        # default here (with it, such a call would stop the extension). Swift 6 checks still apply.
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
         PRODUCT_NAME: ZimamWatchWidgets
         SKIP_INSTALL: YES
     info:
