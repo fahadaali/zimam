@@ -13,6 +13,8 @@ struct RootView: View {
             if session.isSignedIn {
                 MainView()
                     .task {
+                        // Finish a wipe that failed at the last sign-out before the first sync.
+                        sync.wipeIfPending()
                         await notifications.prepare()
                         PushRegistration.shared.register()
                         await session.loadUser()
@@ -47,7 +49,7 @@ struct RootView: View {
         .onAppear {
             sync.onUnauthorized = { [session, sync] in
                 session.endSession()
-                try? sync.reset()
+                sync.reset()
             }
         }
     }

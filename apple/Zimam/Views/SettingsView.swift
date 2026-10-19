@@ -254,7 +254,7 @@ struct SettingsView: View {
         subscriptions.signedOut()
         Task {
             await session.signOut()
-            try? sync.reset()
+            sync.reset()
         }
     }
 
@@ -269,7 +269,7 @@ struct SettingsView: View {
                 deleteFailed = true
                 return
             }
-            try? sync.reset()
+            sync.reset()
             subscriptions.signedOut()
             dismiss()
         }

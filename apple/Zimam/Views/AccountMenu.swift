@@ -19,7 +19,7 @@ struct AccountMenu: View {
             Button("تسجيل الخروج", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
                 Task {
                     await session.signOut()
-                    try? sync.reset()
+                    sync.reset()
                 }
             }
         } label: {
