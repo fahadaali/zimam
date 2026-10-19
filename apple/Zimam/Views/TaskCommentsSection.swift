@@ -22,6 +22,12 @@ struct TaskCommentsSection: View {
     @State private var draft = ""
     @State private var sending = false
     @State private var deleting: TaskComment?
+    /// Counts loads and the changes made here: a load that answers after a newer load, or after
+    /// a change here, does not put an older list back.
+    @State private var version = 0
+    /// The reload asked for by a sync or by coming back online; replaced by the next, and
+    /// cancelled when the section goes away.
+    @State private var reloading: Task<Void, Never>?
 
     private var trimmed: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -67,12 +73,11 @@ struct TaskCommentsSection: View {
                 }
             }
             .task(id: task.id) { await load() }
-            .onChange(of: sync.lastSyncedAt) { _, _ in
-                Task { await load(quietly: true) }
-            }
+            .onChange(of: sync.lastSyncedAt) { _, _ in reload(quietly: true) }
             .onChange(of: online) { _, isOnline in
-                if isOnline { Task { await load() } }
+                if isOnline { reload(quietly: false) }
             }
+            .onDisappear { reloading?.cancel() }
             .confirmationDialog("حذف التعليق؟", isPresented: deletingBinding, titleVisibility: .visible) {
                 Button("حذف", role: .destructive) {
                     if let comment = deleting { delete(comment) }
@@ -91,15 +96,26 @@ struct TaskCommentsSection: View {
         Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
     }
 
+    private func reload(quietly: Bool) {
+        reloading?.cancel()
+        reloading = Task { await load(quietly: quietly) }
+    }
+
     private func load(quietly: Bool = false) async {
         guard NetworkMonitor.shared.isOnline else { return }
+        version += 1
+        let mine = version
         do {
-            comments = try await session.api.comments(on: task.id)
+            let fresh = try await session.api.comments(on: task.id)
+            guard mine == version else { return }
+            comments = fresh
             problem = nil
         } catch let error as APIError where error.status == 404 {
+            guard mine == version else { return }
             // A new task that has not reached the server yet has no comments.
             comments = []
         } catch {
+            guard mine == version, !Task.isCancelled else { return }
             if !quietly { problem = SharingProblem.message(for: error) }
         }
         loaded = true
@@ -118,6 +134,7 @@ struct TaskCommentsSection: View {
             if task.isDirty { await sync.sync() }
             do {
                 let comment = try await session.api.addComment(body, to: task.id)
+                version += 1
                 withAnimation { comments.append(comment) }
                 draft = ""
                 problem = nil
@@ -133,6 +150,7 @@ struct TaskCommentsSection: View {
         Task {
             do {
                 try await session.api.deleteComment(comment.id)
+                version += 1
                 withAnimation { comments.removeAll { $0.id == comment.id } }
             } catch {
                 problem = SharingProblem.message(for: error)

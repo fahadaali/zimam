@@ -28,6 +28,12 @@ struct TaskAttachmentsSection: View {
     @State private var photoItem: PhotosPickerItem?
     /// Bumped when a file lands in the cache, so rows offer «مشاركة» for it.
     @State private var cacheVersion = 0
+    /// Counts loads and the changes made here: a load that answers after a newer load, or after
+    /// a change here, does not put an older list back.
+    @State private var version = 0
+    /// The reload asked for by a sync or by coming back online; replaced by the next, and
+    /// cancelled when the section goes away.
+    @State private var reloading: Task<Void, Never>?
 
     private var locale: Locale { ZimamLocale.current }
     private var maxFileBytes: Int { list?.maxFileBytes ?? AttachmentRules.maxFileBytes }
@@ -60,12 +66,11 @@ struct TaskAttachmentsSection: View {
             // they present and the loading, so these are attached once and not to every row.
             controls(online: online)
                 .task(id: task.id) { await load() }
-                .onChange(of: sync.lastSyncedAt) { _, _ in
-                    Task { await load(quietly: true) }
-                }
+                .onChange(of: sync.lastSyncedAt) { _, _ in reload(quietly: true) }
                 .onChange(of: online) { _, isOnline in
-                    if isOnline { Task { await load() } }
+                    if isOnline { reload(quietly: false) }
                 }
+                .onDisappear { reloading?.cancel() }
                 .onChange(of: photoItem) { _, item in
                     guard let item else { return }
                     photoItem = nil
@@ -174,18 +179,28 @@ struct TaskAttachmentsSection: View {
 
     // MARK: Loading
 
+    private func reload(quietly: Bool) {
+        reloading?.cancel()
+        reloading = Task { await load(quietly: quietly) }
+    }
+
     private func load(quietly: Bool = false) async {
         if list == nil { list = AttachmentCache.list(for: task.id) }
         guard NetworkMonitor.shared.isOnline else { return }
+        version += 1
+        let mine = version
         do {
             let fresh = try await session.api.attachments(on: task.id)
+            guard mine == version else { return }
             list = fresh
             AttachmentCache.saveList(fresh, for: task.id)
             problem = nil
         } catch let error as APIError where error.status == 404 {
+            guard mine == version else { return }
             // A new task that has not reached the server yet has no attachments.
             if list == nil { list = TaskAttachments(attachments: [], maxFileBytes: AttachmentRules.maxFileBytes, canAdd: true) }
         } catch {
+            guard mine == version, !Task.isCancelled else { return }
             if !quietly { problem = AttachmentText.message(for: error, maxFileBytes: maxFileBytes, locale: locale) }
         }
     }
@@ -253,6 +268,7 @@ struct TaskAttachmentsSection: View {
             if (try? AttachmentCache.store(data, for: created)) != nil { cacheVersion += 1 }
             var current = list ?? TaskAttachments(attachments: [], maxFileBytes: maxFileBytes, canAdd: true)
             current.attachments.append(created)
+            version += 1
             withAnimation { list = current }
             AttachmentCache.saveList(current, for: task.id)
         } catch {
@@ -291,7 +307,8 @@ struct TaskAttachmentsSection: View {
                 AttachmentCache.remove(attachment)
                 if var current = list {
                     current.attachments.removeAll { $0.id == attachment.id }
-                    withAnimation { list = current }
+                    version += 1
+            withAnimation { list = current }
                     AttachmentCache.saveList(current, for: task.id)
                 }
                 problem = nil
