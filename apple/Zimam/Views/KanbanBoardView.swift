@@ -154,17 +154,21 @@ struct KanbanBoardView: View {
 
     /// A completed card stays for a second so it can be undone, then leaves the board.
     private func linger(_ id: UUID) {
-        lingering.hold(id, animation: reduceMotion ? nil : .default)
+        lingering.hold(id, animation: .zimam(reduceMotion: reduceMotion))
     }
 }
 
-/// The opened place where a dragged card will land: a card's height, outlined in the focus
-/// ring colour (design/README.md «الحالات والحركة»).
+/// The opened place where a dragged card will land, outlined in the focus ring colour
+/// (design/README.md «الحالات والحركة»). SwiftUI does not say which card is being dragged until
+/// it is dropped, so the gap takes the height of the card it opens above; cards in a column share
+/// one layout, so that is the dragged card's height in all but unusual cases.
 private struct DropGap: View {
+    var height: CGFloat
+
     var body: some View {
         RoundedRectangle(cornerRadius: ZimamRadius.radiusMd)
             .strokeBorder(ZimamColor.focusRing, lineWidth: ZimamLayout.focusRingWidth)
-            .frame(height: ZimamSpacing.space11)
+            .frame(height: height)
             .transition(.opacity)
             .accessibilityHidden(true)
     }
@@ -193,6 +197,8 @@ private struct KanbanColumnView: View {
 
     @State private var isTargeted = false
     @State private var targetedCard: UUID?
+    /// Each card's height, for the gap that opens above it.
+    @State private var cardHeights: [UUID: CGFloat] = [:]
     /// The card whose «نقل إلى مشروع…» sheet is open.
     @State private var movingToProject: ProjectMoveRequest?
     @State private var adding = false
@@ -211,11 +217,13 @@ private struct KanbanColumnView: View {
                         card(task, at: index)
                     }
                     // Dropped below the last card: the gap opens at the bottom.
-                    if isTargeted && targetedCard == nil { DropGap() }
+                    if isTargeted && targetedCard == nil {
+                        DropGap(height: column.tasks.last.flatMap { cardHeights[$0.id] } ?? ZimamSpacing.space11)
+                    }
                     addControl
                 }
-                .animation(reduceMotion ? nil : .default, value: targetedCard)
-                .animation(reduceMotion ? nil : .default, value: isTargeted)
+                .animation(.zimam(reduceMotion: reduceMotion), value: targetedCard)
+                .animation(.zimam(reduceMotion: reduceMotion), value: isTargeted)
             }
         }
         .padding(ZimamSpacing.space3)
@@ -307,8 +315,11 @@ private struct KanbanColumnView: View {
         // Where the dragged card will land: a gap opens above this one. The gap is part of the
         // drop target, so the card moving down under the finger does not close it again.
         VStack(spacing: ZimamSpacing.space2) {
-            if targetedCard == task.id { DropGap() }
+            if targetedCard == task.id { DropGap(height: cardHeights[task.id] ?? ZimamSpacing.space11) }
             KanbanCard(task: task, onToggle: { toggle(task) }, onOpen: { openTask(task.id) })
+                .onGeometryChange(for: CGFloat.self) { proxy in proxy.size.height } action: { height in
+                    cardHeights[task.id] = height
+                }
                 .contextMenu {
                     Button(task.isDone ? "إلغاء الإنجاز" : "إنجاز", systemImage: "checkmark.circle") { toggle(task) }
                     Menu("نقل إلى") {
@@ -350,7 +361,7 @@ private struct KanbanColumnView: View {
     /// `index` counts places in the destination without the task.
     private func move(_ task: TaskItem, to destination: BoardColumn, at index: Int) {
         let changesColumn = destination.id != column.id
-        withAnimation(reduceMotion ? nil : .default) {
+        withAnimation(.zimam(reduceMotion: reduceMotion)) {
             store.place(task, inSection: destination.section?.id, at: index, column: destination.tasks)
         }
         if changesColumn {
@@ -369,7 +380,7 @@ private struct KanbanColumnView: View {
     }
 
     private func toggle(_ task: TaskItem) {
-        withAnimation(reduceMotion ? nil : .default) {
+        withAnimation(.zimamComplete) {
             store.toggleDone(task)
         }
         if task.isDone { onCompleted(task.id) }
@@ -417,7 +428,7 @@ private struct KanbanColumnView: View {
     private func addTask() {
         let title = newTitle
         newTitle = ""
-        withAnimation(reduceMotion ? nil : .default) {
+        withAnimation(.zimam(reduceMotion: reduceMotion)) {
             _ = store.addTask(title: title, projectId: projectId, sectionId: column.section?.id, below: column.tasks)
         }
     }
