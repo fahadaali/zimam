@@ -3,7 +3,8 @@ import Foundation
 /// Keys of what the iPhone app sends the watch app over WatchConnectivity.
 /// The Keychain and App Groups do not cross devices, so this is how the watch
 /// gets the session: the phone sends it, and the watch keeps it in its own Keychain.
-enum WatchPayload {
+/// Plain constants, used from the WatchConnectivity delegates on their own queues.
+nonisolated enum WatchPayload {
     /// The session token, or an empty string after sign-out.
     static let token = "token"
     /// The user's primary calendar, "hijri" or "gregorian".
