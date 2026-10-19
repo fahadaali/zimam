@@ -177,18 +177,20 @@ struct GanttView: View {
             let projectSections = sections.filter { $0.projectId == projectId }
             let known = Set(projectSections.map(\.id))
             let loose = rows(own.filter { $0.sectionId.map { !known.contains($0) } ?? true })
+            let bySection = Dictionary(grouping: own, by: \.sectionId)
             if !loose.isEmpty {
                 result.append(GanttGroup(id: "none", title: projectSections.isEmpty ? nil : "بلا قسم", rows: loose))
             }
             for section in projectSections {
-                let items = rows(own.filter { $0.sectionId == section.id })
+                let items = rows(bySection[section.id] ?? [])
                 if !items.isEmpty { result.append(GanttGroup(id: section.id.uuidString, title: section.name, rows: items)) }
             }
         } else {
-            let inbox = rows(open.filter { $0.projectId == nil })
+            let byProject = Dictionary(grouping: open, by: \.projectId)
+            let inbox = rows(byProject[nil] ?? [])
             if !inbox.isEmpty { result.append(GanttGroup(id: "inbox", title: "صندوق المهام", rows: inbox)) }
             for project in projects where project.kindRaw == ProjectRecord.Kind.project.rawValue {
-                let items = rows(open.filter { $0.projectId == project.id })
+                let items = rows(byProject[project.id] ?? [])
                 if !items.isEmpty { result.append(GanttGroup(id: project.id.uuidString, title: project.name, rows: items)) }
             }
         }

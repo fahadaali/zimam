@@ -71,10 +71,16 @@ struct Store {
     /// follow, as they do on the server, which also sends them to other devices.
     func move(_ task: TaskItem, toProject projectId: UUID?) {
         guard task.projectId != projectId else { return }
-        let all = (try? context.fetch(FetchDescriptor<TaskItem>())) ?? []
+        reassign(task, toProject: projectId)
+        touch(task)
+    }
+
+    /// `move(_:toProject:)` without saving, for a move that changes more before its one save.
+    func reassign(_ task: TaskItem, toProject projectId: UUID?) {
+        let children = Dictionary(grouping: (try? context.fetch(FetchDescriptor<TaskItem>())) ?? [], by: \.parentId)
         var queue = [task.id]
         while let id = queue.popLast() {
-            for child in all where child.parentId == id {
+            for child in children[id] ?? [] {
                 child.projectId = projectId
                 child.sectionId = nil
                 queue.append(child.id)
@@ -84,7 +90,6 @@ struct Store {
         task.sectionId = nil
         // The assignee may not be a member of the new project; the server rejects that.
         task.assigneeId = nil
-        touch(task)
     }
 
     /// Moves a task to another day ("2026-10-15"), from the calendar's drag and drop or «نقل إلى…».
@@ -113,10 +118,10 @@ struct Store {
 
     /// Deletes a task and its subtasks; the server does the same for other devices.
     func delete(_ task: TaskItem) {
-        let all = (try? context.fetch(FetchDescriptor<TaskItem>())) ?? []
+        let children = Dictionary(grouping: (try? context.fetch(FetchDescriptor<TaskItem>())) ?? [], by: \.parentId)
         var queue = [task.id]
         while let id = queue.popLast() {
-            for child in all where child.parentId == id && !child.pendingDelete {
+            for child in children[id] ?? [] where !child.pendingDelete {
                 child.pendingDelete = true
                 child.isDirty = false // the parent's deletion covers it
                 queue.append(child.id)

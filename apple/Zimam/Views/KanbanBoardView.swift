@@ -53,8 +53,9 @@ struct KanbanBoardView: View {
         let visible = tasks.filter { !$0.isDone || lingering.contains($0.id) }
         let known = Set(sections.map(\.id))
         let loose = visible.filter { $0.sectionId.map { !known.contains($0) } ?? true }
+        let bySection = Dictionary(grouping: visible, by: \.sectionId)
         return [BoardColumn(section: nil, tasks: loose)]
-            + sections.map { section in BoardColumn(section: section, tasks: visible.filter { $0.sectionId == section.id }) }
+            + sections.map { section in BoardColumn(section: section, tasks: bySection[section.id] ?? []) }
     }
 
     /// The side margin: space-4 on the iPhone, space-6 on the iPad and the Mac (design/README.md).

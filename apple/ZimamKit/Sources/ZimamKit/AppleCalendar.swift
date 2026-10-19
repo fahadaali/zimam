@@ -247,6 +247,9 @@ public enum AppleCalendarImport {
                 return a.start < b.start
             }
 
+        // Each series' occurrences in order, grouped once rather than filtered per series.
+        let bySeries = Dictionary(grouping: chosen, by: \.externalId)
+
         // Each series is decided once, at its first occurrence here.
         var seriesSeen: Set<String> = []
         var expandedSeriesIds: Set<String> = []
@@ -295,7 +298,7 @@ public enum AppleCalendarImport {
                     plan.alreadyImported += 1
                     continue
                 }
-                let occurrences = chosen.filter { $0.externalId == series }
+                let occurrences = bySeries[series] ?? []
                 // A moved occurrence would put the series on the wrong day: anchor on one planned as the rule says.
                 let anchor = occurrences.first(where: { !$0.isDetached }) ?? event
                 let anchorSpan = anchor.span(timeZone: timeZone)

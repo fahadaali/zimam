@@ -8,15 +8,20 @@ import ZimamKit
 struct TaskDetailView: View {
     let taskId: UUID
 
-    @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: \TaskItem.createdAt)
-    private var tasks: [TaskItem]
-    @Query(filter: #Predicate<ReminderItem> { !$0.pendingDelete }, sort: \ReminderItem.createdAt)
-    private var reminders: [ReminderItem]
+    /// This task and its subtasks only, and its reminders only: an edit to any other task does
+    /// not re-fetch and re-render the form.
+    @Query private var tasks: [TaskItem]
+    @Query private var reminders: [ReminderItem]
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }, sort: \ProjectItem.sortOrder)
     private var allProjects: [ProjectItem]
 
     init(taskId: UUID) {
         self.taskId = taskId
+        let parent: UUID? = taskId
+        _tasks = Query(filter: #Predicate<TaskItem> { !$0.pendingDelete && ($0.id == taskId || $0.parentId == parent) },
+                       sort: \TaskItem.createdAt)
+        _reminders = Query(filter: #Predicate<ReminderItem> { !$0.pendingDelete && $0.taskId == taskId },
+                           sort: \ReminderItem.createdAt)
     }
 
     var body: some View {

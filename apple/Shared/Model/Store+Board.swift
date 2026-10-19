@@ -9,10 +9,11 @@ extension Store {
 
     /// The project's live sections in board order.
     func sections(in projectId: UUID) -> [SectionItem] {
-        let all = (try? context.fetch(FetchDescriptor<SectionItem>())) ?? []
-        return all
-            .filter { $0.projectId == projectId && !$0.pendingDelete }
-            .sorted { ($0.sortOrder, $0.createdAt) < ($1.sortOrder, $1.createdAt) }
+        let descriptor = FetchDescriptor<SectionItem>(
+            predicate: #Predicate { $0.projectId == projectId && !$0.pendingDelete },
+            sortBy: [SortDescriptor(\SectionItem.sortOrder), SortDescriptor(\SectionItem.createdAt)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     /// Adds a section after the project's last one.

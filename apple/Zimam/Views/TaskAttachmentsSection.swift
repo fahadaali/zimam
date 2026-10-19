@@ -36,11 +36,13 @@ struct TaskAttachmentsSection: View {
         let online = NetworkMonitor.shared.isOnline
         Section {
             ForEach(list?.attachments ?? []) { attachment in
+                // One file-system check per row, not two.
+                let cached = cachedURL(for: attachment)
                 AttachmentRow(
                     attachment: attachment,
-                    cachedURL: cachedURL(for: attachment),
+                    cachedURL: cached,
                     isOpening: opening == attachment.id,
-                    canOpen: online || cachedURL(for: attachment) != nil,
+                    canOpen: online || cached != nil,
                     canDelete: online && attachment.canDelete == true,
                     onOpen: { Task { await open(attachment) } },
                     onDelete: { deleting = attachment }

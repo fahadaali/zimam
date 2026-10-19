@@ -21,6 +21,8 @@ struct ProjectsView: View {
     }
 
     var body: some View {
+        // Grouped once, then looked up per card, rather than filtering every task per project.
+        let byProject = Dictionary(grouping: tasks.filter { $0.parentId == nil }, by: \.projectId)
         List {
             // The timeline and the matrix of every project, at the top of the iPhone's projects tab
             // (the iPad and the Mac list them in the sidebar).
@@ -40,7 +42,7 @@ struct ProjectsView: View {
             Section {
                 if projects.isEmpty { EmptyLine(text: "لا مشاريع بعد.") }
                 ForEach(projects) { project in
-                    let own = tasks.filter { $0.projectId == project.id && $0.parentId == nil }
+                    let own = byProject[project.id] ?? []
                     NavigationLink(value: project.id) {
                         ProjectCard(name: project.name, done: own.filter(\.isDone).count, total: own.count)
                     }
