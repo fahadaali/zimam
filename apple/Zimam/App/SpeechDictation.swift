@@ -24,7 +24,9 @@ final class SpeechDictation {
     /// Called once with the final text when listening ends with words.
     @ObservationIgnored var onFinish: (@MainActor (String) -> Void)?
 
-    @ObservationIgnored private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "ar-SA"))
+    /// Made at the first dictation, not with this object: the add screen's state makes a new
+    /// `SpeechDictation` each time its parent redraws, and only the kept one is ever used.
+    @ObservationIgnored private var recognizer: SFSpeechRecognizer?
     @ObservationIgnored private var engine: AVAudioEngine?
     @ObservationIgnored private var request: SFSpeechAudioBufferRecognitionRequest?
     @ObservationIgnored private var recognition: SFSpeechRecognitionTask?
@@ -67,6 +69,7 @@ final class SpeechDictation {
             phase = .failed("الإملاء يحتاج إذن الميكروفون. فعّله لزمام من الإعدادات، أو اكتب المهمة.")
             return
         }
+        if recognizer == nil { recognizer = SFSpeechRecognizer(locale: Locale(identifier: "ar-SA")) }
         guard let recognizer, recognizer.isAvailable else {
             phase = .failed("الإملاء بالعربية غير متاح الآن على هذا الجهاز. اكتب المهمة.")
             return

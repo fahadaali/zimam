@@ -418,6 +418,7 @@ struct CalendarEventSheet: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var converted = false
     #if os(iOS)
@@ -532,7 +533,7 @@ struct CalendarEventSheet: View {
             .addTask(title: fields.title, dueDate: fields.dueDate, notes: fields.notes, dueTime: fields.dueTime,
                      startDate: fields.startDate)
         refs.remember(tasks: [item.event.importKey(timeZone: formatter.timeZone): task.id], projects: [:])
-        withAnimation { converted = true }
+        withAnimation(reduceMotion ? nil : .default) { converted = true }
         AccessibilityNotification.Announcement("أُضيفت المهمة «\(fields.title)»").post()
     }
 

@@ -50,7 +50,10 @@ extension Store {
         if task.dueTime != nil || task.duePrayer != nil || task.recurrence != nil || task.startDate != nil { return true }
         let taskId = task.id
         let descriptor = FetchDescriptor<ReminderItem>(predicate: #Predicate { $0.taskId == taskId && !$0.pendingDelete })
-        return ((try? context.fetchCount(descriptor)) ?? 0) > 0
+        // If the count fails, the safe answer is yes: refusing the move keeps the reminders,
+        // while moving would clear the day they depend on.
+        guard let reminders = try? context.fetchCount(descriptor) else { return true }
+        return reminders > 0
     }
 
     /// Moves a task to another quadrant by the rules in `PriorityMatrix.move`, and returns what

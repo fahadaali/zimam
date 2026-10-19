@@ -124,7 +124,8 @@ struct GanttRow: View {
                     if !titleInside {
                         Text(task.title)
                             .font(ZimamType.callout)
-                            .foregroundStyle(ZimamColor.ink)
+                            .foregroundStyle(task.isDone ? ZimamColor.inkFaint : ZimamColor.ink)
+                            .strikethrough(task.isDone)
                             .lineLimit(1)
                             .fixedSize()
                     }
@@ -132,6 +133,7 @@ struct GanttRow: View {
                 .padding(.leading, x)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(task.title)، \(formatter.spanText(span))")
+                .accessibilityValue(task.isDone ? "منجزة" : "")
                 .accessibilityHint("اسحب الشريط أو طرفيه لتغيير المدة، أو استعمل «تغيير المدة…».")
                 .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
                 .accessibilityAction(.default, onOpen)
@@ -143,7 +145,7 @@ struct GanttRow: View {
                     }
                 }
                 .accessibilityAction(named: "تغيير المدة…", onEdit)
-                .accessibilityAction(named: "إنجاز", onComplete)
+                .accessibilityAction(named: task.isDone ? "إلغاء الإنجاز" : "إنجاز", onComplete)
             }
         }
         .frame(width: CGFloat(range.dayCount) * dayWidth, height: height, alignment: .leading)
@@ -155,20 +157,30 @@ struct GanttRow: View {
     /// The bar, or the diamond of a one-day task, with the drag handles when it can be dragged.
     private func marker(multiDay: Bool, width: CGFloat, titleInside: Bool) -> some View {
         ZStack {
+            // A completed task, kept a moment so it can be undone, looks done as in the lists.
             if multiDay {
-                RoundedRectangle(cornerRadius: ZimamRadius.radiusSm)
-                    .fill(ZimamColor.timelineBar)
+                if task.isDone {
+                    RoundedRectangle(cornerRadius: ZimamRadius.radiusSm)
+                        .fill(ZimamColor.surfaceSunken)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: ZimamRadius.radiusSm).strokeBorder(ZimamColor.lineStrong)
+                        }
+                } else {
+                    RoundedRectangle(cornerRadius: ZimamRadius.radiusSm)
+                        .fill(ZimamColor.timelineBar)
+                }
                 if titleInside {
                     Text(task.title)
                         .font(ZimamType.caption)
-                        .foregroundStyle(ZimamColor.onTimelineBar)
+                        .foregroundStyle(task.isDone ? ZimamColor.inkFaint : ZimamColor.onTimelineBar)
+                        .strikethrough(task.isDone)
                         .lineLimit(1)
                         .padding(.horizontal, handleWidth)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {
                 Rectangle()
-                    .fill(ZimamColor.timelineBar)
+                    .fill(task.isDone ? ZimamColor.lineStrong : ZimamColor.timelineBar)
                     .frame(width: ZimamSpacing.space3, height: ZimamSpacing.space3)
                     .rotationEffect(.degrees(45))
             }
@@ -189,7 +201,7 @@ struct GanttRow: View {
         .contextMenu {
             Button("فتح المهمة", systemImage: "arrow.up.forward.square", action: onOpen)
             Button("تغيير المدة…", systemImage: "calendar", action: onEdit)
-            Button("إنجاز", systemImage: "checkmark.circle", action: onComplete)
+            Button(task.isDone ? "إلغاء الإنجاز" : "إنجاز", systemImage: "checkmark.circle", action: onComplete)
         }
     }
 

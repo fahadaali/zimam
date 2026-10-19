@@ -19,6 +19,11 @@ final class WatchModel {
     private(set) var calendar: CalendarKind
     /// Top-level tasks due today and done, for the complications' ring (WatchGlance).
     @ObservationIgnored private var doneToday = 0
+    /// Tasks added here that the server does not have yet. A refresh while the assistant reads
+    /// the sentence or the push is in flight keeps them in the list instead of dropping them.
+    @ObservationIgnored private var unsent: [UUID: TaskRecord] = [:]
+    /// Counts refreshes, so one that answers late does not overwrite a newer list.
+    @ObservationIgnored private var refreshes = 0
 
     @ObservationIgnored let api: APIClient
     @ObservationIgnored private let link = PhoneLink()
@@ -50,9 +55,18 @@ final class WatchModel {
         }
         isLoading = true
         defer { isLoading = false }
+        refreshes += 1
+        let current = refreshes
         do {
-            let open = try await api.listTasks(status: "open", dueTo: Self.today(), limit: 200)
-            tasks = open.filter { $0.parentId == nil }
+            let today = Self.today()
+            let open = try await api.listTasks(status: "open", dueTo: today, limit: 200)
+            guard current == refreshes else { return }
+            let listed = open.filter { $0.parentId == nil }
+            let known = Set(listed.map(\.id))
+            let added = unsent.values
+                .filter { !known.contains($0.id) && ($0.dueDate ?? today) <= today }
+                .sorted { ($0.createdAt ?? 0) < ($1.createdAt ?? 0) }
+            tasks = listed + added
             errorMessage = nil
             if let done = try? await api.listTasks(status: "done", dueFrom: Self.today(), dueTo: Self.today(), limit: 200) {
                 doneToday = done.filter { $0.parentId == nil }.count
@@ -81,7 +95,7 @@ final class WatchModel {
             let results = try await api.push(mutations)
             errorMessage = nil
             if results.first?.status == .applied {
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .seconds(ZimamMotion.linger))
                 tasks.removeAll { $0.id == task.id }
                 finishing.remove(task.id)
                 if task.dueDate == Self.today() { doneToday += 1 }
@@ -110,6 +124,7 @@ final class WatchModel {
         // Shown at once as said; the assistant's reading replaces it when it comes.
         let placeholder = TaskRecord(title: trimmed, dueDate: today)
         tasks.append(placeholder)
+        unsent[placeholder.id] = placeholder
         notice = nil
         let reading = await api.readSpokenTask(trimmed, timeZone: formatter.timeZone)
         if reading.problem == .signedOut {
@@ -118,24 +133,28 @@ final class WatchModel {
         }
         var record = reading.record(today: today, defaultDueDate: today)
         record.id = placeholder.id
-        if let index = tasks.firstIndex(where: { $0.id == placeholder.id }) {
-            if let day = record.dueDate, day > today {
-                // Not today's: it leaves the list, and a line says when it is due.
-                tasks.remove(at: index)
-                if let date = formatter.date(fromDay: day) {
-                    notice = "أُضيفت «\(record.title)»، \(formatter.label(for: date))."
-                }
-            } else {
-                tasks[index] = record
+        let index = tasks.firstIndex(where: { $0.id == placeholder.id })
+        if let day = record.dueDate, day > today {
+            // Not today's: it leaves the list, and a line says when it is due.
+            if let index { tasks.remove(at: index) }
+            unsent[record.id] = nil
+            if let date = formatter.date(fromDay: day) {
+                notice = "أُضيفت «\(record.title)»، \(formatter.label(for: date))."
             }
+        } else {
+            // In the placeholder's place; back in the list if a refresh replaced it meanwhile.
+            if let index { tasks[index] = record } else { tasks.append(record) }
+            unsent[record.id] = record
         }
         do {
             _ = try await api.push([.upsert(.task(record))])
+            unsent[record.id] = nil
             errorMessage = nil
             publishGlance()
         } catch let error as APIError where error.isUnauthorized {
             signOut()
         } catch {
+            unsent[record.id] = nil
             tasks.removeAll { $0.id == record.id }
             errorMessage = "تعذّرت إضافة المهمة. حاول مرة أخرى."
         }
@@ -164,6 +183,7 @@ final class WatchModel {
         isSignedIn = false
         tasks = []
         finishing = []
+        unsent = [:]
         doneToday = 0
         publishGlance()
     }

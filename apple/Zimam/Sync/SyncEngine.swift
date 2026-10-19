@@ -278,47 +278,95 @@ final class SyncEngine {
         while hasMore {
             let page = try await api.pull(cursor: cursor)
             guard generation == started else { throw Superseded() }
-            for change in page.changes { apply(change) }
+            // If the lookup fails, nothing of the page is applied and the next pull tries it
+            // again whole, rather than insert records it could not find and duplicate them.
+            var records = try localRecords(for: page.changes)
+            for change in page.changes { apply(change, to: &records) }
             try context.save()
             cursor = page.cursor
             hasMore = page.hasMore
         }
     }
 
-    private func apply(_ change: SyncChange) {
+    /// The local records a page's changes touch, by id.
+    private struct PageRecords {
+        var projects: [UUID: ProjectItem] = [:]
+        var sections: [UUID: SectionItem] = [:]
+        var tasks: [UUID: TaskItem] = [:]
+        var reminders: [UUID: ReminderItem] = [:]
+    }
+
+    /// Looks up the page's records that exist here: one fetch per kind, not one per change.
+    private func localRecords(for changes: [SyncChange]) throws -> PageRecords {
+        func ids(_ kind: EntityKind) -> [UUID] { changes.filter { $0.entity == kind }.map(\.id) }
+        var records = PageRecords()
+        let projectIds = ids(.project)
+        if !projectIds.isEmpty {
+            let found = try context.fetch(FetchDescriptor<ProjectItem>(predicate: #Predicate { projectIds.contains($0.id) }))
+            for item in found { records.projects[item.id] = item }
+        }
+        let sectionIds = ids(.section)
+        if !sectionIds.isEmpty {
+            let found = try context.fetch(FetchDescriptor<SectionItem>(predicate: #Predicate { sectionIds.contains($0.id) }))
+            for item in found { records.sections[item.id] = item }
+        }
+        let taskIds = ids(.task)
+        if !taskIds.isEmpty {
+            let found = try context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { taskIds.contains($0.id) }))
+            for item in found { records.tasks[item.id] = item }
+        }
+        let reminderIds = ids(.reminder)
+        if !reminderIds.isEmpty {
+            let found = try context.fetch(FetchDescriptor<ReminderItem>(predicate: #Predicate { reminderIds.contains($0.id) }))
+            for item in found { records.reminders[item.id] = item }
+        }
+        return records
+    }
+
+    /// Applies one change. `records` follows along, so a record inserted or deleted earlier in
+    /// the page is found or missed by the changes after it.
+    private func apply(_ change: SyncChange, to records: inout PageRecords) {
         switch change.record {
         case .project(let record)?:
-            if let local = fetch(ProjectItem.self, change.id) {
+            if let local = records.projects[change.id] {
                 if !keepsLocal(local, over: record.updatedAt) { local.apply(record) }
             } else {
-                context.insert(ProjectItem(record, dirty: false))
+                let item = ProjectItem(record, dirty: false)
+                context.insert(item)
+                records.projects[change.id] = item
             }
         case .section(let record)?:
-            if let local = fetch(SectionItem.self, change.id) {
+            if let local = records.sections[change.id] {
                 if !keepsLocal(local, over: record.updatedAt) { local.apply(record) }
             } else {
-                context.insert(SectionItem(record, dirty: false))
+                let item = SectionItem(record, dirty: false)
+                context.insert(item)
+                records.sections[change.id] = item
             }
         case .task(let record)?:
-            if let local = fetch(TaskItem.self, change.id) {
+            if let local = records.tasks[change.id] {
                 if !keepsLocal(local, over: record.updatedAt) { local.apply(record) }
             } else {
-                context.insert(TaskItem(record, dirty: false))
+                let item = TaskItem(record, dirty: false)
+                context.insert(item)
+                records.tasks[change.id] = item
             }
         case .reminder(let record)?:
-            if let local = fetch(ReminderItem.self, change.id) {
+            if let local = records.reminders[change.id] {
                 if !keepsLocal(local, over: record.updatedAt) { local.apply(record) }
             } else {
-                context.insert(ReminderItem(record, dirty: false))
+                let item = ReminderItem(record, dirty: false)
+                context.insert(item)
+                records.reminders[change.id] = item
             }
         case .comment?:
             break // Comments are shown from the API when a task opens; not stored yet.
         case nil:
             switch change.entity {
-            case .project: if let local = fetch(ProjectItem.self, change.id) { context.delete(local) }
-            case .section: if let local = fetch(SectionItem.self, change.id) { context.delete(local) }
-            case .task: if let local = fetch(TaskItem.self, change.id) { context.delete(local) }
-            case .reminder: if let local = fetch(ReminderItem.self, change.id) { context.delete(local) }
+            case .project: if let local = records.projects.removeValue(forKey: change.id) { context.delete(local) }
+            case .section: if let local = records.sections.removeValue(forKey: change.id) { context.delete(local) }
+            case .task: if let local = records.tasks.removeValue(forKey: change.id) { context.delete(local) }
+            case .reminder: if let local = records.reminders.removeValue(forKey: change.id) { context.delete(local) }
             case .comment: break
             }
         }
@@ -327,30 +375,6 @@ final class SyncEngine {
     /// A local edit newer than the server's version wins; it goes out on the next push.
     private func keepsLocal(_ item: some SyncedItem, over serverVersion: Int64) -> Bool {
         item.isDirty && item.updatedAt > serverVersion
-    }
-
-    private func fetch(_: ProjectItem.Type, _ id: UUID) -> ProjectItem? {
-        var descriptor = FetchDescriptor<ProjectItem>(predicate: #Predicate { $0.id == id })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
-    }
-
-    private func fetch(_: SectionItem.Type, _ id: UUID) -> SectionItem? {
-        var descriptor = FetchDescriptor<SectionItem>(predicate: #Predicate { $0.id == id })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
-    }
-
-    private func fetch(_: TaskItem.Type, _ id: UUID) -> TaskItem? {
-        var descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.id == id })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
-    }
-
-    private func fetch(_: ReminderItem.Type, _ id: UUID) -> ReminderItem? {
-        var descriptor = FetchDescriptor<ReminderItem>(predicate: #Predicate { $0.id == id })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
     }
 }
 

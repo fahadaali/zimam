@@ -26,8 +26,10 @@ struct ZimamApp: App {
         let location = LocationProvider()
         // Created at launch so the notification delegate is set before any action arrives.
         let notifications = NotificationScheduler(context: container.mainContext, sync: sync, session: session, location: location)
-        sync.onDataChanged = { [notifications] in
-            notifications.reschedule()
+        // Weak where the closure's owner is reachable from what it captures (the scheduler holds
+        // the engine, the provider is its own owner): those would be reference cycles.
+        sync.onDataChanged = { [weak notifications] in
+            notifications?.reschedule()
             ZimamShared.reloadWidgets()
             #if os(iOS)
             // «المهمة الجارية» ends once its task is done or deleted, wherever that happened.
@@ -36,9 +38,9 @@ struct ZimamApp: App {
             // Open tasks in Spotlight, for system search, Siri and Apple Intelligence.
             TaskSpotlight.shared.scheduleUpdate()
         }
-        location.onChange = { [notifications, session, location] in
-            notifications.reschedule()
-            let coordinate = location.coordinate
+        location.onChange = { [weak notifications, session, weak location] in
+            notifications?.reschedule()
+            let coordinate = location?.coordinate
             Task { await session.sharePlace(latitude: coordinate?.latitude, longitude: coordinate?.longitude) }
         }
         // Reminders beyond the local window come as pushes; the token is sent with this session.

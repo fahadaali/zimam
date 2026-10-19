@@ -22,6 +22,7 @@ struct ShareProjectView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncEngine.self) private var sync
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
 
     @State private var members: [ProjectMember] = []
@@ -95,20 +96,6 @@ struct ShareProjectView: View {
             .onChange(of: online) { _, isOnline in
                 if isOnline { Task { await load() } }
             }
-            .confirmationDialog("إزالة العضو؟", isPresented: removingBinding, titleVisibility: .visible) {
-                Button("إزالة", role: .destructive) {
-                    if let member = removing { remove(member) }
-                }
-                Button("إلغاء", role: .cancel) {}
-            } message: {
-                Text("تختفي مهام المشروع من أجهزته، وتُلغى إسناداته فيه.")
-            }
-            .confirmationDialog("مغادرة المشروع؟", isPresented: $confirmingLeave, titleVisibility: .visible) {
-                Button("مغادرة", role: .destructive, action: leave)
-                Button("إلغاء", role: .cancel) {}
-            } message: {
-                Text("تختفي مهام المشروع من أجهزتك، ولا تعود إلا بدعوة جديدة.")
-            }
         }
     }
 
@@ -127,6 +114,13 @@ struct ShareProjectView: View {
                     onRole: { role in changeRole(of: member, to: role) },
                     onRemove: { removing = member }
                 )
+                // On the member's row, so on the iPad the dialog points at it.
+                .confirmationDialog("إزالة العضو؟", isPresented: removingBinding(for: member), titleVisibility: .visible) {
+                    Button("إزالة", role: .destructive) { remove(member) }
+                    Button("إلغاء", role: .cancel) {}
+                } message: {
+                    Text("تختفي مهام المشروع من أجهزته، وتُلغى إسناداته فيه.")
+                }
             }
             if loaded && members.count <= 1 && isOwner {
                 Text("لم تشارك هذا المشروع بعد. أنشئ دعوة وأرسلها لمن تريد.")
@@ -186,6 +180,12 @@ struct ShareProjectView: View {
             }
             .frame(minHeight: ZimamSpacing.space11)
             .disabled(!online || working)
+            .confirmationDialog("مغادرة المشروع؟", isPresented: $confirmingLeave, titleVisibility: .visible) {
+                Button("مغادرة", role: .destructive, action: leave)
+                Button("إلغاء", role: .cancel) {}
+            } message: {
+                Text("تختفي مهام المشروع من أجهزتك، ولا تعود إلا بدعوة جديدة.")
+            }
         } footer: {
             if let role = myRole {
                 Text("دورك في هذا المشروع: \(role.arabicName).")
@@ -193,8 +193,8 @@ struct ShareProjectView: View {
         }
     }
 
-    private var removingBinding: Binding<Bool> {
-        Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })
+    private func removingBinding(for member: ProjectMember) -> Binding<Bool> {
+        Binding(get: { removing?.id == member.id }, set: { if !$0, removing?.id == member.id { removing = nil } })
     }
 
     // MARK: Requests
@@ -234,7 +234,7 @@ struct ShareProjectView: View {
         let role = inviteRole
         perform {
             let invite = try await session.api.createInvite(to: projectId, role: role)
-            withAnimation { created = invite }
+            withAnimation(reduceMotion ? nil : .default) { created = invite }
             invites = try await session.api.invites(of: projectId)
         }
     }
@@ -242,7 +242,7 @@ struct ShareProjectView: View {
     private func revoke(_ invite: ProjectInvite) {
         perform {
             try await session.api.revokeInvite(invite.id, of: projectId)
-            withAnimation {
+            withAnimation(reduceMotion ? nil : .default) {
                 invites.removeAll { $0.id == invite.id }
                 if created?.id == invite.id { created = nil }
             }
@@ -264,7 +264,7 @@ struct ShareProjectView: View {
         removing = nil
         perform {
             try await session.api.removeMember(member.userId, from: projectId)
-            withAnimation { members.removeAll { $0.userId == member.userId } }
+            withAnimation(reduceMotion ? nil : .default) { members.removeAll { $0.userId == member.userId } }
             ProjectMembers.shared.set(members, for: projectId)
         }
     }
@@ -386,6 +386,7 @@ struct JoinProjectView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncEngine.self) private var sync
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var text: String
     @State private var preview: InvitePreview?
@@ -479,7 +480,7 @@ struct JoinProjectView: View {
             do {
                 let found = try await session.api.previewInvite(code: code)
                 previewCode = code
-                withAnimation { preview = found }
+                withAnimation(reduceMotion ? nil : .default) { preview = found }
             } catch {
                 problem = SharingProblem.message(for: error)
             }

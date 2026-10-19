@@ -20,7 +20,7 @@ struct ZimamButtonStyle: ButtonStyle {
                     RoundedRectangle(cornerRadius: ZimamRadius.radiusMd).stroke(ZimamColor.lineStrong)
                 }
             }
-            .opacity(configuration.isPressed ? 0.8 : 1)
+            .opacity(configuration.isPressed ? ZimamOpacity.pressed : 1)
     }
 
     private var foreground: Color {
