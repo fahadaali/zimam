@@ -89,6 +89,18 @@ nonisolated public enum ZimamShadow {
     public static let liftY: CGFloat = 8
 }
 
+nonisolated public enum ZimamMotion {
+    /// امتلاء دائرة الإنجاز وخفوت السطر.
+    public static let complete: TimeInterval = 0.25
+    /// بقاء المهمة المنجزة في القائمة قبل أن تغادرها، ليتمكن المستخدم من التراجع.
+    public static let linger: TimeInterval = 1
+}
+
+nonisolated public enum ZimamOpacity {
+    /// الزر أثناء الضغط عليه.
+    public static let pressed: Double = 0.8
+}
+
 /// PostScript names of the fonts in design/fonts/apple. Add the .otf files to every app target
 /// (iPhone, iPad, Mac, Watch, widgets) and list them under UIAppFonts / ATSApplicationFontsPath.
 nonisolated public enum ZimamFontName {

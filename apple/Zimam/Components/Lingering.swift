@@ -5,7 +5,7 @@ import SwiftUI
 /// restarts the second, so complete, undo, complete never lets the first timer cut it short.
 @MainActor @Observable
 final class Lingering {
-    private static let delay: Duration = .seconds(1)
+    private static let delay: Duration = .seconds(ZimamMotion.linger)
 
     private(set) var ids: Set<UUID> = []
     @ObservationIgnored private var timers: [UUID: Task<Void, Never>] = [:]

@@ -67,7 +67,7 @@ def css():
     out.append(block("dark", '[data-theme="dark"]'))
     out.append("@media (prefers-color-scheme: dark) {\n  "
                + block("dark", ':root:not([data-theme="light"])').replace("\n", "\n  ") + "\n}")
-    root = [f"  --{t['name']}: {t['value']};" for fam in ("spacing", "radius") for t in TOKENS[fam]["tokens"]]
+    root = [f"  --{t['name']}: {t['value']};" for fam in ("spacing", "radius", "motion", "opacity") for t in TOKENS[fam]["tokens"]]
     root += [f"  --font-{k}: {v};" for k, v in TOKENS["type"]["families"].items()]
     out.append(":root {\n" + "\n".join(root) + "\n}")
     for group in TOKENS["type"]["groups"]:
@@ -168,6 +168,21 @@ def swift_shadows():
     return s
 
 
+def swift_motion():
+    """Durations as TimeInterval seconds (`.seconds(ZimamMotion.linger)` for Task.sleep), and opacities."""
+    s = ["nonisolated public enum ZimamMotion {"]
+    for t in TOKENS["motion"]["tokens"]:
+        ms = float(t["value"].removesuffix("ms"))
+        s.append(f"    /// {t['usage']}")
+        s.append(f"    public static let {camel(t['name'].removeprefix('duration-'))}: TimeInterval = {ms / 1000:g}")
+    s += ["}", "", "nonisolated public enum ZimamOpacity {"]
+    for t in TOKENS["opacity"]["tokens"]:
+        s.append(f"    /// {t['usage']}")
+        s.append(f"    public static let {camel(t['name'].removeprefix('opacity-'))}: Double = {float(t['value']):g}")
+    s.append("}")
+    return s
+
+
 def swift():
     # The tokens are constants, so they are `nonisolated`: usable from any thread and in
     # SwiftUI's Sendable closures, also in targets that default to the main actor.
@@ -183,7 +198,7 @@ def swift():
     s += [f"    public static let {camel(t['name'])}: CGFloat = {t['value'].replace('px', '')}" for t in TOKENS["spacing"]["tokens"]]
     s += ["}", "", "nonisolated public enum ZimamRadius {"]
     s += [f"    public static let {camel(t['name'])}: CGFloat = {t['value'].replace('px', '')}" for t in TOKENS["radius"]["tokens"]]
-    s += ["}", ""] + swift_shadows()
+    s += ["}", ""] + swift_shadows() + [""] + swift_motion()
     s += ["", SWIFT_FONTS, "nonisolated public enum ZimamType {"]
     for group in TOKENS["type"]["groups"]:
         for st in group["styles"]:

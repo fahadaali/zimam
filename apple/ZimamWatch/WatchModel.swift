@@ -95,7 +95,7 @@ final class WatchModel {
             let results = try await api.push(mutations)
             errorMessage = nil
             if results.first?.status == .applied {
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .seconds(ZimamMotion.linger))
                 tasks.removeAll { $0.id == task.id }
                 finishing.remove(task.id)
                 if task.dueDate == Self.today() { doneToday += 1 }
