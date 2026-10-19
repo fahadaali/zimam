@@ -29,7 +29,7 @@ async function loadRows(db: D1Database, entity: ChangeEntity, ids: string[]): Pr
  * Returns what changed for this user after `cursor`: the latest state of each
  * touched record, or a delete when it is gone or no longer visible to them.
  *
- * Opt-in entities (attachments) are left out unless `include` names them, but the
+ * Opt-in entities (attachments, places) are left out unless `include` names them, but the
  * cursor still moves past their rows, so older apps neither see nor re-pull them.
  * Likewise a project's opt-in view ("timeline") reaches only clients that name it in
  * `views`; the others get "list", which every app can decode.
@@ -76,6 +76,7 @@ export async function pullChanges(
       case "task":
         return access.canSeeTask(row);
       case "reminder":
+      case "place":
         return row.user_id === access.userId;
       case "comment":
       case "attachment": {

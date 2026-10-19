@@ -594,10 +594,11 @@ private struct RemindersSection: View {
             Button("إضافة تذكير بالموقع", systemImage: "mappin.and.ellipse") { addingPlace = true }
                 .frame(minHeight: ZimamSpacing.space11)
                 .sheet(isPresented: $addingPlace) {
-                    LocationReminderSheet { place in
-                        store.addLocationReminder(to: task.id, place: place)
+                    LocationReminderSheet { place, time in
+                        store.addLocationReminder(to: task.id, place: place, at: time)
                         #if os(iOS)
-                        // Location while using the app lets the system watch the place.
+                        // Location while using the app lets the system watch the place; the sheet
+                        // offered «دائماً» with its reason.
                         location.requestAuthorization()
                         #endif
                         askForAlerts()
@@ -626,13 +627,15 @@ private struct RemindersSection: View {
                 }
                 if hasPlaces {
                     #if os(iOS)
-                    Text("تذكير الموقع يصلك كلما وصلت إلى المكان أو غادرته حتى تنجز المهمة.")
+                    Text("تذكير المكان وحده يصلك كلما وصلت أو غادرت حتى تنجز المهمة، والمرتبط بوقت يصلك مرة عند أيهما أسبق.")
                     #else
                     Text("تذكيرات الموقع تصل على الآيفون والآيباد، ولا تعمل على الماك.")
                     #endif
                 }
             }
         }
+        // A reminder added from a sheet that has just closed.
+        .sensoryFeedback(.success, trigger: reminders.count) { old, new in new > old }
     }
 
     private func askForAlerts() {
@@ -677,13 +680,15 @@ private struct ReminderRow: View {
             }
         case .location:
             let place = reminder.record.location
+            let firing = reminder.firing()
             VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
-                Label(LocationReminderPlanner.displayName(place?.name),
+                Label(place.map { LocationReminderPlanner.reminderText($0, firing: firing, formatter: formatter) }
+                          ?? LocationReminderPlanner.displayName(nil),
                       systemImage: place?.trigger == .leave ? "figure.walk.departure" : "figure.walk.arrival")
                     .font(ZimamType.callout)
-                    .foregroundStyle(placeNote == nil ? ZimamColor.ink : ZimamColor.inkMuted)
+                    .foregroundStyle(placeNote == nil && firing.watchesPlace ? ZimamColor.ink : ZimamColor.inkMuted)
                 if let place {
-                    Text(LocationReminderPlanner.summary(place, locale: formatter.locale))
+                    Text("النطاق \(LocationReminderPlanner.radiusText(place.radius, locale: formatter.locale))")
                         .font(ZimamType.caption)
                         .foregroundStyle(ZimamColor.inkMuted)
                 }
@@ -699,19 +704,30 @@ private struct ReminderRow: View {
     /// Why a location reminder is not watched on this device, or nil when it is (or when
     /// notifications themselves are off, which the section's footer already says).
     private var placeNote: String? {
+        let firing = reminder.firing()
+        // Fired already: the row says so, and nothing is watched any more.
+        guard firing.watchesPlace else { return nil }
         #if os(iOS)
-        if notifications.watchedPlaces.contains(reminder.id) || !notifications.isEnabled { return nil }
+        if !notifications.isEnabled { return nil }
+        if notifications.watchedPlaces.contains(reminder.id) {
+            if case .waiting = firing, location.needsAlways {
+                return "قد يصلك التذكيران معاً. اسمح بالموقع «دائماً» ليصلك أيهما أسبق فقط."
+            }
+            return nil
+        }
         if !location.canWatchPlaces {
             return location.isUndecided || location.isDenied
                 ? "لا يعمل حتى تسمح لزمام بالموقع."
                 : "لا يعمل حتى تفعّل «الموقع الدقيق» لزمام."
         }
-        if notifications.watchedPlaces.count >= LocationReminderPlanner.maxRegions {
-            let count = LocationReminderPlanner.maxRegions.formatted(.number.locale(formatter.locale))
-            return "لا يعمل الآن: يراقب زمام \(count) أماكن على الأكثر، أقربها موعداً."
-        }
-        return nil
+        let limit = location.canMonitorPlaces ? PlaceWatchPlanner.maxPlaces : LocationReminderPlanner.maxRegions
+        guard notifications.watchedPlaces.count >= limit else { return nil }
+        let count = limit.formatted(.number.locale(formatter.locale))
+        return "لا يعمل الآن: يراقب زمام \(count) \(limit > 10 ? "مكاناً" : "أماكن") على الأكثر، أقربها موعداً."
         #else
+        if case .waiting = firing {
+            return "يصلك هنا في الوقت فقط؛ المكان على الآيفون والآيباد."
+        }
         return "لا يعمل على الماك، ويصلك على الآيفون والآيباد."
         #endif
     }

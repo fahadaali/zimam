@@ -50,8 +50,23 @@ struct TaskSuggestionCard: View {
                 if !suggestion.tags.isEmpty {
                     SuggestionLine(name: "الوسوم", value: suggestion.tags.joined(separator: "، "))
                 }
+                if let place = suggestion.place {
+                    SuggestionLine(name: "التذكير", value: placeText(place))
+                    if place.placeId == nil {
+                        Text("«\(place.name)» ليس في أماكنك، فتُضاف المهمة دون تذكير المكان. أضفه من الإعدادات في «أماكني».")
+                            .font(ZimamType.caption)
+                            .foregroundStyle(ZimamColor.inkMuted)
+                    }
+                }
             }
         }
+    }
+
+    /// «عند الوصول إلى البيت»، with «أو في الموعد، أيهما أسبق» when the sentence has a time too.
+    private func placeText(_ place: TaskSuggestion.PlaceSuggestion) -> String {
+        let action = LocationReminderPlanner.placeText(
+            ReminderRecord.Location(latitude: 0, longitude: 0, radius: 0, name: place.name, trigger: place.trigger))
+        return suggestion.dueTime == nil || suggestion.dueDate == nil ? action : "\(action) أو في الموعد، أيهما أسبق"
     }
 
     /// «الخميس، ٤ جمادى الأولى، ١٥ أكتوبر، ٩:٣٠ م»: the near word, both calendars, then the time.

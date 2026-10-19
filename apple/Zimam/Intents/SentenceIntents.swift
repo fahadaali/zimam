@@ -8,12 +8,13 @@ import ZimamKit
 // Like the other intents these run in the app's process and write through `Store`.
 
 /// «ذكّرني في زمام» then «أراجع العقد بعد العصر بكرة»: the assistant reads the sentence on the
-/// server (title, day, time or prayer, priority, project) and the task is added at once. Signed
+/// server (title, day, time or prayer, priority, project, and a saved place: «إذا وصلت البيت»)
+/// and the task is added at once, with its place reminder. Signed
 /// out, offline, without the assistant, or when it is slow, the sentence becomes the title.
 struct AddTaskFromSentenceIntent: AppIntent {
     static let title: LocalizedStringResource = "إضافة مهمة بجملة"
     static let description = IntentDescription(
-        "قل المهمة كما تقولها لشخص، مثل «ذكرني أراجع العقد بعد العصر بكرة»، فيقرأ المساعد موعدها ويضيفها. دون اتصال أو دون المساعد تُضاف الجملة عنواناً كما هي.")
+        "قل المهمة كما تقولها لشخص، مثل «ذكرني أراجع العقد بعد العصر بكرة» أو «ذكرني أشتري خبز إذا وصلت البيت»، فيقرأ المساعد موعدها ومكانها ويضيفها. دون اتصال أو دون المساعد تُضاف الجملة عنواناً كما هي.")
     static let openAppWhenRun: Bool = false
 
     @Parameter(title: "الجملة", requestValueDialog: IntentDialog("ما المهمة؟"))
@@ -67,8 +68,42 @@ struct AddTaskFromSentenceIntent: AppIntent {
             dueTime: record.dueTime,
             tags: record.tags
         )
-        let message = Self.confirmation(for: task, reading: reading, formatter: formatter)
+        var message = Self.confirmation(for: task, reading: reading, formatter: formatter)
+        if let spoken = reading.suggestion.place {
+            message += " " + (await Self.addPlaceReminder(spoken, to: task, reading: reading, formatter: formatter))
+        }
         return .result(dialog: "\(message)")
+    }
+
+    /// «إذا وصلت البيت»: a reminder at one of the user's saved places, with the sentence's time
+    /// too when it has one (whichever comes first). A place they have not saved is named back,
+    /// with where to add it; the task stays.
+    @MainActor
+    static func addPlaceReminder(_ spoken: TaskSuggestion.PlaceSuggestion, to task: TaskItem, reading: SpokenTask,
+                                 formatter: DualDateFormatter) async -> String {
+        let context = ZimamStore.shared.mainContext
+        var place = spoken.placeId.flatMap { fetchPlace($0, in: context) }
+        if place == nil, spoken.placeId != nil {
+            // Saved on another device and not pulled here yet.
+            await (LiveSync.engine as? SyncEngine)?.sync()
+            place = spoken.placeId.flatMap { fetchPlace($0, in: context) }
+        }
+        guard let place else {
+            return "لا يوجد مكان باسم «\(spoken.name)» في أماكنك، فلم يُضف التذكير. أضفه من الإعدادات في «أماكني»."
+        }
+        let at = reading.placeReminderAt(today: formatter.dayString(from: Date()), timeZone: formatter.timeZone)
+            .flatMap(ReminderPlanner.date(fromISO:))
+        let copy = ReminderRecord.Location(place: place.record, trigger: spoken.trigger)
+        Store(context: context, sync: LiveSync.engine).addLocationReminder(to: task.id, place: copy, at: at)
+        let action = LocationReminderPlanner.placeText(copy)
+        return at == nil ? "وسأذكّرك \(action)." : "وسأذكّرك \(action) أو في الموعد، أيهما أسبق."
+    }
+
+    @MainActor
+    private static func fetchPlace(_ id: UUID, in context: ModelContext) -> PlaceItem? {
+        var descriptor = FetchDescriptor<PlaceItem>(predicate: #Predicate { $0.id == id && !$0.pendingDelete })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
     }
 
     /// «أُضيفت «مراجعة العقد»، غداً، بعد العصر.», with a note when the sentence was kept as said.

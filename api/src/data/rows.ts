@@ -8,6 +8,7 @@ export const TABLES: Record<ChangeEntity, string> = {
   task: "tasks",
   reminder: "reminders",
   comment: "comments",
+  place: "places",
   attachment: "attachments",
 };
 
@@ -78,6 +79,7 @@ export function reminderOut(r: Row) {
     prayer: strOrNull(r.prayer),
     offsetMinutes: numOrNull(r.offset_minutes),
     location: json(r.location),
+    firedAt: numOrNull(r.fired_at),
     createdAt: num(r.created_at),
     updatedAt: num(r.updated_at),
   };
@@ -89,6 +91,18 @@ export function commentOut(r: Row) {
     taskId: str(r.task_id),
     authorId: str(r.author_id),
     body: str(r.body),
+    createdAt: num(r.created_at),
+    updatedAt: num(r.updated_at),
+  };
+}
+
+export function placeOut(r: Row) {
+  return {
+    id: str(r.id),
+    name: str(r.name),
+    latitude: num(r.latitude),
+    longitude: num(r.longitude),
+    radius: num(r.radius),
     createdAt: num(r.created_at),
     updatedAt: num(r.updated_at),
   };
@@ -115,6 +129,7 @@ export const OUT: Record<ChangeEntity, (r: Row) => Record<string, unknown>> = {
   task: taskOut,
   reminder: reminderOut,
   comment: commentOut,
+  place: placeOut,
   attachment: attachmentOut,
 };
 

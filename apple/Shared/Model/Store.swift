@@ -151,20 +151,89 @@ struct Store {
         return reminder
     }
 
-    /// A reminder on arriving at or leaving a place. It fires on iPhone and iPad only
-    /// (`NotificationScheduler`); the server stores it and never pushes it.
+    /// A reminder on arriving at or leaving a place. The place fires on iPhone and iPad only
+    /// (`NotificationScheduler`, `PlaceMonitor`). With `at` it fires once, at whichever comes
+    /// first; the server pushes that time if no device took it back (`markFired`).
     @discardableResult
-    func addLocationReminder(to taskId: UUID, place: ReminderRecord.Location) -> ReminderItem {
-        let record = ReminderRecord(taskId: taskId, kind: .location, location: place)
+    func addLocationReminder(to taskId: UUID, place: ReminderRecord.Location, at date: Date? = nil) -> ReminderItem {
+        let record = ReminderRecord(taskId: taskId, kind: .location, at: date.map { ReminderPlanner.isoString(from: $0) },
+                                    location: place)
         let reminder = ReminderItem(record, dirty: true)
         context.insert(reminder)
         commit()
         return reminder
     }
 
+    /// The place came first: the reminder's time is taken back, here and, once this syncs,
+    /// on the user's other devices and on the server.
+    func markFired(_ reminder: ReminderItem, at date: Date = Date()) {
+        guard reminder.firedAt == nil else { return }
+        reminder.firedAt = Milliseconds(date.timeIntervalSince1970 * 1000)
+        touch(reminder)
+    }
+
     func deleteReminder(_ reminder: ReminderItem) {
         reminder.pendingDelete = true
         touch(reminder)
+    }
+
+    // MARK: Places
+
+    /// Saves a place to «أماكني». The name is trimmed; callers check it is not empty.
+    @discardableResult
+    func addPlace(name: String, latitude: Double, longitude: Double, radius: Double) -> PlaceItem {
+        let record = PlaceRecord(name: Self.placeName(name), latitude: latitude, longitude: longitude,
+                                 radius: Self.placeRadius(radius))
+        let place = PlaceItem(record, dirty: true)
+        context.insert(place)
+        commit()
+        return place
+    }
+
+    /// Renames, moves or resizes a place. Its reminders follow here at once; the server rewrites
+    /// their copies too, so other devices and older apps follow on their next pull.
+    func updatePlace(_ place: PlaceItem, name: String, latitude: Double, longitude: Double, radius: Double) {
+        place.name = Self.placeName(name)
+        place.latitude = latitude
+        place.longitude = longitude
+        place.radius = Self.placeRadius(radius)
+        let copy = place.record
+        for reminder in reminders(at: place.id) {
+            guard var location = reminder.record.location else { continue }
+            location.latitude = copy.latitude
+            location.longitude = copy.longitude
+            location.radius = copy.radius
+            location.name = copy.name
+            reminder.locationJSON = try? JSONEncoder().encode(location)
+        }
+        touch(place)
+    }
+
+    /// Deletes a place. Its reminders stay where it was, no longer linked to it.
+    func deletePlace(_ place: PlaceItem) {
+        for reminder in reminders(at: place.id) {
+            guard var location = reminder.record.location else { continue }
+            location.placeId = nil
+            reminder.locationJSON = try? JSONEncoder().encode(location)
+        }
+        place.pendingDelete = true
+        touch(place)
+    }
+
+    /// Location reminders that use the place (not deleted).
+    func reminders(at placeId: UUID) -> [ReminderItem] {
+        let kind = ReminderRecord.Kind.location.rawValue
+        let all = (try? context.fetch(FetchDescriptor<ReminderItem>(
+            predicate: #Predicate { $0.kindRaw == kind && !$0.pendingDelete }))) ?? []
+        return all.filter { $0.record.location?.placeId == placeId }
+    }
+
+    private static func placeName(_ name: String) -> String {
+        String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+    }
+
+    private static func placeRadius(_ radius: Double) -> Double {
+        min(max(radius, LocationReminderPlanner.serverRadiusRange.lowerBound), LocationReminderPlanner.serverRadiusRange.upperBound)
     }
 
     // MARK: Projects
@@ -234,7 +303,8 @@ struct Store {
         copyReminders(from: task.id, to: copy.id, fromDay: base, toDay: next.day, days: days)
     }
 
-    /// Gives the next occurrence the same reminders; time reminders move by as many days as the task did.
+    /// Gives the next occurrence the same reminders; times (alone or with a place) move by as many
+    /// days as the task did.
     private func copyReminders(from taskId: UUID, to newTaskId: UUID, fromDay: String, toDay: String, days: DualDateFormatter) {
         let reminders = (try? context.fetch(FetchDescriptor<ReminderItem>(predicate: #Predicate { $0.taskId == taskId }))) ?? []
         var calendar = Calendar(identifier: .gregorian)
@@ -253,6 +323,12 @@ struct Store {
                 guard let at = record.at, let date = ReminderPlanner.date(fromISO: at),
                       let moved = calendar.date(byAdding: .day, value: shift, to: date) else { continue }
                 record.at = ReminderPlanner.isoString(from: moved)
+            } else if record.kind == .location, let at = record.at {
+                // A place with a time: the time moves with the task, and the race starts again.
+                guard let date = ReminderPlanner.date(fromISO: at),
+                      let moved = calendar.date(byAdding: .day, value: shift, to: date) else { continue }
+                record.at = ReminderPlanner.isoString(from: moved)
+                record.firedAt = nil
             }
             context.insert(ReminderItem(record, dirty: true))
         }

@@ -32,6 +32,28 @@ struct PrayerChip: View {
     }
 }
 
+/// A saved place to pick («البيت»), as in Apple's Reminders. Neutral with a strong border, since
+/// it is tappable; the chosen one in brand, since picking is an action. A 44pt target.
+/// See design/components/PlaceChip.
+struct PlaceChip: View {
+    let name: String
+    var isSelected = false
+
+    var body: some View {
+        Label(name, systemImage: isSelected ? "mappin.circle.fill" : "mappin")
+            .labelStyle(ChipLabelStyle())
+            .font(ZimamType.callout)
+            .lineLimit(1)
+            .foregroundStyle(isSelected ? ZimamColor.onBrand : ZimamColor.ink)
+            .padding(.horizontal, ZimamSpacing.space3)
+            .frame(minHeight: ZimamSpacing.space11)
+            .background(isSelected ? ZimamColor.brand : ZimamColor.surfaceRaised, in: Capsule())
+            .overlay(Capsule().strokeBorder(isSelected ? ZimamColor.brand : ZimamColor.lineStrong))
+            .contentShape(Capsule())
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
 private struct ChipLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: ZimamSpacing.space1) {
