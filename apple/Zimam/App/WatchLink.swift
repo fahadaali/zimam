@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import os
 import WatchConnectivity
 import ZimamKit
 
@@ -8,6 +9,7 @@ import ZimamKit
 /// on launch, after sign-in and sign-out, and when the watch asks for it.
 final class WatchLink: NSObject, WCSessionDelegate {
     static let shared = WatchLink()
+    private static let logger = Logger(subsystem: "app.zimam.ios", category: "watch")
 
     func start() {
         guard WCSession.isSupported() else { return }
@@ -20,7 +22,12 @@ final class WatchLink: NSObject, WCSessionDelegate {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
         guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
-        try? session.updateApplicationContext(Self.payload())
+        do {
+            try session.updateApplicationContext(Self.payload())
+        } catch {
+            // The watch asks for the session when it starts, so it still gets it then.
+            Self.logger.error("Sending the session to the watch failed: \(error.localizedDescription)")
+        }
     }
 
     private static func payload() -> [String: Any] {
