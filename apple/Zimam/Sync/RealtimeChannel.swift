@@ -28,10 +28,13 @@ final class RealtimeChannel {
 
     func start() {
         guard loop == nil else { return }
-        loop = Task { [weak self] in
-            await self?.run()
+        // The loop holds the channel while it runs (a weak capture would be held for the whole
+        // run anyway). It ends with stop(), which SyncEngine calls in the background, on sign-out
+        // and when the signed-in screen goes away, or on its own when signed out.
+        loop = Task {
+            await run()
             // Ended on its own (signed out): the next start() opens a new one.
-            if !Task.isCancelled { self?.loop = nil }
+            if !Task.isCancelled { loop = nil }
         }
     }
 

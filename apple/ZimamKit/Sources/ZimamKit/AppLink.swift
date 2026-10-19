@@ -15,7 +15,14 @@ public enum AppLink: Equatable, Hashable, Sendable {
         switch self {
         case .today: return URL(string: "\(scheme)://today")!
         case .calendar: return URL(string: "\(scheme)://calendar")!
-        case .day(let day): return URL(string: "\(scheme)://day/\(day)")!
+        case .day(let day):
+            // Built from parts, so a day string with a space or other stray character is
+            // percent-encoded rather than making URL(string:) return nil.
+            var components = URLComponents()
+            components.scheme = scheme
+            components.host = "day"
+            components.path = "/" + day
+            return components.url!
         case .task(let id): return URL(string: "\(scheme)://task/\(id.uuidString)")!
         }
     }

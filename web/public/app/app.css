@@ -326,7 +326,8 @@
   border-block-end: 0;
 }
 
-/* Completing: the circle fills, the row dims, then it leaves after a second. Fades only. */
+/* Completing: the circle fills, the row dims, then it leaves after a second. Fades only, so they
+   stay with Reduce Motion, as the design asks (design/README.md «الحالات والحركة»). */
 .task-item {
   transition: opacity var(--duration-complete) ease;
 }
@@ -341,14 +342,6 @@
 
 .zm-check {
   transition: background-color var(--duration-complete) ease, border-color var(--duration-complete) ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .task-item,
-  .zm-task-title,
-  .zm-check {
-    transition-duration: 1ms;
-  }
 }
 
 /* The task title opens its details; it keeps the body style and grows to a 44px target. */
