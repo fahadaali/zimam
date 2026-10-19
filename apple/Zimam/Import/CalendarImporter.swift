@@ -77,9 +77,8 @@ final class CalendarImporter {
         let knownProjects = refs.projects.filter { liveProjects.contains($0.value) }
         let firstOrder = (projects.map(\.sortOrder).max() ?? -1) + 1
 
-        let plan = AppleCalendarImport.plan(events: found.events, calendars: chosen, knownTasks: refs.tasks,
-                                            knownProjects: knownProjects, seriesStarts: found.seriesStarts,
-                                            timeZone: .current, now: Date(), firstProjectSortOrder: firstOrder)
+        let plan = await Self.plan(events: found.events, calendars: chosen, knownTasks: refs.tasks,
+                                   knownProjects: knownProjects, seriesStarts: found.seriesStarts, firstOrder: firstOrder)
         do {
             try Store(context: context, sync: sync).insertImported(projects: plan.projects, tasks: plan.tasks, reminders: [])
         } catch {
@@ -88,6 +87,16 @@ final class CalendarImporter {
         }
         refs.remember(tasks: plan.taskRefs, projects: plan.projectRefs)
         resultMessage = AppleCalendarImport.summary(plan, locale: ZimamLocale.current)
+    }
+
+    /// Plans the import off the main actor: up to a year of events, all plain values.
+    @concurrent nonisolated private static func plan(
+        events: [AppleCalendarEvent], calendars: [AppleCalendarImport.CalendarRef], knownTasks: [String: UUID],
+        knownProjects: [String: UUID], seriesStarts: [String: Date], firstOrder: Double
+    ) async -> AppleCalendarImport.Plan {
+        AppleCalendarImport.plan(events: events, calendars: calendars, knownTasks: knownTasks,
+                                 knownProjects: knownProjects, seriesStarts: seriesStarts,
+                                 timeZone: .current, now: Date(), firstProjectSortOrder: firstOrder)
     }
 }
 

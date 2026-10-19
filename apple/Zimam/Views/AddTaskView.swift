@@ -23,6 +23,7 @@ struct AddTaskView: View {
     @Environment(SessionStore.self) private var session
     @Environment(LocationProvider.self) private var location
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete && $0.kindRaw == "project" }, sort: [SortDescriptor(\ProjectItem.sortOrder)])
     private var projects: [ProjectItem]
 
@@ -208,7 +209,7 @@ struct AddTaskView: View {
             titleFocused = false
             let typed = trimmedTitle
             dictationPrefix = typed.isEmpty ? "" : typed + " "
-            withAnimation { assistant = .idle }
+            withAnimation(.zimam(reduceMotion: reduceMotion)) { assistant = .idle }
             dictation.onFinish = { _ in dictationFinished() }
         }
         dictation.toggle()
@@ -245,7 +246,7 @@ struct AddTaskView: View {
                     projectName: suggestion.projectId.flatMap { id in projects.first(where: { $0.id == id })?.name },
                     onAccept: { accept(suggestion) },
                     onEdit: { edit(suggestion) },
-                    onDismiss: { withAnimation { assistant = .idle } }
+                    onDismiss: { withAnimation(.zimam(reduceMotion: reduceMotion)) { assistant = .idle } }
                 )
             }
             .listRowBackground(Color.clear)
@@ -261,7 +262,7 @@ struct AddTaskView: View {
         Task {
             do {
                 let suggestion = try await session.api.suggestTask(from: text, timeZone: formatter.timeZone)
-                withAnimation { assistant = .suggestion(suggestion) }
+                withAnimation(.zimam(reduceMotion: reduceMotion)) { assistant = .suggestion(suggestion) }
             } catch {
                 let problem = AssistantProblem(error)
                 assistantNeedsPro = problem == .proRequired
@@ -342,7 +343,7 @@ struct AddTaskView: View {
             projectId = id
         }
         suggestedPlace = suggestion.place
-        withAnimation { assistant = .idle }
+        withAnimation(.zimam(reduceMotion: reduceMotion)) { assistant = .idle }
     }
 
     /// Splits on the Latin or the Arabic comma, dropping blanks and repeats.

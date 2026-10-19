@@ -45,6 +45,8 @@ struct GanttView: View {
     @State private var showingAdd = false
     /// Bumped to scroll to today («اليوم», and when the zoom changes).
     @State private var todayRequest = 0
+    /// A task completed here stays a second so it can be undone.
+    @State private var lingering = Lingering()
 
     @ScaledMetric(relativeTo: .body) private var rowHeight = ZimamSpacing.space11 + ZimamSpacing.space1
 
@@ -155,7 +157,7 @@ struct GanttView: View {
     private func scrollToToday(_ proxy: ScrollViewProxy) {
         // After the layout, so the marker exists.
         DispatchQueue.main.async {
-            withAnimation(reduceMotion ? nil : .default) {
+            withAnimation(.zimam(reduceMotion: reduceMotion)) {
                 proxy.scrollTo(GanttAxis.todayID, anchor: .top)
             }
         }
@@ -166,7 +168,7 @@ struct GanttView: View {
     /// Open top-level tasks with a due day, each group from its earliest start. A project's are
     /// grouped by section (those without one first), the whole timeline's by project, inbox first.
     private var groups: [GanttGroup] {
-        let open = tasks.filter { $0.parentId == nil && !$0.isDone && $0.span != nil }
+        let open = tasks.filter { $0.parentId == nil && (!$0.isDone || lingering.contains($0.id)) && $0.span != nil }
         func rows(_ items: [TaskItem]) -> [GanttRowData] {
             items.compactMap { task in task.span.map { GanttRowData(task: task, span: $0) } }
                 .sorted { ($0.span.start, $0.span.end) < ($1.span.start, $1.span.end) }
@@ -225,7 +227,7 @@ struct GanttView: View {
 
     private func commit(_ task: TaskItem, _ span: DaySpan) {
         guard task.span != span else { return }
-        withAnimation(reduceMotion ? nil : .default) {
+        withAnimation(.zimam(reduceMotion: reduceMotion)) {
             Store(context: context, sync: sync).setSpan(task, span)
         }
         let message: String = "«\(task.title)» \(formatter.withKind(kind).spanText(span))"
@@ -233,7 +235,8 @@ struct GanttView: View {
     }
 
     private func complete(_ task: TaskItem) {
-        withAnimation(reduceMotion ? nil : .default) { Store(context: context, sync: sync).toggleDone(task) }
+        withAnimation(.zimamComplete) { Store(context: context, sync: sync).toggleDone(task) }
+        if task.isDone { lingering.hold(task.id, animation: .zimam(reduceMotion: reduceMotion)) }
     }
 
     // MARK: State

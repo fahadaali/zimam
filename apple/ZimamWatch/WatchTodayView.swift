@@ -53,7 +53,7 @@ struct WatchTodayView: View {
                 }
             }
             // A completed task leaves the list a second after the tap.
-            .animation(reduceMotion ? nil : .default, value: model.tasks.map(\.id))
+            .animation(.zimam(reduceMotion: reduceMotion), value: model.tasks.map(\.id))
             .navigationTitle("اليوم")
         }
         .task { await model.refresh() }
@@ -76,8 +76,6 @@ private struct WatchTaskRow: View {
     let isDone: Bool
     let onComplete: () -> Void
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
         Button(action: onComplete) {
             HStack(spacing: ZimamSpacing.space2) {
@@ -93,7 +91,7 @@ private struct WatchTaskRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(minHeight: ZimamSpacing.space11)
-            .animation(reduceMotion ? nil : .default, value: isDone)
+            .animation(.zimamComplete, value: isDone)
         }
         .disabled(isDone)
         // Only the tap turns isDone on (a failed push turns it back off), so the haptic

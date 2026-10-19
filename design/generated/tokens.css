@@ -127,6 +127,9 @@
   --radius-md: 10px;
   --radius-lg: 16px;
   --radius-pill: 999px;
+  --duration-complete: 250ms;
+  --duration-linger: 1000ms;
+  --opacity-pressed: 0.8;
   --font-sans: "thmanyah sans", "SF Arabic", "Geeza Pro", system-ui, sans-serif;
   --font-display: "thmanyah serif display", "thmanyah sans", "SF Arabic", system-ui, serif;
 }

@@ -47,9 +47,12 @@ struct RootView: View {
         }
         .environment(\.dateFormatterZimam, DualDateFormatter(primary: session.user?.settings.calendar ?? .hijri, locale: ZimamLocale.current))
         .onAppear {
-            sync.onUnauthorized = { [session, sync] in
+            // Weak: the engine owns this closure. A local, so the weak capture is of it rather than
+            // of the strong one this closure already holds.
+            let engine = sync
+            engine.onUnauthorized = { [session, weak engine] in
                 session.endSession()
-                sync.reset()
+                engine?.reset()
             }
         }
     }

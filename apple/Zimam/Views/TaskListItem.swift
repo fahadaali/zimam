@@ -27,7 +27,6 @@ struct TaskListItem: View {
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
     @Environment(\.taskSelection) private var taskSelection
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var moving: ProjectMoveRequest?
 
     var body: some View {
@@ -35,7 +34,7 @@ struct TaskListItem: View {
         let selected = taskSelection?.wrappedValue?.id == task.id
         NavigationLink(value: TaskRoute(id: task.id)) {
             TaskRow(task: task, projectName: projectName) {
-                withAnimation(reduceMotion ? nil : .default) {
+                withAnimation(.zimamComplete) {
                     store.toggleDone(task)
                     if task.isDone { onCompleted?(task.id) }
                 }

@@ -3,6 +3,7 @@ import CoreLocation
 #endif
 import Foundation
 import Observation
+import os
 import SwiftData
 import UserNotifications
 import ZimamKit
@@ -29,6 +30,8 @@ final class NotificationScheduler {
     /// The location reminders the device is watching now; the others are over the budget
     /// or cannot fire here (see `LocationProvider.canWatchPlaces`).
     private(set) var watchedPlaces: Set<UUID> = []
+
+    private static let logger = Logger(subsystem: "app.zimam.ios", category: "notifications")
 
     private let context: ModelContext
     private let sync: SyncEngine
@@ -143,7 +146,7 @@ final class NotificationScheduler {
         #if os(iOS)
         for place in places where !kept.contains(place.id) {
             guard !Task.isCancelled else { return }
-            try? await center.add(Self.request(for: place))
+            await add(Self.request(for: place), to: center)
         }
         #endif
         for item in times {
@@ -157,7 +160,17 @@ final class NotificationScheduler {
             content.userInfo = ["taskId": item.taskId.uuidString]
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, item.date.timeIntervalSinceNow), repeats: false)
             let request = UNNotificationRequest(identifier: item.id, content: content, trigger: trigger)
-            try? await center.add(request)
+            await add(request, to: center)
+        }
+    }
+
+    /// Adds one reminder. A failure is logged, not swallowed: the reminder would silently never
+    /// fire. The next pass (after the next edit or sync, or on return to the app) tries again.
+    private func add(_ request: UNNotificationRequest, to center: UNUserNotificationCenter) async {
+        do {
+            try await center.add(request)
+        } catch {
+            Self.logger.error("Scheduling a reminder failed: \(error.localizedDescription)")
         }
     }
 
