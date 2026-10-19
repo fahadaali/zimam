@@ -215,12 +215,7 @@ extension DualDateFormatter {
     }
 
     private func part(_ date: Date, in kind: CalendarKind, pattern: String) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = Self.makeCalendar(kind, timeZone: timeZone)
-        formatter.locale = locale
-        formatter.timeZone = timeZone
-        formatter.dateFormat = pattern
-        return formatter.string(from: date)
+        DateFormatterCache.string(from: date, calendar: kind.identifier, locale: locale, timeZone: timeZone, pattern: pattern)
     }
 
     private static func makeCalendar(_ kind: CalendarKind, timeZone: TimeZone) -> Calendar {

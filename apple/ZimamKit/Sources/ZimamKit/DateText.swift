@@ -37,12 +37,7 @@ public struct DualDateFormatter {
 
     /// The clock time in the user's locale: «٣:٠٠ م».
     public func time(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.timeZone = timeZone
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        DateFormatterCache.string(from: date, calendar: nil, locale: locale, timeZone: timeZone, pattern: nil)
     }
 
     /// «اليوم», «غداً», «أمس», or the weekday for the coming week; nil further out.
@@ -82,14 +77,7 @@ public struct DualDateFormatter {
     }
 
     private func format(_ date: Date, calendar identifier: Calendar.Identifier, pattern: String) -> String {
-        let formatter = DateFormatter()
-        var calendar = Calendar(identifier: identifier)
-        calendar.timeZone = timeZone
-        formatter.calendar = calendar
-        formatter.locale = locale
-        formatter.timeZone = timeZone
-        formatter.dateFormat = pattern
-        return formatter.string(from: date)
+        DateFormatterCache.string(from: date, calendar: identifier, locale: locale, timeZone: timeZone, pattern: pattern)
     }
 }
 

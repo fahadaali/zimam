@@ -29,6 +29,8 @@ struct TodayView: View {
     var body: some View {
         let names = projectNames(projects)
         let events = todayEvents
+        // Once per render, not once per use.
+        let items = self.items
         List(selection: taskSelection) {
             Section {
                 // «ملخص اليوم» from the assistant; hidden offline.

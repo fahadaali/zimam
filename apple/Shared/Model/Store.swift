@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 import ZimamKit
 
@@ -18,6 +19,8 @@ protocol SyncScheduling: AnyObject {
 struct Store {
     let context: ModelContext
     let sync: (any SyncScheduling)?
+
+    private static let logger = Logger(subsystem: "app.zimam.ios", category: "store")
 
     init(context: ModelContext, sync: (any SyncScheduling)?) {
         self.context = context
@@ -179,7 +182,12 @@ struct Store {
 
     /// Saves and tells the sync engine. Internal so `Store+Board` can save a batch of edits once.
     func commit() {
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // The context keeps the unsaved edit; the next save that succeeds writes it.
+            Self.logger.error("Saving a local edit failed: \(error.localizedDescription)")
+        }
         if let sync {
             // The app's listener reschedules notifications and reloads the widgets.
             sync.scheduleSync()

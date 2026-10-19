@@ -27,6 +27,8 @@ struct UpcomingView: View {
 
     var body: some View {
         let names = projectNames(projects)
+        // Once per render, not once per use.
+        let days = self.days
         List(selection: taskSelection) {
             Section {
                 if days.isEmpty { EmptyLine(text: "لا مهام قادمة.") }

@@ -114,6 +114,9 @@ final class NotificationScheduler {
     private func apply() async {
         let center = UNUserNotificationCenter.current()
         await refreshStatus()
+        // A pass replaced while suspended stops here: its snapshot is stale, and removing by it
+        // could take back a reminder the newer pass just added (a snooze, for one).
+        guard !Task.isCancelled else { return }
         guard isEnabled, session.isSignedIn else {
             center.removeAllPendingNotificationRequests()
             watchedPlaces = []
@@ -125,6 +128,7 @@ final class NotificationScheduler {
         // Everything is replaced except places already watched as planned: registering a place
         // again while the device is inside it could fire it again.
         let existing = await center.pendingNotificationRequests()
+        guard !Task.isCancelled else { return }
         let kept = Self.alreadyWatched(existing, places: places)
         center.removePendingNotificationRequests(withIdentifiers: existing.map(\.identifier).filter { !kept.contains($0) })
         #if os(iOS)

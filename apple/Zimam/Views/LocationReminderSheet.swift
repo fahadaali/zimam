@@ -64,6 +64,8 @@ struct LocationReminderSheet: View {
                                        isCurrentLocation: true))
                 }
             }
+            // The closure holds this view, whose state holds the reader: let go on close.
+            .onDisappear { reader.onPlace = nil }
         }
         #if os(macOS)
         .frame(minWidth: ZimamSpacing.space8 * 14, minHeight: ZimamSpacing.space8 * 18)
