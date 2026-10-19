@@ -15,14 +15,7 @@ struct TaskRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: ZimamSpacing.space3) {
-            Button(action: onToggle) {
-                Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                    .font(ZimamType.title)
-                    .foregroundStyle(task.isDone ? ZimamColor.brand : ZimamColor.lineStrong)
-                    .frame(minWidth: ZimamSpacing.space11, minHeight: ZimamSpacing.space11, alignment: .top)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(task.isDone ? "إلغاء الإنجاز" : "إنجاز")
+            CompletionCircle(isDone: task.isDone, alignment: .top, action: onToggle)
 
             VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
                 Text(task.title)

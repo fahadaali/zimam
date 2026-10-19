@@ -17,6 +17,7 @@ struct CalendarView: View {
     @Environment(LocationProvider.self) private var location
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #endif
 
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder), SortDescriptor(\TaskItem.createdAt)])
@@ -31,7 +32,7 @@ struct CalendarView: View {
     @State private var showingAdd = false
     @State private var moving: MoveRequest?
     /// Tasks completed here stay a second, so the completion can be undone.
-    @State private var lingering: Set<UUID> = []
+    @State private var lingering = Lingering()
     /// «أحداث التقويم»: its settings sheet, and the event whose details are open.
     @State private var showingEventSettings = false
     @State private var openEvent: ShownEvent?
@@ -337,7 +338,7 @@ struct CalendarView: View {
         let moved = tasks.filter { ids.contains($0.id) && $0.dueDate != day }
         guard !moved.isEmpty else { return false }
         let store = Store(context: context, sync: sync)
-        withAnimation {
+        withAnimation(reduceMotion ? nil : .default) {
             for task in moved { store.reschedule(task, toDay: day) }
         }
         if let date = formatter.date(fromDay: day) {
@@ -350,14 +351,8 @@ struct CalendarView: View {
     }
 
     private func complete(_ task: TaskItem) {
-        withAnimation { Store(context: context, sync: sync).toggleDone(task) }
-        guard task.isDone else { return }
-        let id = task.id
-        lingering.insert(id)
-        Task {
-            try? await Task.sleep(for: .seconds(1))
-            _ = withAnimation { lingering.remove(id) }
-        }
+        withAnimation(reduceMotion ? nil : .default) { Store(context: context, sync: sync).toggleDone(task) }
+        if task.isDone { lingering.hold(task.id, animation: reduceMotion ? nil : .default) }
     }
 }
 

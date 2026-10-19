@@ -30,8 +30,9 @@ struct KanbanBoardView: View {
     #endif
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var lingering: Set<UUID> = []
+    @State private var lingering = Lingering()
     @State private var addingSection = false
     @State private var sectionName = ""
     @State private var renaming: SectionItem?
@@ -163,11 +164,7 @@ struct KanbanBoardView: View {
 
     /// A completed card stays for a second so it can be undone, then leaves the board.
     private func linger(_ id: UUID) {
-        lingering.insert(id)
-        Task {
-            try? await Task.sleep(for: .seconds(1))
-            _ = withAnimation { lingering.remove(id) }
-        }
+        lingering.hold(id, animation: reduceMotion ? nil : .default)
     }
 }
 

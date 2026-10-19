@@ -92,6 +92,16 @@ private struct TaskDetailForm: View {
             Section {
                 Button("حذف المهمة", systemImage: "trash", role: .destructive) { confirmingDelete = true }
                     .frame(minHeight: ZimamSpacing.space11)
+                    // On the button, so on the iPad the dialog points at what asked for it.
+                    .confirmationDialog("حذف المهمة؟", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                        Button("حذف", role: .destructive) {
+                            store.delete(task)
+                            dismiss()
+                        }
+                        Button("إلغاء", role: .cancel) {}
+                    } message: {
+                        Text("تُحذف معها مهامها الفرعية وتذكيراتها.")
+                    }
             }
         }
         .scrollContentBackground(.hidden)
@@ -103,15 +113,6 @@ private struct TaskDetailForm: View {
         .onAppear(perform: load)
         .onDisappear(perform: saveText)
         .onChange(of: focused) { _, _ in saveText() }
-        .confirmationDialog("حذف المهمة؟", isPresented: $confirmingDelete, titleVisibility: .visible) {
-            Button("حذف", role: .destructive) {
-                store.delete(task)
-                dismiss()
-            }
-            Button("إلغاء", role: .cancel) {}
-        } message: {
-            Text("تُحذف معها مهامها الفرعية وتذكيراتها.")
-        }
     }
 
     private func load() {
@@ -520,19 +521,14 @@ private struct SubtaskRow: View {
     let task: TaskItem
     let store: Store
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         NavigationLink(value: TaskRoute(id: task.id)) {
             HStack(spacing: ZimamSpacing.space2) {
-                Button {
-                    withAnimation { store.toggleDone(task) }
-                } label: {
-                    Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                        .font(ZimamType.headline)
-                        .foregroundStyle(task.isDone ? ZimamColor.brand : ZimamColor.lineStrong)
-                        .frame(minWidth: ZimamSpacing.space11, minHeight: ZimamSpacing.space11)
+                CompletionCircle(isDone: task.isDone, font: ZimamType.headline) {
+                    withAnimation(reduceMotion ? nil : .default) { store.toggleDone(task) }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(task.isDone ? "إلغاء الإنجاز" : "إنجاز")
 
                 Text(task.title)
                     .font(ZimamType.body)

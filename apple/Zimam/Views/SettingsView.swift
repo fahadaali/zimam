@@ -45,12 +45,6 @@ struct SettingsView: View {
                     Button("إغلاق") { dismiss() }
                 }
             }
-            .confirmationDialog("تسجيل الخروج؟", isPresented: $confirmingSignOut, titleVisibility: .visible) {
-                Button("تسجيل الخروج", role: .destructive, action: signOut)
-                Button("إلغاء", role: .cancel) {}
-            } message: {
-                Text("تُمسح بيانات زمام من هذا الجهاز، وتبقى محفوظة في حسابك.")
-            }
             .task { await notifications.refreshStatus() }
             .task { await subscriptions.refresh(signedIn: session.isSignedIn) }
         }
@@ -180,6 +174,12 @@ struct SettingsView: View {
                 confirmingSignOut = true
             }
             .frame(minHeight: ZimamSpacing.space11)
+            .confirmationDialog("تسجيل الخروج؟", isPresented: $confirmingSignOut, titleVisibility: .visible) {
+                Button("تسجيل الخروج", role: .destructive, action: signOut)
+                Button("إلغاء", role: .cancel) {}
+            } message: {
+                Text("تُمسح بيانات زمام من هذا الجهاز، وتبقى محفوظة في حسابك.")
+            }
             Button("حذف الحساب", systemImage: "person.crop.circle.badge.xmark", role: .destructive) {
                 confirmingDeleteAccount = true
             }

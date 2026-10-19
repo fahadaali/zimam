@@ -26,7 +26,7 @@ struct MatrixView: View {
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
 
     /// Tasks completed here stay a second, so the completion can be undone.
-    @State private var lingering: Set<UUID> = []
+    @State private var lingering = Lingering()
     @State private var targeted: PriorityQuadrant?
     @State private var refusal: String?
     @State private var showingAdd = false
@@ -92,13 +92,7 @@ struct MatrixView: View {
 
     private func complete(_ task: TaskItem) {
         withAnimation(reduceMotion ? nil : .default) { Store(context: context, sync: sync).toggleDone(task) }
-        guard task.isDone else { return }
-        let id = task.id
-        lingering.insert(id)
-        Task {
-            try? await Task.sleep(for: .seconds(1))
-            _ = withAnimation(reduceMotion ? nil : .default) { lingering.remove(id) }
-        }
+        if task.isDone { lingering.hold(task.id, animation: reduceMotion ? nil : .default) }
     }
 
     private func drop(_ ids: [UUID], on quadrant: PriorityQuadrant) -> Bool {
@@ -250,14 +244,7 @@ private struct MatrixTaskRow: View {
     var body: some View {
         NavigationLink(value: TaskRoute(id: task.id)) {
             HStack(alignment: .top, spacing: ZimamSpacing.space1) {
-                Button(action: onToggle) {
-                    Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                        .font(ZimamType.headline)
-                        .foregroundStyle(task.isDone ? ZimamColor.brand : ZimamColor.lineStrong)
-                        .frame(minWidth: ZimamSpacing.space11, minHeight: ZimamSpacing.space11)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(task.isDone ? "إلغاء الإنجاز" : "إنجاز")
+                CompletionCircle(isDone: task.isDone, font: ZimamType.headline, action: onToggle)
 
                 VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
                     Text(task.title)

@@ -41,7 +41,7 @@ public enum RealtimeMessage {
 }
 
 /// Talks to the Zimam API (api/). Every call after sign-in sends the session token.
-public final class APIClient: @unchecked Sendable {
+public final class APIClient: Sendable {
     public static let maxPushBatch = 200
 
     public let baseURL: URL
