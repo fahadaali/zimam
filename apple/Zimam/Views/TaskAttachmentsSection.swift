@@ -275,7 +275,7 @@ struct TaskAttachmentsSection: View {
             var current = list ?? TaskAttachments(attachments: [], maxFileBytes: maxFileBytes, canAdd: true)
             current.attachments.append(created)
             version += 1
-            withAnimation(reduceMotion ? nil : .default) { list = current }
+            withAnimation(.zimam(reduceMotion: reduceMotion)) { list = current }
             AttachmentCache.saveList(current, for: task.id)
         } catch {
             problem = AttachmentText.message(for: error, maxFileBytes: maxFileBytes, locale: locale)
@@ -314,7 +314,7 @@ struct TaskAttachmentsSection: View {
                 if var current = list {
                     current.attachments.removeAll { $0.id == attachment.id }
                     version += 1
-            withAnimation(reduceMotion ? nil : .default) { list = current }
+            withAnimation(.zimam(reduceMotion: reduceMotion)) { list = current }
                     AttachmentCache.saveList(current, for: task.id)
                 }
                 problem = nil

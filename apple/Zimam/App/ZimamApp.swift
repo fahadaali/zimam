@@ -63,36 +63,42 @@ struct ZimamApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                // The join sheet for an invite link (App/InviteLinks.swift); inside the environment below.
-                .inviteLinkSheet()
-                // An import's OAuth callback opened outside its web session (Import/ImportLinks.swift).
-                .importLinkSheet()
-                .environment(session)
-                .environment(sync)
-                .environment(location)
-                .environment(notifications)
-                .environment(subscriptions)
-                .environment(\.layoutDirection, .rightToLeft)
-                .environment(\.locale, ZimamLocale.current)
-                .font(ZimamType.body)
-                .foregroundStyle(ZimamColor.ink)
-                .tint(ZimamColor.brand)
-                // Google's sign-in page returns here through the reversed client ID scheme, the
-                // widgets through zimam://task/<id>, zimam://day/<day>, zimam://today and
-                // zimam://calendar (App/AppLinks.swift), and «فتح في التطبيق» on the web join page
-                // through zimam://join/<code>. An import's OAuth flow returns through
-                // zimam://import-callback?pending=<id> (Import/ImportLinks.swift).
-                .onOpenURL { url in
-                    if SessionStore.handleOpenURL(url) { return }
-                    if AppLinks.open(url) { return }
-                    if ImportLinks.shared.open(url) { return }
-                    InviteLinks.shared.open(url)
-                }
-                // Universal links: https://<site>/join/#<code> (Associated Domains in project.yml).
-                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-                    if let url = activity.webpageURL { InviteLinks.shared.open(url) }
-                }
+            if ZimamStore.isTestHost {
+                // The unit tests run inside the app: nothing of the app starts, no sync, no
+                // notifications, no window content.
+                Color.clear
+            } else {
+                RootView()
+                    // The join sheet for an invite link (App/InviteLinks.swift); inside the environment below.
+                    .inviteLinkSheet()
+                    // An import's OAuth callback opened outside its web session (Import/ImportLinks.swift).
+                    .importLinkSheet()
+                    .environment(session)
+                    .environment(sync)
+                    .environment(location)
+                    .environment(notifications)
+                    .environment(subscriptions)
+                    .environment(\.layoutDirection, .rightToLeft)
+                    .environment(\.locale, ZimamLocale.current)
+                    .font(ZimamType.body)
+                    .foregroundStyle(ZimamColor.ink)
+                    .tint(ZimamColor.brand)
+                    // Google's sign-in page returns here through the reversed client ID scheme, the
+                    // widgets through zimam://task/<id>, zimam://day/<day>, zimam://today and
+                    // zimam://calendar (App/AppLinks.swift), and «فتح في التطبيق» on the web join page
+                    // through zimam://join/<code>. An import's OAuth flow returns through
+                    // zimam://import-callback?pending=<id> (Import/ImportLinks.swift).
+                    .onOpenURL { url in
+                        if SessionStore.handleOpenURL(url) { return }
+                        if AppLinks.open(url) { return }
+                        if ImportLinks.shared.open(url) { return }
+                        InviteLinks.shared.open(url)
+                    }
+                    // Universal links: https://<site>/join/#<code> (Associated Domains in project.yml).
+                    .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                        if let url = activity.webpageURL { InviteLinks.shared.open(url) }
+                    }
+            }
         }
         .modelContainer(container)
         #if os(macOS)

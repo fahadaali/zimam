@@ -338,7 +338,7 @@ struct CalendarView: View {
         let moved = tasks.filter { ids.contains($0.id) && $0.dueDate != day }
         guard !moved.isEmpty else { return false }
         let store = Store(context: context, sync: sync)
-        withAnimation(reduceMotion ? nil : .default) {
+        withAnimation(.zimam(reduceMotion: reduceMotion)) {
             for task in moved { store.reschedule(task, toDay: day) }
         }
         if let date = formatter.date(fromDay: day) {
@@ -351,8 +351,8 @@ struct CalendarView: View {
     }
 
     private func complete(_ task: TaskItem) {
-        withAnimation(reduceMotion ? nil : .default) { Store(context: context, sync: sync).toggleDone(task) }
-        if task.isDone { lingering.hold(task.id, animation: reduceMotion ? nil : .default) }
+        withAnimation(.zimamComplete) { Store(context: context, sync: sync).toggleDone(task) }
+        if task.isDone { lingering.hold(task.id, animation: .zimam(reduceMotion: reduceMotion)) }
     }
 }
 

@@ -12,8 +12,8 @@ final class Lingering {
 
     func contains(_ id: UUID) -> Bool { ids.contains(id) }
 
-    /// Keeps `id` in the list for a second, then removes it with `animation`
-    /// (nil under Reduce Motion).
+    /// Keeps `id` in the list for `duration-linger`, then removes it with `animation`
+    /// (`.zimam(reduceMotion:)`, a cross-fade under Reduce Motion).
     func hold(_ id: UUID, animation: Animation?) {
         timers[id]?.cancel()
         ids.insert(id)

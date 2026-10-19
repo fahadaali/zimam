@@ -135,7 +135,7 @@ struct TaskCommentsSection: View {
             do {
                 let comment = try await session.api.addComment(body, to: task.id)
                 version += 1
-                withAnimation(reduceMotion ? nil : .default) { comments.append(comment) }
+                withAnimation(.zimam(reduceMotion: reduceMotion)) { comments.append(comment) }
                 draft = ""
                 problem = nil
             } catch {
@@ -151,7 +151,7 @@ struct TaskCommentsSection: View {
             do {
                 try await session.api.deleteComment(comment.id)
                 version += 1
-                withAnimation(reduceMotion ? nil : .default) { comments.removeAll { $0.id == comment.id } }
+                withAnimation(.zimam(reduceMotion: reduceMotion)) { comments.removeAll { $0.id == comment.id } }
             } catch {
                 problem = SharingProblem.message(for: error)
             }

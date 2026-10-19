@@ -533,7 +533,7 @@ struct CalendarEventSheet: View {
             .addTask(title: fields.title, dueDate: fields.dueDate, notes: fields.notes, dueTime: fields.dueTime,
                      startDate: fields.startDate)
         refs.remember(tasks: [item.event.importKey(timeZone: formatter.timeZone): task.id], projects: [:])
-        withAnimation(reduceMotion ? nil : .default) { converted = true }
+        withAnimation(.zimam(reduceMotion: reduceMotion)) { converted = true }
         AccessibilityNotification.Announcement("أُضيفت المهمة «\(fields.title)»").post()
     }
 

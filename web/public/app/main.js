@@ -40,8 +40,10 @@ import { projectTimeline, viewTimeline } from "./timeline-view.js";
 const APPLE_CLIENT_ID = "app.zimam.ios.web";
 // Google OAuth web client ID (public). Empty hides the Google button. Keep it in the API's GOOGLE_CLIENT_IDS.
 const GOOGLE_CLIENT_ID = "404741015373-ukucah8482ofiuvd9lb4cn4pgqvnfm75.apps.googleusercontent.com";
-const LEAVE_AFTER = 1000; // a completed task stays a second so it can be undone
-const FADE = 250;
+// From design/tokens.json through tokens.css; the numbers are fallbacks if it did not load.
+const tokens = getComputedStyle(document.documentElement);
+const LEAVE_AFTER = parseFloat(tokens.getPropertyValue("--duration-linger")) || 1000; // a completed task stays so it can be undone
+const FADE = parseFloat(tokens.getPropertyValue("--duration-complete")) || 250;
 const LIVE_DEBOUNCE = 800; // folds a burst of changes into one reload
 const LIVE_RETRY = 2000; // while the person is in the middle of something
 

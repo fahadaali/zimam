@@ -328,7 +328,7 @@
 
 /* Completing: the circle fills, the row dims, then it leaves after a second. Fades only. */
 .task-item {
-  transition: opacity 250ms ease;
+  transition: opacity var(--duration-complete) ease;
 }
 
 .task-item.is-leaving {
@@ -336,11 +336,11 @@
 }
 
 .zm-task-title {
-  transition: color 250ms ease;
+  transition: color var(--duration-complete) ease;
 }
 
 .zm-check {
-  transition: background-color 250ms ease, border-color 250ms ease;
+  transition: background-color var(--duration-complete) ease, border-color var(--duration-complete) ease;
 }
 
 @media (prefers-reduced-motion: reduce) {

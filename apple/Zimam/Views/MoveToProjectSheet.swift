@@ -87,7 +87,7 @@ struct MoveToProjectSheet: View {
         let isCurrent = task.projectId == project && task.sectionId == section
         return Button {
             guard !isCurrent else { return }
-            withAnimation(reduceMotion ? nil : .default) {
+            withAnimation(.zimam(reduceMotion: reduceMotion)) {
                 Store(context: context, sync: sync).move(task, toProject: project, section: section)
             }
             let message: String = "نُقلت إلى \(name)"

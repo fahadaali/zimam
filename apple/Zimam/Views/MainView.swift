@@ -12,7 +12,6 @@ struct MainView: View {
     #endif
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
 
@@ -243,7 +242,7 @@ struct MainView: View {
         guard let id = selectedTask.wrappedValue?.id else { return }
         let descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.id == id })
         guard let task = try? context.fetch(descriptor).first, !task.pendingDelete else { return }
-        withAnimation(reduceMotion ? nil : .default) {
+        withAnimation(.zimamComplete) {
             Store(context: context, sync: sync).toggleDone(task)
         }
     }

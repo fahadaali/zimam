@@ -234,7 +234,7 @@ struct ShareProjectView: View {
         let role = inviteRole
         perform {
             let invite = try await session.api.createInvite(to: projectId, role: role)
-            withAnimation(reduceMotion ? nil : .default) { created = invite }
+            withAnimation(.zimam(reduceMotion: reduceMotion)) { created = invite }
             invites = try await session.api.invites(of: projectId)
         }
     }
@@ -242,7 +242,7 @@ struct ShareProjectView: View {
     private func revoke(_ invite: ProjectInvite) {
         perform {
             try await session.api.revokeInvite(invite.id, of: projectId)
-            withAnimation(reduceMotion ? nil : .default) {
+            withAnimation(.zimam(reduceMotion: reduceMotion)) {
                 invites.removeAll { $0.id == invite.id }
                 if created?.id == invite.id { created = nil }
             }
@@ -264,7 +264,7 @@ struct ShareProjectView: View {
         removing = nil
         perform {
             try await session.api.removeMember(member.userId, from: projectId)
-            withAnimation(reduceMotion ? nil : .default) { members.removeAll { $0.userId == member.userId } }
+            withAnimation(.zimam(reduceMotion: reduceMotion)) { members.removeAll { $0.userId == member.userId } }
             ProjectMembers.shared.set(members, for: projectId)
         }
     }
@@ -480,7 +480,7 @@ struct JoinProjectView: View {
             do {
                 let found = try await session.api.previewInvite(code: code)
                 previewCode = code
-                withAnimation(reduceMotion ? nil : .default) { preview = found }
+                withAnimation(.zimam(reduceMotion: reduceMotion)) { preview = found }
             } catch {
                 problem = SharingProblem.message(for: error)
             }
