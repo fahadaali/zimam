@@ -174,7 +174,7 @@ struct ZimamSceneActions {
     var newTask: @MainActor () -> Void
     var search: @MainActor () -> Void
     /// Completes or reopens the selected task; nil when no task is selected.
-    var toggleSelectedDone: (@MainActor () -> Void)?
+    var toggleSelectedDone: (@MainActor () -> Void)? = nil
 }
 
 private struct ZimamActionsKey: FocusedValueKey {

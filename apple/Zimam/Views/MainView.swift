@@ -177,12 +177,16 @@ struct MainView: View {
     // MARK: Commands
 
     private var actions: ZimamSceneActions {
-        let canToggle = isRegular && selectedTask.wrappedValue != nil
-        return ZimamSceneActions(
-            newTask: { newTask = newTaskRequest() },
-            search: { openSearch() },
-            toggleSelectedDone: canToggle ? { toggleSelectedDone() } : nil
-        )
+        // Built a step at a time, with each closure's type spelled out: as one expression the
+        // compiler failed on it without saying why.
+        let newTaskAction: @MainActor () -> Void = { newTask = newTaskRequest() }
+        let searchAction: @MainActor () -> Void = { openSearch() }
+        var actions = ZimamSceneActions(newTask: newTaskAction, search: searchAction)
+        if isRegular && selectedTask.wrappedValue != nil {
+            let toggleAction: @MainActor () -> Void = { toggleSelectedDone() }
+            actions.toggleSelectedDone = toggleAction
+        }
+        return actions
     }
 
     private func openSearch() {
