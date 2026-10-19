@@ -9,14 +9,14 @@ nonisolated final class PhoneLink: NSObject, WCSessionDelegate {
     /// The token (empty after sign-out on the phone) and the primary calendar, if sent.
     var onSession: (@MainActor (String, String?) -> Void)?
 
-    func start() {
+    nonisolated func start() {
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
     }
 
     /// Asks the phone for the session; the phone app answers even from the background.
-    func requestSession() {
+    nonisolated func requestSession() {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
         guard session.activationState == .activated, session.isReachable else { return }
@@ -26,7 +26,7 @@ nonisolated final class PhoneLink: NSObject, WCSessionDelegate {
         }, errorHandler: nil)
     }
 
-    private static func deliver(_ payload: [String: Any], to handler: (@MainActor (String, String?) -> Void)?) {
+    private nonisolated static func deliver(_ payload: [String: Any], to handler: (@MainActor (String, String?) -> Void)?) {
         guard let token = payload[WatchPayload.token] as? String else { return }
         let calendar = payload[WatchPayload.calendar] as? String
         Task { @MainActor in handler?(token, calendar) }
@@ -34,7 +34,7 @@ nonisolated final class PhoneLink: NSObject, WCSessionDelegate {
 
     // MARK: WCSessionDelegate
 
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+    nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         guard activationState == .activated else { return }
         let latest = session.receivedApplicationContext
         if latest.isEmpty {
@@ -44,7 +44,7 @@ nonisolated final class PhoneLink: NSObject, WCSessionDelegate {
         }
     }
 
-    func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+    nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
         Self.deliver(applicationContext, to: onSession)
     }
 }

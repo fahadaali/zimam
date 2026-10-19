@@ -205,7 +205,7 @@ nonisolated private final class LocationDelegate: NSObject, CLLocationManagerDel
     var onFailure: (@MainActor (CLError.Code?) -> Void)?
     var onAuthorizationChange: (@MainActor (CLAuthorizationStatus) -> Void)?
 
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         // A negative accuracy marks an invalid reading.
         guard let location = locations.last(where: { $0.horizontalAccuracy >= 0 }) else { return }
         let latitude = location.coordinate.latitude
@@ -214,13 +214,13 @@ nonisolated private final class LocationDelegate: NSObject, CLLocationManagerDel
         Task { @MainActor in handler?(latitude, longitude) }
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         let code = (error as? CLError)?.code
         let handler = onFailure
         Task { @MainActor in handler?(code) }
     }
 
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let status = manager.authorizationStatus
         let handler = onAuthorizationChange
         Task { @MainActor in handler?(status) }

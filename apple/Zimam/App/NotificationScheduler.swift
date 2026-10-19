@@ -292,14 +292,14 @@ final class NotificationScheduler {
 nonisolated private final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     var onAction: (@MainActor (String, UUID?) async -> Void)?
 
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         let action = response.actionIdentifier
         let taskId = (response.notification.request.content.userInfo["taskId"] as? String).flatMap(UUID.init(uuidString:))
         await onAction?(action, taskId)
     }
 
     /// Shows reminders while the app is open too.
-    func userNotificationCenter(_ center: UNUserNotificationCenter,
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .list, .sound]
     }
