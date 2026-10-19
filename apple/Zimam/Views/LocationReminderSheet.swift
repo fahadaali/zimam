@@ -44,7 +44,7 @@ struct LocationReminderSheet: View {
                 AlwaysLocationSection()
                 if !saved.isEmpty { savedSection }
                 PlaceSearchSection(title: saved.isEmpty ? "المكان" : "مكان جديد", selection: newOption) { choose($0) }
-                if case .new(let option) = source {
+                if let option = newOption {
                     newPlaceSection(option)
                 }
                 if source != nil {
