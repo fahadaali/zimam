@@ -20,8 +20,8 @@ struct YearProgressWidget: Widget {
 }
 
 struct YearProgressConfiguration: WidgetConfigurationIntent {
-    static var title: LocalizedStringResource = "تقدّم السنة"
-    static var description = IntentDescription("اختر السنة الهجرية أو الميلادية.")
+    static let title: LocalizedStringResource = "تقدّم السنة"
+    static let description = IntentDescription("اختر السنة الهجرية أو الميلادية.")
 
     @Parameter(title: "التقويم", default: .automatic)
     var calendar: WidgetCalendarChoice

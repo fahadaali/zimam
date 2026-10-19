@@ -6,8 +6,9 @@ import SwiftData
 /// «المهمة الجارية»: a Live Activity for the task the user is focusing on, with a timer
 /// on the Lock Screen and in the Dynamic Island. Started from the task's details in the app;
 /// its views live in the widget extension (ZimamWidgets/FocusLiveActivity.swift).
-struct FocusActivityAttributes: ActivityAttributes {
-    struct ContentState: Codable, Hashable {
+/// Not tied to the main actor: ActivityKit reads the attributes from its own threads.
+nonisolated struct FocusActivityAttributes: ActivityAttributes {
+    nonisolated struct ContentState: Codable, Hashable {
         /// When the focus started; the timer counts up from here.
         var startedAt: Date
     }
@@ -49,9 +50,7 @@ enum FocusActivity {
 
     /// Ends the focus on this task, and removes it from the Lock Screen right away.
     static func end(taskId: UUID) async {
-        for activity in running where activity.attributes.taskId == taskId {
-            await activity.end(nil, dismissalPolicy: .immediate)
-        }
+        await endActivities(for: taskId)
     }
 
     /// Ends the focus when its task was completed or deleted elsewhere: in the Today list, from a
@@ -70,7 +69,16 @@ enum FocusActivity {
     }
 
     static func endAll() async {
-        for activity in running {
+        await endActivities(for: nil)
+    }
+
+    /// Ends one task's focus, or every one with nil. `Activity` is not Sendable, so the
+    /// activities are looked up off the main actor, where ActivityKit ends them, rather than
+    /// handed over from it.
+    @concurrent nonisolated private static func endActivities(for taskId: UUID?) async {
+        for activity in Activity<FocusActivityAttributes>.activities
+        where activity.activityState == .active || activity.activityState == .stale {
+            guard taskId == nil || activity.attributes.taskId == taskId else { continue }
             await activity.end(nil, dismissalPolicy: .immediate)
         }
     }

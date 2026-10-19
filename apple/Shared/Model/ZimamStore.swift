@@ -3,14 +3,15 @@ import SwiftData
 import WidgetKit
 
 /// What the app, its widgets and its intents share on this device.
-enum ZimamShared {
+nonisolated enum ZimamShared {
     /// The App Group that holds the local store and the few settings the widgets read.
     /// Register it in the developer account (see docs/setup.md).
     static let appGroup = "group.app.zimam.ios"
 
     /// Settings shared with the widgets. Falls back to the process's own defaults if the
-    /// App Group is missing from the build's entitlements.
-    static let defaults: UserDefaults = UserDefaults(suiteName: appGroup) ?? .standard
+    /// App Group is missing from the build's entitlements. UserDefaults locks internally and
+    /// Apple documents it as safe to use from any thread; the SDK just does not mark it Sendable.
+    nonisolated(unsafe) static let defaults: UserDefaults = UserDefaults(suiteName: appGroup) ?? .standard
 
     /// Asks WidgetKit to redraw the widgets after the data or the settings changed.
     static func reloadWidgets() {

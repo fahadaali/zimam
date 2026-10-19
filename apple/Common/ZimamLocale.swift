@@ -1,6 +1,6 @@
 import Foundation
 
-enum ZimamLocale {
+nonisolated enum ZimamLocale {
     /// Arabic formats with the digits the user chose in system settings
     /// (Arabic-Indic by default for Arabic).
     static var current: Locale {

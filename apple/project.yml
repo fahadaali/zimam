@@ -12,7 +12,11 @@ options:
 
 settings:
   base:
-    SWIFT_VERSION: "5.0"
+    # Every target: Swift 6, with Approachable Concurrency and the main actor by default (Xcode 26).
+    # Shared/ and Common/ compile into several targets, so they all use the same settings.
+    SWIFT_VERSION: "6.0"
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     # The version every bundle carries (app, widgets, watch app, complications): each Info.plist
     # below reads CFBundleShortVersionString and CFBundleVersion from these two, because
     # XcodeGen otherwise writes a fixed "1.0" and "1". Raise MARKETING_VERSION for each release;

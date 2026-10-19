@@ -15,9 +15,9 @@ struct CalendarView: View {
     @Environment(SyncEngine.self) private var sync
     @Environment(SessionStore.self) private var session
     @Environment(LocationProvider.self) private var location
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #endif
 
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder), SortDescriptor(\TaskItem.createdAt)])

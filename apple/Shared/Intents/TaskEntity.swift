@@ -9,8 +9,8 @@ import ZimamKit
 /// in Spotlight (`IndexedEntity`, see Zimam/App/TaskSpotlight.swift), so they turn up in search
 /// and Siri can find them by their words; a result opens with `OpenTaskIntent`.
 struct TaskEntity: IndexedEntity {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "مهمة"
-    static var defaultQuery = TaskEntityQuery()
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "مهمة"
+    static let defaultQuery = TaskEntityQuery()
 
     let id: UUID
     let title: String

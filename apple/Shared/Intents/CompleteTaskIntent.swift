@@ -8,10 +8,10 @@ import ZimamKit
 /// so the task is marked dirty; the app's sync engine sends it right away when this process
 /// has one, otherwise the app sends it the next time it opens.
 struct CompleteTaskIntent: AppIntent {
-    static var title: LocalizedStringResource = "إنجاز مهمة"
-    static var description = IntentDescription("ينجز مهمة في زمام.")
+    static let title: LocalizedStringResource = "إنجاز مهمة"
+    static let description = IntentDescription("ينجز مهمة في زمام.")
     /// Done in place, from Siri or a widget, without opening the app.
-    static var openAppWhenRun: Bool = false
+    static let openAppWhenRun: Bool = false
 
     @Parameter(title: "المهمة", requestValueDialog: IntentDialog("أي مهمة؟"))
     var task: TaskEntity

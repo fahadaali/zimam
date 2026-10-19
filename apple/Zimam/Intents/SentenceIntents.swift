@@ -11,10 +11,10 @@ import ZimamKit
 /// server (title, day, time or prayer, priority, project) and the task is added at once. Signed
 /// out, offline, without the assistant, or when it is slow, the sentence becomes the title.
 struct AddTaskFromSentenceIntent: AppIntent {
-    static var title: LocalizedStringResource = "إضافة مهمة بجملة"
-    static var description = IntentDescription(
+    static let title: LocalizedStringResource = "إضافة مهمة بجملة"
+    static let description = IntentDescription(
         "قل المهمة كما تقولها لشخص، مثل «ذكرني أراجع العقد بعد العصر بكرة»، فيقرأ المساعد موعدها ويضيفها. دون اتصال أو دون المساعد تُضاف الجملة عنواناً كما هي.")
-    static var openAppWhenRun: Bool = false
+    static let openAppWhenRun: Bool = false
 
     @Parameter(title: "الجملة", requestValueDialog: IntentDialog("ما المهمة؟"))
     var sentence: String
@@ -103,9 +103,9 @@ struct AddTaskFromSentenceIntent: AppIntent {
 /// Opens a task's details in the app: from Shortcuts, from Siri («افتح مهمة في زمام»), and from
 /// a Spotlight result (tasks are indexed as `TaskEntity`, see TaskSpotlight).
 struct OpenTaskIntent: OpenIntent {
-    static var title: LocalizedStringResource = "فتح مهمة"
-    static var description = IntentDescription("يفتح تفاصيل مهمة في زمام.")
-    static var openAppWhenRun: Bool = true
+    static let title: LocalizedStringResource = "فتح مهمة"
+    static let description = IntentDescription("يفتح تفاصيل مهمة في زمام.")
+    static let openAppWhenRun: Bool = true
 
     @Parameter(title: "المهمة", requestValueDialog: IntentDialog("أي مهمة؟"))
     var target: TaskEntity

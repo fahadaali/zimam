@@ -6,7 +6,7 @@ import UIKit
 import AppKit
 #endif
 
-public enum ZimamColor {
+nonisolated public enum ZimamColor {
     /// خلفية الصفحة والقوائم الرئيسية.
     public static let surface = Color.zimamDynamic(light: (0.9647, 0.9686, 0.9843), dark: (0.0549, 0.0667, 0.1255))
     /// البطاقات وأسطر المهام والنوافذ المنبثقة فوق surface.
@@ -63,7 +63,7 @@ public enum ZimamColor {
     public static let timelineToday = Color.zimamDynamic(light: (0.7255, 0.2431, 0.0471), dark: (0.9490, 0.5725, 0.3725))
 }
 
-public enum ZimamSpacing {
+nonisolated public enum ZimamSpacing {
     public static let space1: CGFloat = 4
     public static let space2: CGFloat = 8
     public static let space3: CGFloat = 12
@@ -73,14 +73,14 @@ public enum ZimamSpacing {
     public static let space11: CGFloat = 44
 }
 
-public enum ZimamRadius {
+nonisolated public enum ZimamRadius {
     public static let radiusSm: CGFloat = 6
     public static let radiusMd: CGFloat = 10
     public static let radiusLg: CGFloat = 16
     public static let radiusPill: CGFloat = 999
 }
 
-public enum ZimamShadow {
+nonisolated public enum ZimamShadow {
     /// المهمة أثناء السحب والإفلات، والقوائم المنبثقة. لا يُستعمل للبطاقات الثابتة.
     public static let liftColor = Color.zimamDynamic(light: (0.0902, 0.1059, 0.1843), dark: (0.0000, 0.0000, 0.0000), lightAlpha: 0.14, darkAlpha: 0.5)
     /// SwiftUI's shadow radius is about half the CSS blur (24px).
@@ -91,7 +91,7 @@ public enum ZimamShadow {
 
 /// PostScript names of the fonts in design/fonts/apple. Add the .otf files to every app target
 /// (iPhone, iPad, Mac, Watch, widgets) and list them under UIAppFonts / ATSApplicationFontsPath.
-public enum ZimamFontName {
+nonisolated public enum ZimamFontName {
     public static func sans(_ weight: Font.Weight) -> String {
         switch weight {
         case .light: return "thmanyahsans-Light"
@@ -113,7 +113,7 @@ public enum ZimamFontName {
     }
 }
 
-public enum ZimamType {
+nonisolated public enum ZimamType {
     /// عنوان الشاشة الكبير: اليوم، القادم، اسم المشروع. مرة واحدة في الشاشة، مع الأحرف المرسلة (zm-display) ومدّ واحد اختياري قبل الحرف الأخير.
     public static let display = Font.custom(ZimamFontName.sans(.bold), size: 34, relativeTo: .largeTitle)
     /// Extra line spacing so lines match the 50px line height (the font's own line is 1.25em).
@@ -144,7 +144,7 @@ public enum ZimamType {
     public static let heroLineSpacing: CGFloat = 10
 }
 
-extension Color {
+nonisolated extension Color {
     /// A color that follows the system light/dark appearance.
     static func zimamDynamic(
         light: (Double, Double, Double), dark: (Double, Double, Double), lightAlpha: Double = 1, darkAlpha: Double = 1

@@ -11,8 +11,11 @@ let package = Package(
         .package(url: "https://github.com/batoulapps/adhan-swift", from: "1.5.0"),
     ],
     targets: [
-        .target(name: "ZimamKit", dependencies: [.product(name: "Adhan", package: "adhan-swift")]),
+        .target(
+            name: "ZimamKit",
+            dependencies: [.product(name: "Adhan", package: "adhan-swift")]
+        ),
         .testTarget(name: "ZimamKitTests", dependencies: ["ZimamKit"]),
     ],
-    swiftLanguageModes: [.v5]
+    swiftLanguageModes: [.v6]
 )

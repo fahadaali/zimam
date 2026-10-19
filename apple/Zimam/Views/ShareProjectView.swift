@@ -303,7 +303,7 @@ private struct MemberRow: View {
             .accessibilityElement(children: .combine)
             if canManage {
                 Menu {
-                    Picker("الدور", selection: Binding(get: { member.role }, set: onRole)) {
+                    Picker("الدور", selection: Binding(get: { member.role }, set: { onRole($0) })) {
                         ForEach(ProjectRole.grantable, id: \.self) { role in
                             Text(role.arabicName).tag(role)
                         }
