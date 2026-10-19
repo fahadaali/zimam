@@ -2,8 +2,10 @@ import Foundation
 import WatchConnectivity
 
 /// Receives the session from the iPhone app over WatchConnectivity, and asks for it
-/// when the watch has none. Calls back on the main actor.
-final class PhoneLink: NSObject, WCSessionDelegate {
+/// when the watch has none. Calls back on the main actor. WatchConnectivity calls the delegate
+/// on its own queue, so this is not tied to the main actor (a call from that queue would stop
+/// the app). `onSession` is set once, before `start()`.
+nonisolated final class PhoneLink: NSObject, WCSessionDelegate {
     /// The token (empty after sign-out on the phone) and the primary calendar, if sent.
     var onSession: (@MainActor (String, String?) -> Void)?
 
@@ -18,15 +20,15 @@ final class PhoneLink: NSObject, WCSessionDelegate {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
         guard session.activationState == .activated, session.isReachable else { return }
-        session.sendMessage([WatchPayload.request: true], replyHandler: { [weak self] reply in
-            self?.deliver(reply)
+        let handler = onSession
+        session.sendMessage([WatchPayload.request: true], replyHandler: { reply in
+            Self.deliver(reply, to: handler)
         }, errorHandler: nil)
     }
 
-    private func deliver(_ payload: [String: Any]) {
+    private static func deliver(_ payload: [String: Any], to handler: (@MainActor (String, String?) -> Void)?) {
         guard let token = payload[WatchPayload.token] as? String else { return }
         let calendar = payload[WatchPayload.calendar] as? String
-        let handler = onSession
         Task { @MainActor in handler?(token, calendar) }
     }
 
@@ -38,11 +40,11 @@ final class PhoneLink: NSObject, WCSessionDelegate {
         if latest.isEmpty {
             requestSession()
         } else {
-            deliver(latest)
+            Self.deliver(latest, to: onSession)
         }
     }
 
     func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
-        deliver(applicationContext)
+        Self.deliver(applicationContext, to: onSession)
     }
 }

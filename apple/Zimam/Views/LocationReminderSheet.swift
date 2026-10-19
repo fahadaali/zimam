@@ -455,8 +455,9 @@ final class CurrentPlaceReader {
     }
 }
 
-/// CoreLocation's delegate for `CurrentPlaceReader`; its callbacks hop to the main actor.
-private final class PlaceReaderDelegate: NSObject, CLLocationManagerDelegate {
+/// CoreLocation's delegate for `CurrentPlaceReader`; its callbacks hop to the main actor, and
+/// it is not tied to it, so a call from another thread cannot stop the app.
+nonisolated private final class PlaceReaderDelegate: NSObject, CLLocationManagerDelegate {
     var onLocation: (@MainActor (Double, Double, Double) -> Void)?
     var onFailure: (@MainActor (CLError.Code?) -> Void)?
     var onAuthorizationChange: (@MainActor (CLAuthorizationStatus) -> Void)?

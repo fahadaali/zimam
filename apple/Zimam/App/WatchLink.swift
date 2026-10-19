@@ -7,7 +7,9 @@ import ZimamKit
 /// Hands the session to the Apple Watch app, which talks to the API itself.
 /// The token travels over WatchConnectivity (encrypted between the paired devices)
 /// on launch, after sign-in and sign-out, and when the watch asks for it.
-final class WatchLink: NSObject, WCSessionDelegate {
+/// WatchConnectivity calls the delegate on its own queue, so this is not tied to the main actor
+/// (with the main actor by default, a call from that queue would stop the app). It keeps no state.
+nonisolated final class WatchLink: NSObject, WCSessionDelegate, Sendable {
     static let shared = WatchLink()
     private static let logger = Logger(subsystem: "app.zimam.ios", category: "watch")
 

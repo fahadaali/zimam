@@ -228,6 +228,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.zimam.ios.widgets
+        # WidgetKit calls the timeline providers on its own threads, so the main actor is not the
+        # default here (with it, such a call would stop the extension). Swift 6 checks still apply.
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
         PRODUCT_NAME: ZimamWidgets
         TARGETED_DEVICE_FAMILY: "1,2"
         # Installed inside the app, so the archive stays an app archive.
@@ -332,6 +335,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.zimam.ios.watchkitapp.widgets
+        # WidgetKit calls the timeline providers on its own threads, so the main actor is not the
+        # default here (with it, such a call would stop the extension). Swift 6 checks still apply.
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
         PRODUCT_NAME: ZimamWatchWidgets
         SKIP_INSTALL: YES
     info:

@@ -287,23 +287,20 @@ final class NotificationScheduler {
 
 /// The notification center's delegate, kept apart so the observable scheduler stays a
 /// plain class. Set at launch so actions work when the app starts in the background.
-private final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+/// The center may call it off the main thread, so it is not tied to the main actor (a call
+/// from another thread would stop the app); `onAction` hops there. Set once, before use.
+nonisolated private final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     var onAction: (@MainActor (String, UUID?) async -> Void)?
 
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
-                                withCompletionHandler completionHandler: @escaping () -> Void) {
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         let action = response.actionIdentifier
         let taskId = (response.notification.request.content.userInfo["taskId"] as? String).flatMap(UUID.init(uuidString:))
-        let handler = onAction
-        Task { @MainActor in
-            await handler?(action, taskId)
-            completionHandler()
-        }
+        await onAction?(action, taskId)
     }
 
     /// Shows reminders while the app is open too.
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
-                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.banner, .list, .sound])
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        [.banner, .list, .sound]
     }
 }
