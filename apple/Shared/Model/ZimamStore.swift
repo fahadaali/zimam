@@ -25,8 +25,24 @@ nonisolated enum ZimamShared {
 enum ZimamStore {
     static let shared: ModelContainer = makeContainer()
 
+    /// True when the app is only the host of its unit tests (ZimamTests). The store is then kept
+    /// in memory, so the tests never read or write the person's data, and a test build that is
+    /// not signed (and so cannot reach the App Group) still launches.
+    nonisolated static var isTestHost: Bool {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["XCTestConfigurationFilePath"] != nil || environment["XCTestBundlePath"] != nil
+            || environment["XCTestSessionIdentifier"] != nil
+    }
+
     static func makeContainer() -> ModelContainer {
         let schema = Schema(zimamModelTypes)
+        if isTestHost {
+            do {
+                return try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
+            } catch {
+                fatalError("Cannot open the in-memory store for the tests: \(error)")
+            }
+        }
         // Without the App Group in the signed build (a signing mistake), keep the store in the
         // app's own container rather than failing to launch; the widgets then show nothing.
         let hasGroup = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: ZimamShared.appGroup) != nil
