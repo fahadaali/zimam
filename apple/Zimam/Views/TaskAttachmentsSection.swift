@@ -217,11 +217,16 @@ struct TaskAttachmentsSection: View {
             problem = AttachmentText.message(for: found, locale: locale)
             return
         }
-        guard let data = try? Data(contentsOf: url) else {
+        guard let data = try? await Self.read(url) else {
             problem = "تعذّرت قراءة الملف. اختره مرة أخرى."
             return
         }
         await upload(fileName: name, data: data)
+    }
+
+    /// Reads a chosen file off the main actor: it can be large, or on a slow file provider.
+    @concurrent nonisolated private static func read(_ url: URL) async throws -> Data {
+        try Data(contentsOf: url)
     }
 
     private func importPhoto(_ item: PhotosPickerItem) async {
@@ -265,7 +270,7 @@ struct TaskAttachmentsSection: View {
         do {
             let created = try await session.api.uploadAttachment(fileName: fileName, data: data, to: task.id)
             // Kept, so it opens at once and offline.
-            if (try? AttachmentCache.store(data, for: created)) != nil { cacheVersion += 1 }
+            if (try? await AttachmentCache.store(data, for: created)) != nil { cacheVersion += 1 }
             var current = list ?? TaskAttachments(attachments: [], maxFileBytes: maxFileBytes, canAdd: true)
             current.attachments.append(created)
             version += 1
@@ -291,7 +296,7 @@ struct TaskAttachmentsSection: View {
         defer { opening = nil }
         do {
             let data = try await session.api.downloadAttachment(attachment.id)
-            preview = Preview(id: attachment.id, url: try AttachmentCache.store(data, for: attachment))
+            preview = Preview(id: attachment.id, url: try await AttachmentCache.store(data, for: attachment))
             cacheVersion += 1
             problem = nil
         } catch {
@@ -383,8 +388,9 @@ private struct AttachmentRow: View {
 // MARK: Cache
 
 /// The last attachment list of each task and the files opened, in the Caches folder: the
-/// system may clear it, and the app fetches again when online. Cleared on sign-out.
-enum AttachmentCache {
+/// system may clear it, and the app fetches again when online. Cleared on sign-out. File system
+/// calls are safe from any thread, so this is not tied to the main actor.
+nonisolated enum AttachmentCache {
     private static var root: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Attachments", isDirectory: true)
@@ -411,7 +417,8 @@ enum AttachmentCache {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
-    static func store(_ data: Data, for attachment: TaskAttachment) throws -> URL {
+    /// Writes off the main actor: a file can be up to the attachment size limit.
+    @concurrent static func store(_ data: Data, for attachment: TaskAttachment) async throws -> URL {
         let url = fileURL(for: attachment)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
