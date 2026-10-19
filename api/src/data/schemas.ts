@@ -1,16 +1,17 @@
 import { z } from "zod";
 
-export const ENTITIES = ["project", "section", "task", "reminder", "comment"] as const;
+export const ENTITIES = ["project", "section", "task", "reminder", "comment", "place"] as const;
 export type EntityName = (typeof ENTITIES)[number];
 
 /**
  * Entities in the change log: the synced ones, and attachments, which their own routes write
- * (src/routes/attachments.ts). Clients pull attachments only when they ask (`include=attachment`),
- * because apps built before them cannot decode an entity they do not know.
+ * (src/routes/attachments.ts). Clients pull attachments and saved places only when they ask
+ * (`include=attachment`, `include=place`), because apps built before them cannot decode an
+ * entity they do not know.
  */
 export const CHANGE_ENTITIES = [...ENTITIES, "attachment"] as const;
 export type ChangeEntity = (typeof CHANGE_ENTITIES)[number];
-export const OPT_IN_ENTITIES: readonly ChangeEntity[] = ["attachment"];
+export const OPT_IN_ENTITIES: readonly ChangeEntity[] = ["attachment", "place"];
 
 export const PRAYERS = ["fajr", "dhuhr", "asr", "maghrib", "isha"] as const;
 
@@ -90,12 +91,22 @@ export const TaskInput = z
   });
 export type TaskInput = z.infer<typeof TaskInput>;
 
+const Latitude = z.number().min(-90).max(90);
+const Longitude = z.number().min(-180).max(180);
+/** Meters around a place that count as being there. */
+const Radius = z.number().min(50).max(10_000);
+
 const Location = z.object({
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-  radius: z.number().min(50).max(10_000),
+  latitude: Latitude,
+  longitude: Longitude,
+  radius: Radius,
   name: z.string().max(200).nullable().default(null),
   trigger: z.enum(["arrive", "leave"]),
+  /**
+   * The saved place this copy came from, if any. The server keeps the copy in step when the
+   * place changes, and clears this when the place is deleted or is not the user's.
+   */
+  placeId: NullableId,
 });
 
 export const ReminderInput = z
@@ -103,11 +114,19 @@ export const ReminderInput = z
     id: Id,
     taskId: Id,
     kind: z.enum(["time", "prayer", "location"]),
-    /** ISO 8601 date-time with offset, for kind "time". */
+    /**
+     * ISO 8601 date-time with offset, for kind "time". On a "location" reminder it is the time
+     * that competes with the place: the reminder fires once, at whichever comes first.
+     */
     at: z.iso.datetime({ offset: true }).nullable().default(null),
     prayer: z.enum(PRAYERS).nullable().default(null),
     offsetMinutes: z.number().int().min(-720).max(720).nullable().default(null),
     location: Location.nullable().default(null),
+    /**
+     * When a location reminder with a time fired at the place, before its time (Unix ms). Left
+     * out (apps that predate it) keeps the stored value.
+     */
+    firedAt: Timestamp.nullable().optional(),
     updatedAt: Timestamp,
   })
   .refine(
@@ -126,6 +145,17 @@ export const CommentInput = z.object({
   updatedAt: Timestamp,
 });
 export type CommentInput = z.infer<typeof CommentInput>;
+
+/** A saved place («أماكني»), personal to its owner. */
+export const PlaceInput = z.object({
+  id: Id,
+  name: z.string().trim().min(1).max(200),
+  latitude: Latitude,
+  longitude: Longitude,
+  radius: Radius,
+  updatedAt: Timestamp,
+});
+export type PlaceInput = z.infer<typeof PlaceInput>;
 
 export const Mutation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("upsert"), entity: z.enum(ENTITIES), data: z.record(z.string(), z.unknown()) }),

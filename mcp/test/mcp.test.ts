@@ -1,7 +1,7 @@
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { AssistantTask, Outcome, TaskFields, ZimamBackend } from "../src/backend";
+import type { AssistantTask, Outcome, PlaceReminderRequest, TaskFields, ZimamBackend } from "../src/backend";
 import { GOOGLE_CALLBACK_SCRIPT, googleAuthUrl } from "../src/consent";
 import { createWorker } from "../src/index";
 
@@ -57,6 +57,16 @@ class FakeBackend implements ZimamBackend {
   listProjects = (userId: string) => this.record("listProjects", userId, {}, []);
   getAgenda = (userId: string, request: object) =>
     this.record("getAgenda", userId, request, { timeZone: "Asia/Riyadh", hasLocation: false, overdue: [], days: [] });
+  listPlaces = (userId: string) => this.record("listPlaces", userId, {}, [{ id: "p1", name: "البيت", radiusMeters: 200 }]);
+  addPlaceReminder = (userId: string, request: PlaceReminderRequest) =>
+    this.record("addPlaceReminder", userId, request, {
+      id: "r1",
+      taskId: request.taskId,
+      place: "البيت",
+      trigger: request.trigger ?? ("arrive" as const),
+      at: null,
+      text: "عند الوصول إلى البيت",
+    });
 }
 
 let backend: FakeBackend;
@@ -306,7 +316,7 @@ describe("Zimam MCP server", () => {
     expect(mixed.response.status).toBe(401);
   });
 
-  it("links an account through Sign in with Apple and serves all seven tools", async () => {
+  it("links an account through Sign in with Apple and serves all nine tools", async () => {
     const token = await connect();
     const init = await initialize(token);
     expect(init.result.serverInfo.name).toBe("zimam");
@@ -314,7 +324,17 @@ describe("Zimam MCP server", () => {
 
     const list = await rpc(token, "tools/list");
     expect(list.result.tools.map((t: { name: string }) => t.name).sort()).toEqual(
-      ["complete_task", "create_task", "get_agenda", "list_projects", "list_tasks", "search_tasks", "update_task"].sort(),
+      [
+        "add_place_reminder",
+        "complete_task",
+        "create_task",
+        "get_agenda",
+        "list_places",
+        "list_projects",
+        "list_tasks",
+        "search_tasks",
+        "update_task",
+      ].sort(),
     );
 
     const created = await rpc(token, "tools/call", {
@@ -340,6 +360,18 @@ describe("Zimam MCP server", () => {
       method: "updateTask",
       args: { id: "abc", startDate: "2026-10-14", dueDate: "2026-10-18" },
     });
+
+    const places = await rpc(token, "tools/call", { name: "list_places", arguments: {} });
+    expect(JSON.parse(places.result.content[0].text)).toEqual([{ id: "p1", name: "البيت", radiusMeters: 200 }]);
+    await rpc(token, "tools/call", {
+      name: "add_place_reminder",
+      arguments: { taskId: "abc", place: "البيت", trigger: "leave", date: "2026-10-15", time: "17:00" },
+    });
+    expect(backend.calls.at(-1)).toEqual({
+      method: "addPlaceReminder",
+      userId: "user-1",
+      args: { taskId: "abc", place: "البيت", trigger: "leave", date: "2026-10-15", time: "17:00" },
+    });
   });
 
   it("rejects bad tool input before it reaches the backend", async () => {
@@ -354,7 +386,7 @@ describe("Zimam MCP server", () => {
     const token = await connect(["tasks:read"]);
     const list = await rpc(token, "tools/list");
     expect(list.result.tools.map((t: { name: string }) => t.name).sort()).toEqual(
-      ["get_agenda", "list_projects", "list_tasks", "search_tasks"].sort(),
+      ["get_agenda", "list_places", "list_projects", "list_tasks", "search_tasks"].sort(),
     );
   });
 

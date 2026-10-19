@@ -7,6 +7,7 @@ import {
   CommentInput,
   type EntityName,
   Mutation,
+  PlaceInput,
   ProjectInput,
   ReminderInput,
   SectionInput,
@@ -99,6 +100,8 @@ export class Mutator {
         return this.upsertReminder(parse(ReminderInput, data));
       case "comment":
         return this.upsertComment(parse(CommentInput, data));
+      case "place":
+        return this.upsertPlace(parse(PlaceInput, data));
     }
   }
 
@@ -439,20 +442,99 @@ export class Mutator {
     if (existing && existing.task_id !== r.taskId) reject("invalid", "A reminder cannot move between tasks");
     const task = await this.loadTask(r.taskId);
     if (!(await this.access.canSeeTask(task))) reject("forbidden", "Cannot see this task");
+    // A copy of a saved place keeps its link only to one of the user's own live places.
+    const location = r.location && r.location.placeId !== null && !(await this.ownPlace(r.location.placeId))
+      ? { ...r.location, placeId: null }
+      : r.location;
+    // An app that predates firedAt leaves it out: keep the stored one.
+    const firedAt = r.firedAt !== undefined ? r.firedAt : ((existing?.fired_at as number | null | undefined) ?? null);
     const now = Date.now();
     await this.db.batch([
       this.db
         .prepare(
-          `INSERT INTO reminders (id, user_id, task_id, kind, at, prayer, offset_minutes, location, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO reminders (id, user_id, task_id, kind, at, prayer, offset_minutes, location, fired_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (id) DO UPDATE SET kind = excluded.kind, at = excluded.at, prayer = excluded.prayer,
-             offset_minutes = excluded.offset_minutes, location = excluded.location, updated_at = excluded.updated_at`,
+             offset_minutes = excluded.offset_minutes, location = excluded.location, fired_at = excluded.fired_at,
+             updated_at = excluded.updated_at`,
         )
         .bind(
           r.id, this.me, r.taskId, r.kind, r.at, r.prayer, r.offsetMinutes,
-          r.location ? JSON.stringify(r.location) : null, now, r.updatedAt,
+          location ? JSON.stringify(location) : null, firedAt, now, r.updatedAt,
         ),
       this.logChange("reminder", r.id, { projectId: null, userId: this.me }, now),
+    ]);
+  }
+
+  // MARK: Places
+
+  private async ownPlace(id: string): Promise<boolean> {
+    const place = await this.load("place", id);
+    return place != null && place.deleted_at == null && place.user_id === this.me;
+  }
+
+  /**
+   * Saves a place, and rewrites the copy in the user's reminders that use it, so moving «البيت»
+   * or widening it moves every reminder there, in apps that predate places too.
+   */
+  private async upsertPlace(p: PlaceInput) {
+    const existing = await this.current("place", p.id, p.updatedAt);
+    if (existing && existing.user_id !== this.me) reject("forbidden", "Places are personal");
+    const now = Date.now();
+    const linked = `user_id = ?1 AND deleted_at IS NULL AND kind = 'location' AND json_valid(location)
+      AND json_extract(location, '$.placeId') = ?2`;
+    const statements = [
+      this.db
+        .prepare(
+          `INSERT INTO places (id, user_id, name, latitude, longitude, radius, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET name = excluded.name, latitude = excluded.latitude,
+             longitude = excluded.longitude, radius = excluded.radius, updated_at = excluded.updated_at`,
+        )
+        .bind(p.id, this.me, p.name, p.latitude, p.longitude, p.radius, now, p.updatedAt),
+      this.logChange("place", p.id, { projectId: null, userId: this.me }, now),
+    ];
+    if (existing) {
+      statements.push(
+        this.db
+          .prepare(
+            `UPDATE reminders SET location = json_set(location, '$.latitude', ?3, '$.longitude', ?4, '$.radius', ?5, '$.name', ?6),
+               updated_at = MAX(updated_at + 1, ?7)
+             WHERE ${linked}`,
+          )
+          .bind(this.me, p.id, p.latitude, p.longitude, p.radius, p.name, now),
+        this.db
+          .prepare(
+            `INSERT INTO changes (entity, entity_id, project_id, user_id, at)
+             SELECT 'reminder', id, NULL, user_id, ?3 FROM reminders WHERE ${linked}`,
+          )
+          .bind(this.me, p.id, now),
+      );
+    }
+    await this.db.batch(statements);
+  }
+
+  /** Deletes a place. Its reminders stay where it was, unlinked. */
+  private async deletePlace(place: Row, at: number) {
+    if (place.user_id !== this.me) reject("forbidden", "Places are personal");
+    const now = Date.now();
+    const linked = `user_id = ?1 AND deleted_at IS NULL AND kind = 'location' AND json_valid(location)
+      AND json_extract(location, '$.placeId') = ?2`;
+    await this.db.batch([
+      this.db
+        .prepare(
+          `INSERT INTO changes (entity, entity_id, project_id, user_id, at)
+           SELECT 'reminder', id, NULL, user_id, ?3 FROM reminders WHERE ${linked}`,
+        )
+        .bind(this.me, place.id, now),
+      this.db
+        .prepare(
+          `UPDATE reminders SET location = json_set(location, '$.placeId', NULL), updated_at = MAX(updated_at + 1, ?3)
+           WHERE ${linked}`,
+        )
+        .bind(this.me, place.id, now),
+      this.db.prepare(`UPDATE places SET deleted_at = ?2, updated_at = ?2 WHERE id = ?1`).bind(place.id, at),
+      this.logChange("place", place.id as string, { projectId: null, userId: this.me }, now),
     ]);
   }
 
@@ -500,6 +582,8 @@ export class Mutator {
         const task = await this.load("task", row.task_id as string);
         return this.softDelete("comment", row, this.taskScope(task ?? { owner_id: this.me }), at);
       }
+      case "place":
+        return this.deletePlace(row, at);
     }
   }
 

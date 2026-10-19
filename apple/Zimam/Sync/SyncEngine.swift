@@ -30,6 +30,9 @@ final class SyncEngine {
     @ObservationIgnored var onDataChanged: (@MainActor () -> Void)?
 
     private static let cursorKey = "sync.cursor"
+    /// What the cursor was earned with (`APIClient.pullIncludes`). Pulls without saved places
+    /// moved past them, so asking for more starts once from zero.
+    private static let includesKey = "sync.includes"
     /// Set before a wipe and cleared once it is saved. While set, nothing is sent, so a wipe
     /// that failed at sign-out never lets the next account push this one's records.
     private static let wipePendingKey = "sync.wipePending"
@@ -46,8 +49,14 @@ final class SyncEngine {
     /// Kept in the App Group next to the store it describes. The store moved there
     /// empty, so the cursor starts from zero with it and the first sync refills it.
     private var cursor: Int64 {
-        get { Int64(ZimamShared.defaults.integer(forKey: Self.cursorKey)) }
-        set { ZimamShared.defaults.set(Int(newValue), forKey: Self.cursorKey) }
+        get {
+            guard ZimamShared.defaults.string(forKey: Self.includesKey) == APIClient.pullIncludes else { return 0 }
+            return Int64(ZimamShared.defaults.integer(forKey: Self.cursorKey))
+        }
+        set {
+            ZimamShared.defaults.set(Int(newValue), forKey: Self.cursorKey)
+            ZimamShared.defaults.set(APIClient.pullIncludes, forKey: Self.includesKey)
+        }
     }
 
     /// Tells listeners that a local edit was saved. `Store` calls this after each commit.
@@ -155,6 +164,7 @@ final class SyncEngine {
         guard ZimamShared.defaults.bool(forKey: Self.wipePendingKey) else { return true }
         do {
             try context.delete(model: ReminderItem.self)
+            try context.delete(model: PlaceItem.self)
             try context.delete(model: TaskItem.self)
             try context.delete(model: SectionItem.self)
             try context.delete(model: ProjectItem.self)
@@ -181,10 +191,15 @@ final class SyncEngine {
         let sections = try context.fetch(FetchDescriptor<SectionItem>(predicate: #Predicate { $0.isDirty }))
         let tasks = try context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { $0.isDirty }))
         let reminders = try context.fetch(FetchDescriptor<ReminderItem>(predicate: #Predicate { $0.isDirty }))
+        let places = try context.fetch(FetchDescriptor<PlaceItem>(predicate: #Predicate { $0.isDirty }))
 
-        // Creations and edits first, parents before children; deletions last.
+        // Creations and edits first, parents before children; deletions last. Places go before
+        // the reminders that name them, which the server unlinks from a place it does not know.
         var upserts: [Outgoing] = []
         var deletes: [Outgoing] = []
+        for place in places where !place.pendingDelete {
+            upserts.append(outgoing(place, .upsert(.place(place.record))))
+        }
         for project in projects.sorted(by: { $0.kindRaw == "folder" && $1.kindRaw != "folder" }) {
             if project.pendingDelete {
                 deletes.append(outgoing(project, .delete(.project, id: project.id, updatedAt: project.updatedAt)))
@@ -211,6 +226,9 @@ final class SyncEngine {
         }
         for section in sections where section.pendingDelete {
             deletes.append(outgoing(section, .delete(.section, id: section.id, updatedAt: section.updatedAt)))
+        }
+        for place in places where place.pendingDelete {
+            deletes.append(outgoing(place, .delete(.place, id: place.id, updatedAt: place.updatedAt)))
         }
 
         let all = upserts + deletes
@@ -294,6 +312,7 @@ final class SyncEngine {
         var sections: [UUID: SectionItem] = [:]
         var tasks: [UUID: TaskItem] = [:]
         var reminders: [UUID: ReminderItem] = [:]
+        var places: [UUID: PlaceItem] = [:]
     }
 
     /// Looks up the page's records that exist here: one fetch per kind, not one per change.
@@ -319,6 +338,11 @@ final class SyncEngine {
         if !reminderIds.isEmpty {
             let found = try context.fetch(FetchDescriptor<ReminderItem>(predicate: #Predicate { reminderIds.contains($0.id) }))
             for item in found { records.reminders[item.id] = item }
+        }
+        let placeIds = ids(.place)
+        if !placeIds.isEmpty {
+            let found = try context.fetch(FetchDescriptor<PlaceItem>(predicate: #Predicate { placeIds.contains($0.id) }))
+            for item in found { records.places[item.id] = item }
         }
         return records
     }
@@ -359,6 +383,14 @@ final class SyncEngine {
                 context.insert(item)
                 records.reminders[change.id] = item
             }
+        case .place(let record)?:
+            if let local = records.places[change.id] {
+                if !keepsLocal(local, over: record.updatedAt) { local.apply(record) }
+            } else {
+                let item = PlaceItem(record, dirty: false)
+                context.insert(item)
+                records.places[change.id] = item
+            }
         case .comment?:
             break // Comments are shown from the API when a task opens; not stored yet.
         case nil:
@@ -367,6 +399,7 @@ final class SyncEngine {
             case .section: if let local = records.sections.removeValue(forKey: change.id) { context.delete(local) }
             case .task: if let local = records.tasks.removeValue(forKey: change.id) { context.delete(local) }
             case .reminder: if let local = records.reminders.removeValue(forKey: change.id) { context.delete(local) }
+            case .place: if let local = records.places.removeValue(forKey: change.id) { context.delete(local) }
             case .comment: break
             }
         }

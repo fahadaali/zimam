@@ -137,11 +137,16 @@ targets:
         ATSApplicationFontsPath: .
         # Prayer times are computed on the device. Only the opt-in «أوقات الصلاة في كلود وChatGPT»
         # (settings) keeps a city-level place (rounded to 0.1°) on the server; the text says so.
-        # Location reminders: the system watches the chosen places with when-in-use permission
-        # (UNLocationNotificationTrigger), so no «Always» string is needed. The places themselves
-        # sync with the reminder; the device's position does not. The Mac has no location triggers,
-        # so its text mentions only picking the current location as a place.
+        # Location reminders: with when-in-use the system watches the chosen places
+        # (UNLocationNotificationTrigger). «Always» lets the app watch them itself (CLMonitor in
+        # Zimam/App/PlaceMonitor.swift), woken on arriving or leaving, so a place and a time on one
+        # reminder fire once at whichever comes first. Asked only when the user adds a location
+        # reminder or saves a place, after the app explains why. Region monitoring relaunches the
+        # app without the `location` background mode. The places (saved in «أماكني» or on the
+        # reminder) sync with the account; the device's position does not. The Mac watches no
+        # places, so its text mentions only picking the current location as a place.
         NSLocationWhenInUseUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، ولتذكيرك بمهمة حين تصل إلى مكان اخترته أو تغادره. يبقى موقعك على جهازك؛ ويُحفظ في حسابك المكان الذي تختاره للتذكير، وموقع تقريبي على مستوى المدينة إن فعّلت أوقات الصلاة في كلود وChatGPT.
+        NSLocationAlwaysAndWhenInUseUsageDescription: يحتاج زمام إلى موقعك «دائماً» ليذكّرك حين تصل إلى أماكنك، مثل البيت أو العمل، أو تغادرها، والتطبيق مغلق، وليصلك التذكير المرتبط بمكان ووقت مرة واحدة عند أيهما أسبق. يراقب جهازك دخولك أماكنك وخروجك منها، ولا يُرسل موقعك ولا تحركاتك إلى زمام.
         NSLocationUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، ولتختار موقعك الحالي مكاناً لتذكير. يبقى موقعك على جهازك؛ ويُحفظ في حسابك المكان الذي تختاره للتذكير، وموقع تقريبي على مستوى المدينة إن فعّلت أوقات الصلاة في كلود وChatGPT.
         # Apple Reminders import (Zimam/Import/RemindersImporter.swift): read only when the user imports.
         NSRemindersFullAccessUsageDescription: يقرأ زمام قوائم التذكيرات التي تختارها حين تطلب استيرادها، فيضيفها مشاريع ومهام في حسابك على زمام. لا يغيّر التذكيرات ولا يحذفها، ولا يقرؤها في غير الاستيراد.

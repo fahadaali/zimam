@@ -4,7 +4,7 @@ import ZimamKit
 import UIKit
 #endif
 
-/// Calendar, prayer times, notifications and the account. Settings are saved
+/// Calendar, prayer times, saved places, notifications and the account. Settings are saved
 /// to the API (`PATCH /v1/me`) and applied at once, so dates switch calendars
 /// as soon as the choice changes.
 struct SettingsView: View {
@@ -31,6 +31,7 @@ struct SettingsView: View {
             Form {
                 calendarSection
                 prayerSection
+                placesSection
                 notificationsSection
                 subscriptionSection
                 importSection
@@ -107,6 +108,20 @@ struct SettingsView: View {
             Text(shareLocation
                  ? "تُحسب الأوقات على جهازك، ويُحفظ في خادم زمام موقع تقريبي على مستوى المدينة لتظهر الأوقات في جدولك عند كلود وChatGPT."
                  : "تُحسب الأوقات على جهازك، ولا يُرسل موقعك إلى أي خادم.")
+        }
+    }
+
+    /// «أماكني»: places the user names once and reuses for location reminders.
+    private var placesSection: some View {
+        Section {
+            NavigationLink {
+                PlacesView()
+            } label: {
+                Label("أماكني", systemImage: "mappin.and.ellipse")
+            }
+            .frame(minHeight: ZimamSpacing.space11)
+        } footer: {
+            Text("البيت والعمل وغيرهما، لتذكيرك بمهمة حين تصل إلى المكان أو تغادره.")
         }
     }
 

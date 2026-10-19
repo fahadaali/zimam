@@ -8,7 +8,8 @@ const INSTRUCTIONS = `Zimam (زمام) is an Arabic-first task manager. Talk to 
 - Dates you send are Gregorian YYYY-MM-DD in the user's local time; every task you get back also carries its Hijri (Umm al-Qura) date. Show both, Hijri first unless the user prefers Gregorian, separated by the Arabic comma «،».
 - A task can be tied to a prayer instead of a clock time: duePrayer (fajr, dhuhr, asr, maghrib, isha) plus duePrayerOffset in minutes (positive = after, negative = before). "After Asr by 20 minutes" is duePrayer=asr, duePrayerOffset=20.
 - A task can span days: startDate is its first day and dueDate its last (startDate needs a dueDate on or after it).
-- Never invent ids: look tasks and projects up with list_tasks, search_tasks or list_projects.`;
+- A reminder can be tied to one of the user's saved places («البيت», «العمل», «الاستراحة»): add_place_reminder fires on arriving at or leaving it. With a date and time too, it fires once, at whichever comes first: arriving before the time, or the time before arriving. Places are added only in the Zimam app (Settings, «أماكني»); list_places shows them.
+- Never invent ids: look tasks, projects and places up with list_tasks, search_tasks, list_projects or list_places.`;
 
 const PRAYER = z.enum(["fajr", "dhuhr", "asr", "maghrib", "isha"]);
 const DAY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
@@ -107,6 +108,18 @@ export function buildServer(backend: ZimamBackend, userId: string, canWrite: boo
     async (args) => answer(await backend.getAgenda(userId, args)),
   );
 
+  server.registerTool(
+    "list_places",
+    {
+      title: "List saved places",
+      description:
+        "The user's saved places («أماكني») by name, such as «البيت» or «العمل», for location reminders. The user adds and moves places in the Zimam app.",
+      inputSchema: {},
+      annotations: readOnly,
+    },
+    async () => answer(await backend.listPlaces(userId)),
+  );
+
   if (!canWrite) return server;
 
   const writes = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
@@ -137,6 +150,24 @@ export function buildServer(backend: ZimamBackend, userId: string, canWrite: boo
       annotations: { ...writes, idempotentHint: true },
     },
     async ({ id, ...fields }) => answer(await backend.updateTask(userId, id, fields)),
+  );
+
+  server.registerTool(
+    "add_place_reminder",
+    {
+      title: "Add place reminder",
+      description:
+        "Remind the user about a task when they arrive at or leave one of their saved places (\"remind me to buy bread when I get home\"). Add date and time to make it fire once at whichever comes first: arriving, or the time. The place must already be saved in the app; if it is not, tell the user to add it under «أماكني» in Zimam's settings.",
+      inputSchema: {
+        taskId: z.string().describe("Task id. Create the task first with create_task if needed."),
+        place: z.string().min(1).max(200).describe("A saved place's id or name from list_places."),
+        trigger: z.enum(["arrive", "leave"]).optional().describe("Default arrive."),
+        date: DAY.optional().describe("Also remind on this local day; it fires at whichever comes first."),
+        time: TIME.optional().describe("Local HH:mm with date. Default 09:00."),
+      },
+      annotations: writes,
+    },
+    async (args) => answer(await backend.addPlaceReminder(userId, args)),
   );
 
   server.registerTool(

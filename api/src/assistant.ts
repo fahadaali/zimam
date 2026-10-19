@@ -6,7 +6,8 @@ import { type AppleTokens, appleRedirectUris } from "./auth/apple-tokens";
 import { googleAudiences, verifyGoogleToken } from "./auth/google";
 import { appleAudiences, signInUser } from "./auth/users";
 import { Access } from "./data/access";
-import { addDays, dayIn, dualText, gregorianText, hijriText, weekdayText } from "./data/dates";
+import { foldForSearch } from "./data/arabic";
+import { addDays, dayIn, dualText, gregorianText, hijriText, localDateTime, weekdayText } from "./data/dates";
 import { Mutator } from "./data/mutations";
 import { prayerPhrase, prayerTimes, type PrayerTimesOfDay } from "./data/prayers";
 import { listProjects, listTasks } from "./data/queries";
@@ -54,6 +55,24 @@ export interface AssistantProject {
   view: string;
   taskCount: number;
   doneCount: number;
+}
+
+/** A saved place («أماكني»). Coordinates stay out: the assistant only names places. */
+export interface AssistantPlace {
+  id: string;
+  name: string;
+  radiusMeters: number;
+}
+
+/** A location reminder: on arriving at or leaving a saved place, or at a time, whichever comes first. */
+export interface AssistantPlaceReminder {
+  id: string;
+  taskId: string;
+  place: string;
+  trigger: "arrive" | "leave";
+  /** Also at this time; the reminder fires once, at whichever comes first. */
+  at: { date: string; time: string; hijri: string; gregorian: string } | null;
+  text: string;
 }
 
 export interface AgendaDay {
@@ -104,6 +123,20 @@ export const TaskFields = z.object({
   recurrence: z.string().max(500).nullable().optional(),
 });
 export type TaskFields = z.input<typeof TaskFields>;
+
+export const PlaceReminderRequest = z.object({
+  taskId: z.string(),
+  /** A saved place's id or name. */
+  place: z.string().trim().min(1).max(200),
+  trigger: z.enum(["arrive", "leave"]).default("arrive"),
+  /** Optional local day and time: the reminder then fires at whichever comes first. */
+  date: z.iso.date().optional(),
+  time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+    .optional(),
+});
+export type PlaceReminderRequest = z.input<typeof PlaceReminderRequest>;
 
 export const AgendaRequest = z.object({
   from: z.iso.date().optional(),
@@ -232,6 +265,77 @@ export class Assistant {
         doneCount: r.done as number,
       })),
     );
+  }
+
+  async listPlaces(userId: string): Promise<Outcome<AssistantPlace[]>> {
+    if (!(await this.activeUser(userId))) return this.gone();
+    const { results } = await this.db
+      .prepare(`SELECT id, name, radius FROM places WHERE user_id = ? AND deleted_at IS NULL ORDER BY name`)
+      .bind(userId)
+      .all<{ id: string; name: string; radius: number }>();
+    return ok(results.map((p) => ({ id: p.id, name: p.name, radiusMeters: p.radius })));
+  }
+
+  /**
+   * Reminds the user about a task on arriving at or leaving one of their saved places, and
+   * optionally at a time too, whichever comes first. Places are added in the app, where the
+   * user picks them on the map; an assistant only refers to them by id or name.
+   */
+  async addPlaceReminder(userId: string, request: PlaceReminderRequest): Promise<Outcome<AssistantPlaceReminder>> {
+    const parsed = PlaceReminderRequest.safeParse(request);
+    if (!parsed.success) return fail("invalid", issues(parsed.error));
+    const { taskId, trigger, date, time } = parsed.data;
+    if (time && !date) return fail("invalid", "time needs a date");
+    const user = await this.activeUser(userId);
+    if (!user) return this.gone();
+    const task = await this.visibleTask(userId, taskId);
+    if (!task) return fail("not_found", "Task not found");
+
+    const { results: places } = await this.db
+      .prepare(`SELECT * FROM places WHERE user_id = ? AND deleted_at IS NULL`)
+      .bind(userId)
+      .all<Row>();
+    const wanted = parsed.data.place.toLowerCase();
+    const folded = foldForSearch(parsed.data.place);
+    const place =
+      places.find((p) => p.id === wanted) ?? places.find((p) => foldForSearch(p.name as string) === folded);
+    if (!place) {
+      const names = places.map((p) => `«${p.name}»`).join("، ") || "none";
+      return fail(
+        "not_found",
+        `No saved place named «${parsed.data.place}». Saved places: ${names}. The user adds places in the Zimam app (Settings, «أماكني»).`,
+      );
+    }
+
+    const settings = userOut(user).settings;
+    const at = date ? localDateTime(date, time ?? "09:00", settings.timeZone) : null;
+    const id = crypto.randomUUID();
+    const location = {
+      latitude: place.latitude,
+      longitude: place.longitude,
+      radius: place.radius,
+      name: place.name,
+      trigger,
+      placeId: place.id,
+    };
+    const result = await new Mutator(this.db, new Access(this.db, userId)).apply({
+      op: "upsert",
+      entity: "reminder",
+      data: { id, taskId: task.id, kind: "location", location, at, updatedAt: Date.now() },
+    });
+    if (result.status !== "applied") return fail(result.status, result.message ?? result.status);
+
+    const name = place.name as string;
+    const action = trigger === "arrive" ? `عند الوصول إلى ${name}` : `عند مغادرة ${name}`;
+    const day = date ?? null;
+    return ok({
+      id,
+      taskId: task.id as string,
+      place: name,
+      trigger,
+      at: day ? { date: day, time: time ?? "09:00", hijri: hijriText(day), gregorian: gregorianText(day) } : null,
+      text: day ? `${action} أو في الوقت المحدد، أيهما أسبق` : action,
+    });
   }
 
   /** Days from `from` (today in the user's zone by default), with prayer times and the tasks due on each. */

@@ -80,7 +80,8 @@ final class LocationProvider {
 
     /// Whether location reminders can fire on this device: iPhone and iPad, with location allowed
     /// while using the app (enough for location notification triggers) and precise. The Mac has
-    /// no location notification triggers.
+    /// no location notification triggers. With «دائماً» the app watches places itself
+    /// (`canMonitorPlaces`).
     var canWatchPlaces: Bool {
         #if os(iOS)
         (authorization == .authorizedWhenInUse || authorization == .authorizedAlways) && isPrecise
@@ -89,6 +90,39 @@ final class LocationProvider {
         #endif
     }
 
+    /// Whether the app itself watches places (`PlaceMonitor`): iPhone and iPad with location
+    /// «دائماً» and precise. Then a place and a time on one reminder take each other back.
+    var canMonitorPlaces: Bool {
+        #if os(iOS)
+        authorization == .authorizedAlways && isPrecise
+        #else
+        false
+        #endif
+    }
+
+    /// Location is allowed only while using the app, and iOS may still show the one prompt that
+    /// upgrades it to «دائماً». After that prompt, only System Settings can change it.
+    var canAskForAlways: Bool {
+        #if os(iOS)
+        authorization == .notDetermined
+            || (authorization == .authorizedWhenInUse && !UserDefaults.standard.bool(forKey: Self.askedAlwaysKey))
+        #else
+        false
+        #endif
+    }
+
+    /// Allowed while using the app, but not «دائماً»: location reminders still fire, but a place
+    /// and a time on the same reminder cannot take each other back.
+    var needsAlways: Bool {
+        #if os(iOS)
+        authorization == .authorizedWhenInUse
+        #else
+        false
+        #endif
+    }
+
+    private static let askedAlwaysKey = "location.askedAlways"
+
     /// Asks for location while using the app, without reading it: the first location reminder
     /// needs it to fire. Does nothing once the user has answered.
     func requestAuthorization() {
@@ -96,6 +130,20 @@ final class LocationProvider {
         if authorization == .notDetermined {
             manager.requestWhenInUseAuthorization()
         }
+    }
+
+    /// Asks for location «دائماً», after the app has explained why (`AlwaysLocationCard`). Undecided,
+    /// iOS first offers «أثناء الاستخدام» and asks about «دائماً» later on its own; allowed while
+    /// using, it shows its one upgrade prompt. Location never leaves the device for this.
+    func requestAlwaysAuthorization() {
+        #if os(iOS)
+        authorization = manager.authorizationStatus
+        guard canAskForAlways else { return }
+        if authorization == .authorizedWhenInUse {
+            UserDefaults.standard.set(true, forKey: Self.askedAlwaysKey)
+        }
+        manager.requestAlwaysAuthorization()
+        #endif
     }
 
     /// Prayer times for the saved place, or nil before the first location.

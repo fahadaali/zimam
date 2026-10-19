@@ -121,3 +121,50 @@ describe("Assistant (MCP backend)", () => {
     expect(await assistant.listTasks(userId, {})).toMatchObject({ ok: false, error: { code: "unauthorized" } });
   });
 });
+
+describe("Assistant places (MCP backend)", () => {
+  it("lists saved places by name and adds reminders at them, alone or with a time", async () => {
+    const { userId, token } = await signIn();
+    const other = await signIn();
+    const home = uuid();
+    const theirs = uuid();
+    const place = (id: string, name: string) => ({
+      op: "upsert",
+      entity: "place",
+      data: { id, name, latitude: 24.7136, longitude: 46.6753, radius: 250, updatedAt: 1000 },
+    });
+    await call("POST", "/v1/sync", { token, body: { mutations: [place(home, "البيت")] } });
+    await call("POST", "/v1/sync", { token: other.token, body: { mutations: [place(theirs, "الاستراحة")] } });
+
+    expect(value(await assistant.listPlaces(userId))).toEqual([{ id: home, name: "البيت", radiusMeters: 250 }]);
+
+    const task = value(await assistant.createTask(userId, { title: "شراء الخبز" }));
+    // Found by name, ignoring alef forms and diacritics.
+    const alone = value(await assistant.addPlaceReminder(userId, { taskId: task.id, place: "البَيت" }));
+    expect(alone).toMatchObject({ taskId: task.id, place: "البيت", trigger: "arrive", at: null, text: "عند الوصول إلى البيت" });
+
+    const timed = value(
+      await assistant.addPlaceReminder(userId, { taskId: task.id, place: home, trigger: "leave", date: "2026-10-13", time: "17:00" }),
+    );
+    expect(timed).toMatchObject({
+      at: { date: "2026-10-13", time: "17:00", hijri: "٢ جمادى الأولى ١٤٤٨" },
+      text: "عند مغادرة البيت أو في الوقت المحدد، أيهما أسبق",
+    });
+
+    const pulled = await call("GET", "/v1/sync?cursor=0", { token });
+    const reminder = pulled.body.changes.find((c: { id: string }) => c.id === timed.id).data;
+    expect(reminder).toMatchObject({
+      kind: "location",
+      at: "2026-10-13T17:00:00+03:00",
+      firedAt: null,
+      location: { latitude: 24.7136, longitude: 46.6753, radius: 250, name: "البيت", trigger: "leave", placeId: home },
+    });
+
+    const missing = await assistant.addPlaceReminder(userId, { taskId: task.id, place: "الاستراحة" });
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.error.message).toContain("«البيت»");
+    expect((await assistant.addPlaceReminder(userId, { taskId: task.id, place: theirs })).ok).toBe(false);
+    expect((await assistant.addPlaceReminder(userId, { taskId: uuid(), place: home })).ok).toBe(false);
+    expect((await assistant.addPlaceReminder(userId, { taskId: task.id, place: home, time: "17:00" })).ok).toBe(false);
+  });
+});

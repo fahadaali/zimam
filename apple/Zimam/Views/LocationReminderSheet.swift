@@ -1,45 +1,55 @@
 import CoreLocation
 import MapKit
+import SwiftData
 import SwiftUI
 import ZimamKit
 
-/// «تذكير بالموقع»: the user finds a place with Apple Maps search (names come in Arabic, the
-/// app's only localization) or takes the current location, names it, sets how far around it
-/// counts (١٠٠ م to ١ كم) and whether to remind on arriving or on leaving. Nothing is saved
-/// until «إضافة». The place syncs with the reminder; the device watches it (`NotificationScheduler`).
+/// «تذكير بالموقع». A saved place from «أماكني» takes one tap, as in Apple's Reminders; or the
+/// user finds a new one with Apple Maps search (names come in Arabic, the app's only localization)
+/// or the current location, names it, sets how far around it counts (١٠٠ م to ١ كم) and keeps it
+/// in «أماكني» for next time. Then arriving or leaving, and optionally a time: the reminder then
+/// fires once, at whichever comes first. Nothing is saved until «إضافة». The place syncs with
+/// the reminder; the device watches it (`NotificationScheduler`, `PlaceMonitor`).
 struct LocationReminderSheet: View {
-    let onAdd: (ReminderRecord.Location) -> Void
+    /// The place copied into the reminder, and the time that competes with it.
+    let onAdd: (ReminderRecord.Location, Date?) -> Void
 
-    enum SearchPhase: Equatable { case idle, searching, empty, failed }
+    /// Where the place comes from: one tap on a saved place, or a new one from the search.
+    enum Source: Equatable {
+        case saved(UUID)
+        case new(PlaceOption)
+    }
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dateFormatterZimam) private var formatter
-    @Environment(LocationProvider.self) private var location
+    @Environment(\.modelContext) private var context
+    @Environment(SyncEngine.self) private var sync
+    @Query(filter: #Predicate<PlaceItem> { !$0.pendingDelete }, sort: \PlaceItem.name) private var saved: [PlaceItem]
 
-    @State private var reader = CurrentPlaceReader()
-    @State private var query = ""
-    @State private var results: [PlaceOption] = []
-    @State private var phase: SearchPhase = .idle
-    @State private var place: PlaceOption?
+    @State private var source: Source?
     @State private var name = ""
+    @State private var keep = true
     @State private var radius = LocationReminderPlanner.defaultRadius
     @State private var trigger: ReminderRecord.Location.Trigger = .arrive
+    @State private var hasTime = false
+    @State private var time = Date().addingTimeInterval(3600)
 
-    /// How far around the user's area the search looks first.
-    private static let searchSpanMeters: CLLocationDistance = 50_000
-    private static let maxResults = 8
-
-    init(onAdd: @escaping (ReminderRecord.Location) -> Void) {
+    init(onAdd: @escaping (ReminderRecord.Location, Date?) -> Void) {
         self.onAdd = onAdd
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                searchSection
-                if let place {
-                    chosenSection(place)
+                AlwaysLocationSection()
+                if !saved.isEmpty { savedSection }
+                PlaceSearchSection(title: saved.isEmpty ? "المكان" : "مكان جديد", selection: newOption) { choose($0) }
+                if let option = newOption {
+                    newPlaceSection(option)
+                }
+                if source != nil {
                     triggerSection
+                    timeSection
                 }
             }
             .scrollContentBackground(.hidden)
@@ -54,27 +64,186 @@ struct LocationReminderSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("إضافة", action: add)
-                        .disabled(place == nil)
+                        .disabled(!canAdd)
                 }
             }
-            .task(id: query) { await search(query) }
-            .onAppear {
-                reader.onPlace = { latitude, longitude in
-                    choose(PlaceOption(name: "موقعي الحالي", detail: nil, latitude: latitude, longitude: longitude,
-                                       isCurrentLocation: true))
-                }
-            }
-            // The closure holds this view, whose state holds the reader: let go on close.
-            .onDisappear { reader.onPlace = nil }
         }
         #if os(macOS)
         .frame(minWidth: ZimamSpacing.space8 * 14, minHeight: ZimamSpacing.space8 * 18)
         #endif
     }
 
-    // MARK: Finding the place
+    // MARK: Saved places
 
-    private var searchSection: some View {
+    private var savedSection: some View {
+        Section {
+            ScrollView(.horizontal) {
+                HStack(spacing: ZimamSpacing.space2) {
+                    ForEach(saved) { place in
+                        Button {
+                            source = .saved(place.id)
+                        } label: {
+                            PlaceChip(name: place.name, isSelected: source == .saved(place.id))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(place.name)
+                    }
+                }
+                .padding(.vertical, ZimamSpacing.space1)
+            }
+            .scrollIndicators(.hidden)
+        } header: {
+            Text("أماكني")
+        }
+    }
+
+    private var chosenSaved: PlaceItem? {
+        guard case .saved(let id) = source else { return nil }
+        return saved.first { $0.id == id }
+    }
+
+    private var newOption: PlaceOption? {
+        guard case .new(let option) = source else { return nil }
+        return option
+    }
+
+    // MARK: A new place
+
+    private func newPlaceSection(_ option: PlaceOption) -> some View {
+        Section {
+            TextField("اسم المكان، مثل البيت أو العمل", text: $name)
+            Toggle("حفظ في أماكني", isOn: $keep)
+                .frame(minHeight: ZimamSpacing.space11)
+            PlacePreview(place: option, radius: radius)
+            RadiusSlider(radius: $radius)
+        } header: {
+            Text("المكان المختار")
+        } footer: {
+            Text(newPlaceFooter)
+        }
+    }
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// A saved place already has this name (ignoring diacritics and letter forms).
+    private var nameTaken: Bool {
+        PlaceNames.isTaken(trimmedName, among: saved.map(\.name))
+    }
+
+    private var newPlaceFooter: String {
+        if keep && trimmedName.isEmpty { return "اكتب اسماً ليُحفظ في أماكنك، أو أطفئ الحفظ." }
+        if keep && nameTaken { return "في أماكنك مكان بهذا الاسم. اختره من الأعلى، أو اختر اسماً آخر." }
+        return "يظهر الاسم في التذكير: «\(LocationReminderPlanner.body(placeName: name, trigger: trigger, taskTitle: "المهمة"))»."
+    }
+
+    // MARK: Arriving or leaving, and the time
+
+    private var triggerSection: some View {
+        Section {
+            Picker("التذكير", selection: $trigger) {
+                Text(LocationReminderPlanner.triggerText(.arrive)).tag(ReminderRecord.Location.Trigger.arrive)
+                Text(LocationReminderPlanner.triggerText(.leave)).tag(ReminderRecord.Location.Trigger.leave)
+            }
+            .pickerStyle(.segmented)
+            .frame(minHeight: ZimamSpacing.space11)
+        } footer: {
+            #if os(iOS)
+            if !hasTime {
+                Text("يصلك التذكير كلما وصلت أو غادرت حتى تنجز المهمة.")
+            }
+            #else
+            Text("تذكيرات الموقع تصل على الآيفون والآيباد، ولا تعمل على الماك.")
+            #endif
+        }
+    }
+
+    private var timeSection: some View {
+        Section {
+            Toggle("أو في وقت محدد", isOn: $hasTime)
+                .frame(minHeight: ZimamSpacing.space11)
+            if hasTime {
+                DatePicker("الوقت", selection: $time, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                Text(formatter.dual(time, withYear: true))
+                    .font(ZimamType.caption)
+                    .foregroundStyle(ZimamColor.inkMuted)
+            }
+        } footer: {
+            if hasTime {
+                Text("يصلك مرة واحدة: عند \(trigger == .arrive ? "الوصول" : "المغادرة") أو في الوقت، أيهما أسبق.")
+            }
+        }
+    }
+
+    // MARK: Actions
+
+    private var canAdd: Bool {
+        switch source {
+        case nil: false
+        case .saved: chosenSaved != nil
+        case .new: !keep || (!trimmedName.isEmpty && !nameTaken)
+        }
+    }
+
+    private func choose(_ option: PlaceOption) {
+        // Keeps a name the user typed; replaces the previous place's own name.
+        let previousName = newOption.map { $0.isCurrentLocation ? "" : $0.name } ?? ""
+        if trimmedName.isEmpty || trimmedName == previousName {
+            name = option.isCurrentLocation ? "" : option.name
+        }
+        source = .new(option)
+    }
+
+    private func add() {
+        let place: ReminderRecord.Location
+        switch source {
+        case .saved?:
+            guard let chosen = chosenSaved else { return }
+            place = ReminderRecord.Location(place: chosen.record, trigger: trigger)
+        case .new(let option)?:
+            if keep {
+                let item = Store(context: context, sync: sync)
+                    .addPlace(name: trimmedName, latitude: option.latitude, longitude: option.longitude, radius: radius)
+                place = ReminderRecord.Location(place: item.record, trigger: trigger)
+            } else {
+                place = ReminderRecord.Location(
+                    latitude: option.latitude,
+                    longitude: option.longitude,
+                    radius: min(max(radius, LocationReminderPlanner.serverRadiusRange.lowerBound),
+                                LocationReminderPlanner.serverRadiusRange.upperBound),
+                    name: trimmedName.isEmpty ? nil : String(trimmedName.prefix(200)),
+                    trigger: trigger
+                )
+            }
+        case nil:
+            return
+        }
+        onAdd(place, hasTime ? time : nil)
+        dismiss()
+    }
+}
+
+// MARK: Finding a place
+
+/// Apple Maps search near the user's area, and «استعمال موقعي الحالي». Shared by the reminder
+/// sheet and «أماكني».
+struct PlaceSearchSection: View {
+    let title: String
+    let selection: PlaceOption?
+    let onChoose: (PlaceOption) -> Void
+
+    enum SearchPhase: Equatable { case idle, searching, empty, failed }
+
+    @Environment(LocationProvider.self) private var location
+    @State private var reader = CurrentPlaceReader()
+    @State private var query = ""
+    @State private var results: [PlaceOption] = []
+    @State private var phase: SearchPhase = .idle
+
+    /// How far around the user's area the search looks first.
+    private static let searchSpanMeters: CLLocationDistance = 50_000
+    private static let maxResults = 8
+
+    var body: some View {
         Section {
             TextField("ابحث عن مكان أو عنوان", text: $query)
                 .autocorrectionDisabled()
@@ -116,95 +285,23 @@ struct LocationReminderSheet: View {
             }
 
             ForEach(results) { option in
-                Button { choose(option) } label: {
-                    PlaceOptionRow(option: option, isSelected: option == place)
+                Button { onChoose(option) } label: {
+                    PlaceOptionRow(option: option, isSelected: option == selection)
                 }
                 .buttonStyle(.plain)
             }
         } header: {
-            Text("المكان")
+            Text(title)
         }
-    }
-
-    // MARK: The chosen place
-
-    private func chosenSection(_ place: PlaceOption) -> some View {
-        Section {
-            TextField("اسم المكان، مثل البيت أو المكتب", text: $name)
-            PlacePreview(place: place, radius: radius)
-        } header: {
-            Text("المكان المختار")
-        } footer: {
-            Text("يظهر الاسم في التذكير: «\(LocationReminderPlanner.body(placeName: name, trigger: trigger, taskTitle: "المهمة"))».")
-        }
-    }
-
-    private var triggerSection: some View {
-        Section {
-            Picker("التذكير", selection: $trigger) {
-                Text(LocationReminderPlanner.triggerText(.arrive)).tag(ReminderRecord.Location.Trigger.arrive)
-                Text(LocationReminderPlanner.triggerText(.leave)).tag(ReminderRecord.Location.Trigger.leave)
+        .task(id: query) { await search(query) }
+        .onAppear {
+            reader.onPlace = { latitude, longitude in
+                onChoose(PlaceOption(name: "موقعي الحالي", detail: nil, latitude: latitude, longitude: longitude,
+                                     isCurrentLocation: true))
             }
-            VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
-                HStack(spacing: ZimamSpacing.space2) {
-                    Text("نطاق المكان")
-                    Spacer(minLength: ZimamSpacing.space2)
-                    Text(radiusText(radius))
-                        .foregroundStyle(ZimamColor.inkMuted)
-                }
-                Slider(value: $radius, in: LocationReminderPlanner.radiusRange, step: LocationReminderPlanner.radiusStep) {
-                    Text("نطاق المكان")
-                } minimumValueLabel: {
-                    Text(radiusText(LocationReminderPlanner.radiusRange.lowerBound))
-                        .font(ZimamType.caption)
-                        .foregroundStyle(ZimamColor.inkMuted)
-                } maximumValueLabel: {
-                    Text(radiusText(LocationReminderPlanner.radiusRange.upperBound))
-                        .font(ZimamType.caption)
-                        .foregroundStyle(ZimamColor.inkMuted)
-                }
-                .frame(minHeight: ZimamSpacing.space11)
-                .accessibilityValue(radiusText(radius))
-            }
-            .padding(.vertical, ZimamSpacing.space1)
-        } footer: {
-            #if os(iOS)
-            Text("يصلك التذكير كلما دخلت النطاق أو خرجت منه حتى تنجز المهمة. النطاق الأوسع أدق في الأماكن الكبيرة.")
-            #else
-            Text("تذكيرات الموقع تصل على الآيفون والآيباد، ولا تعمل على الماك.")
-            #endif
         }
-    }
-
-    private func radiusText(_ meters: Double) -> String {
-        LocationReminderPlanner.radiusText(meters, locale: formatter.locale)
-    }
-
-    // MARK: Actions
-
-    private func choose(_ option: PlaceOption) {
-        // Keeps a name the user typed; replaces the previous place's own name.
-        let previousName = place.map { $0.isCurrentLocation ? "" : $0.name } ?? ""
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty || trimmed == previousName {
-            name = option.isCurrentLocation ? "" : option.name
-        }
-        place = option
-    }
-
-    private func add() {
-        guard let place else { return }
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let saved = ReminderRecord.Location(
-            latitude: place.latitude,
-            longitude: place.longitude,
-            radius: min(max(radius, LocationReminderPlanner.serverRadiusRange.lowerBound),
-                        LocationReminderPlanner.serverRadiusRange.upperBound),
-            name: trimmed.isEmpty ? nil : String(trimmed.prefix(200)),
-            trigger: trigger
-        )
-        onAdd(saved)
-        dismiss()
+        // The closure holds this view, whose state holds the reader: let go on close.
+        .onDisappear { reader.onPlace = nil }
     }
 
     /// Searches Apple Maps a moment after the user stops typing, near their area when known.
@@ -242,6 +339,56 @@ struct LocationReminderSheet: View {
     }
 }
 
+/// How far around a place counts as being there, ١٠٠ م to ١ كم. The circle on the map above it
+/// follows the slider as it moves.
+struct RadiusSlider: View {
+    @Binding var radius: Double
+
+    @Environment(\.dateFormatterZimam) private var formatter
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
+            HStack(spacing: ZimamSpacing.space2) {
+                Text("نطاق المكان")
+                Spacer(minLength: ZimamSpacing.space2)
+                Text(text(radius))
+                    .foregroundStyle(ZimamColor.inkMuted)
+            }
+            Slider(value: $radius, in: LocationReminderPlanner.radiusRange, step: LocationReminderPlanner.radiusStep) {
+                Text("نطاق المكان")
+            } minimumValueLabel: {
+                Text(text(LocationReminderPlanner.radiusRange.lowerBound))
+                    .font(ZimamType.caption)
+                    .foregroundStyle(ZimamColor.inkMuted)
+            } maximumValueLabel: {
+                Text(text(LocationReminderPlanner.radiusRange.upperBound))
+                    .font(ZimamType.caption)
+                    .foregroundStyle(ZimamColor.inkMuted)
+            }
+            .frame(minHeight: ZimamSpacing.space11)
+            .accessibilityValue(text(radius))
+        }
+        .padding(.vertical, ZimamSpacing.space1)
+    }
+
+    private func text(_ meters: Double) -> String {
+        LocationReminderPlanner.radiusText(meters, locale: formatter.locale)
+    }
+}
+
+/// Saved place names compare as the search does: «البيت» and «البَيت» are the same place.
+enum PlaceNames {
+    static func isTaken(_ name: String, among names: [String], except current: String? = nil) -> Bool {
+        let key = fold(name)
+        guard !key.isEmpty else { return false }
+        return names.contains { fold($0) == key && $0 != current }
+    }
+
+    private static func fold(_ name: String) -> String {
+        ArabicSearch.fold(name.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+}
+
 // MARK: Place rows
 
 /// A place from the search, or the current location.
@@ -275,7 +422,7 @@ struct PlaceOption: Identifiable, Equatable {
     }
 }
 
-private struct PlaceOptionRow: View {
+struct PlaceOptionRow: View {
     let option: PlaceOption
     let isSelected: Bool
 
@@ -306,7 +453,7 @@ private struct PlaceOptionRow: View {
 }
 
 /// The place and its circle on a still map, so the radius reads at a glance.
-private struct PlacePreview: View {
+struct PlacePreview: View {
     let place: PlaceOption
     let radius: Double
 

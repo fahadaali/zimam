@@ -49,7 +49,21 @@ const ModelSuggestion = TaskFields.pick({
     .nullable()
     .optional(),
   projectId: z.string().nullable().optional(),
+  place: z
+    .object({ placeId: z.string().nullable().optional(), name: z.string(), trigger: z.enum(["arrive", "leave"]) })
+    .nullable()
+    .optional(),
 });
+
+/**
+ * A place the note ties the reminder to. `placeId` is one of the user's saved places, with its
+ * saved name; without it the user named a place they have not saved, and the app says so.
+ */
+export interface PlaceSuggestion {
+  placeId?: string;
+  name: string;
+  trigger: "arrive" | "leave";
+}
 
 export interface TaskSuggestion {
   title: string;
@@ -61,10 +75,16 @@ export interface TaskSuggestion {
   priority: "none" | "low" | "medium" | "high";
   tags: string[];
   projectId?: string;
+  place?: PlaceSuggestion;
 }
 
 /** Null when the model's answer does not hold a usable task. */
-export function validateSuggestion(json: unknown, today: string, projectIds: Set<string>): TaskSuggestion | null {
+export function validateSuggestion(
+  json: unknown,
+  today: string,
+  projectIds: Set<string>,
+  places: ReadonlyMap<string, string> = new Map(),
+): TaskSuggestion | null {
   const parsed = ModelSuggestion.safeParse(json);
   if (!parsed.success) return null;
   const m = parsed.data;
@@ -98,6 +118,17 @@ export function validateSuggestion(json: unknown, today: string, projectIds: Set
 
   const projectId = m.projectId?.trim().toLowerCase();
   if (projectId && projectIds.has(projectId)) suggestion.projectId = projectId;
+
+  if (m.place) {
+    const placeId = m.place.placeId?.trim().toLowerCase();
+    const saved = placeId ? places.get(placeId) : undefined;
+    if (placeId && saved !== undefined) {
+      suggestion.place = { placeId, name: saved, trigger: m.place.trigger };
+    } else {
+      const name = cleanTitle(m.place.name);
+      if (name && name.length <= 200) suggestion.place = { name, trigger: m.place.trigger };
+    }
+  }
   return suggestion;
 }
 

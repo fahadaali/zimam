@@ -101,6 +101,12 @@ assistant.post("/parse", async (c) => {
     .filter((p) => p.kind === "project" && p.archived_at == null && (p.role === "owner" || p.role === "editor"))
     .map((p) => ({ id: p.id as string, name: p.name as string }));
   const projectIds = new Set(projects.map((p) => p.id));
+  const { results: places } = await c.env.DB.prepare(
+    `SELECT id, name FROM places WHERE user_id = ? AND deleted_at IS NULL ORDER BY name LIMIT 100`,
+  )
+    .bind(c.var.userId)
+    .all<{ id: string; name: string }>();
+  const placeNames = new Map(places.map((p) => [p.id, p.name]));
 
   const request = parseRequest({
     text: body.data.text,
@@ -108,8 +114,9 @@ assistant.post("/parse", async (c) => {
     localTime: timeIn(settings.timeZone, now),
     timeZone: settings.timeZone,
     projects,
+    places,
   });
-  const result = await runAi(c, request, (json) => validateSuggestion(json, today, projectIds));
+  const result = await runAi(c, request, (json) => validateSuggestion(json, today, projectIds, placeNames));
   return result.ok ? c.json(result.value) : result.response;
 });
 

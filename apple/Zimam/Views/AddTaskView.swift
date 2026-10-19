@@ -21,6 +21,7 @@ struct AddTaskView: View {
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
     @Environment(SessionStore.self) private var session
+    @Environment(LocationProvider.self) private var location
     @Environment(\.dateFormatterZimam) private var formatter
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete && $0.kindRaw == "project" }, sort: [SortDescriptor(\ProjectItem.sortOrder)])
@@ -45,6 +46,8 @@ struct AddTaskView: View {
     @State private var notes = ""
     @State private var tagsText = ""
     @State private var dueTime: String?
+    /// The assistant's place («إذا وصلت البيت»), added as a reminder with the task.
+    @State private var suggestedPlace: TaskSuggestion.PlaceSuggestion?
     @State private var dictation = SpeechDictation()
     /// What was typed before dictation started; the dictated words follow it.
     @State private var dictationPrefix = ""
@@ -271,7 +274,7 @@ struct AddTaskView: View {
     /// Adds the suggestion as it is. A project not on this device yet is left out.
     private func accept(_ suggestion: TaskSuggestion) {
         let knownProject = suggestion.projectId.flatMap { id in projects.contains(where: { $0.id == id }) ? id : nil }
-        Store(context: context, sync: sync).addTask(
+        let task = Store(context: context, sync: sync).addTask(
             title: suggestion.title,
             projectId: knownProject ?? projectId,
             dueDate: suggestion.dueDate,
@@ -282,7 +285,27 @@ struct AddTaskView: View {
             dueTime: suggestion.dueTime,
             tags: suggestion.tags
         )
+        if let place = suggestion.place {
+            let at = SpokenTask(suggestion: suggestion)
+                .placeReminderAt(today: formatter.dayString(from: Date()), timeZone: formatter.timeZone)
+                .flatMap(ReminderPlanner.date(fromISO:))
+            addSuggestedPlace(place, to: task, at: at)
+        }
         dismiss()
+    }
+
+    /// The sentence's saved place as a reminder on the new task; a place not on this device
+    /// (not saved, or not pulled yet) is left out, as the card said.
+    private func addSuggestedPlace(_ suggested: TaskSuggestion.PlaceSuggestion, to task: TaskItem, at: Date?) {
+        guard let id = suggested.placeId else { return }
+        var descriptor = FetchDescriptor<PlaceItem>(predicate: #Predicate { $0.id == id && !$0.pendingDelete })
+        descriptor.fetchLimit = 1
+        guard let place = try? context.fetch(descriptor).first else { return }
+        let copy = ReminderRecord.Location(place: place.record, trigger: suggested.trigger)
+        Store(context: context, sync: sync).addLocationReminder(to: task.id, place: copy, at: at)
+        #if os(iOS)
+        location.requestAuthorization()
+        #endif
     }
 
     /// Puts the suggestion in the form to change before adding.
@@ -319,6 +342,7 @@ struct AddTaskView: View {
         if let id = suggestion.projectId, projects.contains(where: { $0.id == id }) {
             projectId = id
         }
+        suggestedPlace = suggestion.place
         withAnimation(.zimam(reduceMotion: reduceMotion)) { assistant = .idle }
     }
 
@@ -350,7 +374,7 @@ struct AddTaskView: View {
     private func add() {
         guard !trimmedTitle.isEmpty else { return }
         let day = dueDay
-        Store(context: context, sync: sync).addTask(
+        let task = Store(context: context, sync: sync).addTask(
             title: trimmedTitle,
             projectId: projectId,
             dueDate: day.map { formatter.dayString(from: $0) },
@@ -362,6 +386,22 @@ struct AddTaskView: View {
             tags: fromAssistant ? parsedTags : [],
             startDate: hasStart && day != nil ? formatter.dayString(from: startDate) : nil
         )
+        if fromAssistant, let suggestedPlace {
+            // The form's day and the assistant's time, when both are still set.
+            let at = day.flatMap { day in
+                dueTime.flatMap { clockDate($0, on: day) }
+            }
+            addSuggestedPlace(suggestedPlace, to: task, at: at)
+        }
         dismiss()
+    }
+
+    /// "17:00" on `day`, in the user's zone.
+    private func clockDate(_ hhmm: String, on day: Date) -> Date? {
+        let parts = hhmm.split(separator: ":").compactMap { Int($0) }
+        guard parts.count >= 2 else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = formatter.timeZone
+        return calendar.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: day).flatMap { $0 > Date() ? $0 : nil }
     }
 }

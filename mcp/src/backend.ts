@@ -51,6 +51,31 @@ export interface Agenda {
   }[];
 }
 
+/** A saved place («أماكني»); coordinates stay in the app. */
+export interface AssistantPlace {
+  id: string;
+  name: string;
+  radiusMeters: number;
+}
+
+export interface PlaceReminderRequest {
+  taskId: string;
+  /** A saved place's id or name. */
+  place: string;
+  trigger?: "arrive" | "leave";
+  date?: string;
+  time?: string;
+}
+
+export interface AssistantPlaceReminder {
+  id: string;
+  taskId: string;
+  place: string;
+  trigger: "arrive" | "leave";
+  at: { date: string; time: string; hijri: string; gregorian: string } | null;
+  text: string;
+}
+
 export interface TaskFilter {
   projectId?: string;
   status?: "open" | "done" | "all";
@@ -95,4 +120,6 @@ export interface ZimamBackend {
   completeTask(userId: string, id: string): Promise<Outcome<AssistantTask>>;
   listProjects(userId: string): Promise<Outcome<AssistantProject[]>>;
   getAgenda(userId: string, request: { from?: string; days?: number }): Promise<Outcome<Agenda>>;
+  listPlaces(userId: string): Promise<Outcome<AssistantPlace[]>>;
+  addPlaceReminder(userId: string, request: PlaceReminderRequest): Promise<Outcome<AssistantPlaceReminder>>;
 }

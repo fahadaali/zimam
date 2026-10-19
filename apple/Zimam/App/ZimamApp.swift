@@ -24,8 +24,13 @@ struct ZimamApp: App {
         let session = SessionStore()
         let sync = SyncEngine(api: session.api, context: container.mainContext)
         let location = LocationProvider()
+        // Listens at launch, so a place crossing that woke the app in the background is delivered.
+        let places = PlaceMonitor(context: container.mainContext, sync: sync)
+        // Not while hosting the unit tests: they must not watch the device's places.
+        if !ZimamStore.isTestHost { places.start() }
         // Created at launch so the notification delegate is set before any action arrives.
-        let notifications = NotificationScheduler(context: container.mainContext, sync: sync, session: session, location: location)
+        let notifications = NotificationScheduler(context: container.mainContext, sync: sync, session: session,
+                                                  location: location, places: places)
         // Weak where the closure's owner is reachable from what it captures (the scheduler holds
         // the engine, the provider is its own owner): those would be reference cycles.
         sync.onDataChanged = { [weak notifications] in
@@ -37,6 +42,8 @@ struct ZimamApp: App {
             #endif
             // Open tasks in Spotlight, for system search, Siri and Apple Intelligence.
             TaskSpotlight.shared.scheduleUpdate()
+            // Saved places in Siri's phrases («ذكرني في زمام إذا وصلت البيت»).
+            ZimamShortcuts.updateAppShortcutParameters()
         }
         location.onChange = { [weak notifications, session, weak location] in
             notifications?.reschedule()

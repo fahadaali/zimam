@@ -127,9 +127,14 @@ public final class APIClient: Sendable {
         try await send("GET", "v1/sync", query: Self.pullQuery(cursor: cursor, limit: limit))
     }
 
+    /// What this app asks the server for beyond what every app decodes: the "timeline" project
+    /// view and saved places. A pull without them moves past their records, so when this list
+    /// grows the app pulls once from the start (`SyncEngine`).
+    public static let pullIncludes = "timeline,place"
+
     static func pullQuery(cursor: Int64, limit: Int) -> [URLQueryItem] {
         [URLQueryItem(name: "cursor", value: String(cursor)), URLQueryItem(name: "limit", value: String(limit)),
-         URLQueryItem(name: "include", value: "timeline")]
+         URLQueryItem(name: "include", value: pullIncludes)]
     }
 
     /// Sends up to `maxPushBatch` edits; each comes back with its own result, in order.

@@ -12,8 +12,9 @@ export const sync = new Hono<AppEnv>();
 
 /**
  * GET /v1/sync?cursor=0&limit=500 — changes since the cursor, oldest first.
- * `include=attachment` adds attachment metadata, which older apps cannot decode, and
- * `include=timeline` sends a project's "timeline" view as it is rather than "list".
+ * `include=attachment` adds attachment metadata and `include=place` saved places, which older
+ * apps cannot decode, and `include=timeline` sends a project's "timeline" view as it is rather
+ * than "list".
  */
 sync.get("/", async (c) => {
   const query = z
