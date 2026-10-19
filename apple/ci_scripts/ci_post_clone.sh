@@ -4,8 +4,8 @@
 # apple/project.yml and is not in the repository, so this script:
 #   1. downloads a pinned XcodeGen release and checks its SHA-256,
 #   2. generates Zimam.xcodeproj (with its shared «Zimam» scheme) in apple/,
-#   3. gives the project a Package.resolved: Xcode Cloud builds with automatic package
-#      resolution turned off, and fails without one.
+#   3. gives the project the committed apple/Package.resolved: Xcode Cloud builds with
+#      package resolution turned off, and fails without one.
 # Steps and troubleshooting: docs/release.md.
 set -euo pipefail
 
@@ -43,14 +43,15 @@ if [[ ! -f "${SCHEME}" ]]; then
 fi
 
 RESOLVED_DIR="Zimam.xcodeproj/project.xcworkspace/xcshareddata/swiftpm"
-if [[ -f "Package.resolved" ]]; then
-  # The pinned package versions, committed in apple/ (docs/release.md).
-  mkdir -p "${RESOLVED_DIR}"
-  cp "Package.resolved" "${RESOLVED_DIR}/Package.resolved"
-  echo "Zimam: using the committed apple/Package.resolved"
-else
-  echo "warning: apple/Package.resolved is not committed; resolving packages to the newest allowed versions." >&2
-  xcodebuild -resolvePackageDependencies -project Zimam.xcodeproj -scheme Zimam
+if [[ ! -f "Package.resolved" ]]; then
+  # Xcode Cloud turns off package resolution for every xcodebuild, -resolvePackageDependencies
+  # included, so there is no fallback: the pinned versions must be in the repository.
+  echo "error: apple/Package.resolved is not committed; Xcode Cloud cannot resolve packages without it (docs/release.md)." >&2
+  exit 1
 fi
+# The pinned package versions, committed in apple/ (docs/release.md).
+mkdir -p "${RESOLVED_DIR}"
+cp "Package.resolved" "${RESOLVED_DIR}/Package.resolved"
+echo "Zimam: using the committed apple/Package.resolved"
 
 echo "Zimam: project ready"

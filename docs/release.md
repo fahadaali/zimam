@@ -18,7 +18,7 @@
 1. ينسخ Xcode Cloud المستودع، ثم يشغّل `ci_post_clone.sh`.
 2. ينزّل السكربت XcodeGen ‏2.46.0 من صفحة إصداراته في GitHub، ويرفض تشغيله إن لم تطابق بصمته SHA-256 المكتوبة فيه. اخترنا هذا بدل `brew install xcodegen` لأن Homebrew يثبّت أحدث إصدار، فيتغيّر المشروع المولَّد دون أن يتغيّر شيء في المستودع.
 3. يولّد `Zimam.xcodeproj` ومعه المخطط المشترك «Zimam» (يتطلب Xcode Cloud أن يكون المخطط مشتركاً، وXcodeGen يضعه في `xcshareddata`).
-4. يبني Xcode Cloud والحزم لا تُحلّ تلقائياً، فيلزمه `Package.resolved`. إن كان `apple/Package.resolved` في المستودع نسخه السكربت إلى المشروع، وإلا حلّ الحزم بأحدث ما يسمح به `project.yml` مع تحذير في السجل.
+4. يبني Xcode Cloud وحلّ الحزم معطّل في كل أوامر `xcodebuild`، حتى `-resolvePackageDependencies`، فيلزمه `Package.resolved`. ينسخ السكربت `apple/Package.resolved` إلى المشروع، ويتوقف بخطأ صريح إن لم يجده في المستودع.
 5. قبل كل بناء يضع `ci_pre_xcodebuild.sh` رقم البناء في المشروع.
 
 لتحديث XcodeGen: غيّر `XCODEGEN_VERSION` و`XCODEGEN_SHA256` معاً في `ci_post_clone.sh`. البصمة من `shasum -a 256 xcodegen.zip` بعد تنزيل الملف من صفحة الإصدار.
@@ -42,7 +42,7 @@
 | SKU | `zimam` (معرّف داخلي لا يظهر للناس) |
 | User Access | Full Access |
 
-3. **تثبيت إصدارات الحزم (مستحسن):** على الماك:
+3. **تثبيت إصدارات الحزم (إلزامي):** على الماك:
 
 ```sh
 cd apple
@@ -59,7 +59,16 @@ cp Zimam.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved Pac
 
 1. افتح المشروع المولَّد على الماك (`cd apple && xcodegen && open Zimam.xcodeproj`)، وتأكد أن حساب المطوّر مضاف في **Xcode ← Settings ← Accounts**.
 2. **Product ← Xcode Cloud ← Create Workflow**، واختر المنتج **Zimam**، ثم **Next**.
-3. يطلب Xcode ربط المستودع: **Grant Access** يفتح App Store Connect، فثبّت تطبيق Xcode Cloud على GitHub واسمح له بالمستودع `fahadaali/zimam` وحده. الحزمتان (GoogleSignIn-iOS وadhan-swift) عامتان فلا تحتاجان إذناً.
+3. يطلب Xcode ربط المستودع: **Grant Access** يفتح App Store Connect، فثبّت تطبيق Xcode Cloud على GitHub واسمح له بالمستودع `fahadaali/zimam` وحده. الحزم (GoogleSignIn-iOS ومتطلباتها، وadhan-swift) عامة، وأبل تنص على أن Xcode Cloud يصل إليها دون إذن. لكن المعالج قد يسرد مستودعاتها «Not connected» ويبقي **Next** معطّلاً، و**Connect** عليها يفشل لأنها ليست لك. حينها أنشئ سير العمل من نسخة مؤقتة بلا حزم، ولا تغيّر المستودع:
+
+```sh
+git clone https://github.com/fahadaali/zimam.git zimam-cloud-setup
+cd zimam-cloud-setup/apple
+perl -0pi -e 's/^packages:\n.*?(?=^targets:)//ms; s/^ *- package: GoogleSignIn\n *product: GoogleSignIn\n//mg; s/^ *- package: ZimamKit\n//mg; s/^    dependencies:\n(?=    settings:)//mg' project.yml
+xcodegen && open Zimam.xcodeproj
+```
+
+المشروع الناتج لا يُبنى، ولا يلزمه، فالمعالج لا يبني شيئاً. وسير العمل يبني `main` بحزمه كلها. لا ترفع شيئاً من هذه النسخة، واحذفها بعد الحفظ.
 4. في نافذة **Edit Workflow**:
 
 | القسم | الإعداد |
@@ -67,11 +76,11 @@ cp Zimam.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved Pac
 | **General** | الاسم `TestFlight من main`، والمشروع `apple/Zimam.xcodeproj` كما يكتشفه Xcode. فعّل **Restrict Editing** إن أردت ألا يغيّره غيرك |
 | **Environment** | **Xcode Version:** Latest Release، و**macOS Version:** Latest Release. وفعّل **Clean** ليبدأ كل بناء من الصفر، فبناء الإصدار لا يتأثر ببقايا بناء سابق |
 | **Start Conditions** | احذف الشرط الافتراضي، وأضف **Branch Changes** بالفرع `main` وحده. ومن **Files and Folders** اختر «Start a build if any file changes in» المجلدين `apple/` و`design/`، لأن الدمج الذي يغيّر `api/` أو `web/` فقط لا يحتاج بناء التطبيق. وفعّل **Auto-cancel Builds** |
-| **Actions** | **+ ← Archive**: Platform **iOS**، وScheme **Zimam**، وDeployment Preparation **TestFlight and App Store**. ثم **+ ← Archive** ثانية: Platform **macOS**، والإعدادان نفسهما |
-| **Post-Actions** | **+ ← TestFlight Internal Testing**: Artifact من أرشيف iOS، والمجموعة `الفريق`. ثم مثلها لأرشيف macOS |
+| **Actions** | **+ ← Archive**: Platform **iOS**، وScheme **Zimam**، وDistribution Preparation **App Store Connect**. ثم **+ ← Archive** ثانية: Platform **macOS**، والإعدادان نفسهما. واحذف إجراءات **Build** التي يضيفها المعالج: الأرشيف يبني التطبيق، والساعة تُبنى داخل أرشيف iOS |
+| **Post-Actions** | **+ ← TestFlight Internal Testing**: Artifact من أرشيف iOS، والمجموعة `الفريق`. ثم مثلها لأرشيف macOS. المجموعة تُنشأ أولاً في App Store Connect (الخطوة ٤ في «قبل أول بناء»)، وإلا بقيت القائمة فارغة |
 
-- **TestFlight and App Store** يتيح البناء نفسه للمختبرين الداخليين وللخارجيين وللمراجعة. أما **TestFlight (Internal Testing Only)** فلا يُرسل بناؤه للمراجعة ولا للمختبرين الخارجيين، فلا تختره إلا لسير عمل تجريبي منفصل.
-- لا يوجد اختبار في المخطط بعد (اختبارات `ZimamKit` حزمة Swift تُشغَّل بـ `swift test`)، فلا تضف إجراء **Test** الآن.
+- **App Store Connect** (اسمه في Xcode القديم **TestFlight and App Store**) يتيح البناء نفسه للمختبرين الداخليين وللخارجيين وللمراجعة. أما **TestFlight (Internal Testing Only)** فلا يُرسل بناؤه للمراجعة ولا للمختبرين الخارجيين، فلا تختره إلا لسير عمل تجريبي منفصل.
+- المخطط فيه هدف الاختبار `ZimamTests`، لكن سير العمل هذا للأرشيف فقط. إجراء **Test** يحتاج سير عمل منفصلاً لطلبات الدمج، ولم يُعدّ بعد.
 - يرسل Xcode Cloud بريداً عند فشل البناء. ومن **Post-Actions ← Notify** تضيف بريداً آخر أو Slack.
 
 5. **Save**، ثم **Start Build**. أول بناء أطول من غيره لأنه ينزّل الحزم. وتتابعه في Xcode من **Report Navigator ← Cloud**، أو في App Store Connect من **Xcode Cloud**.
