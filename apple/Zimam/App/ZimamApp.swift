@@ -24,8 +24,12 @@ struct ZimamApp: App {
         let session = SessionStore()
         let sync = SyncEngine(api: session.api, context: container.mainContext)
         let location = LocationProvider()
+        // Listens at launch, so a place crossing that woke the app in the background is delivered.
+        let places = PlaceMonitor(context: container.mainContext, sync: sync)
+        places.start()
         // Created at launch so the notification delegate is set before any action arrives.
-        let notifications = NotificationScheduler(context: container.mainContext, sync: sync, session: session, location: location)
+        let notifications = NotificationScheduler(context: container.mainContext, sync: sync, session: session,
+                                                  location: location, places: places)
         sync.onDataChanged = { [notifications] in
             notifications.reschedule()
             ZimamShared.reloadWidgets()

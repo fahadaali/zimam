@@ -222,6 +222,9 @@ final class ReminderItem {
     var prayerRaw: String?
     var offsetMinutes: Int?
     var locationJSON: Data?
+    /// When a location reminder with a time fired at the place (`ReminderFiring`). Added after
+    /// the first release: optional, so SwiftData migrates existing stores on its own.
+    var firedAt: Int64?
     var createdAt: Int64
     var updatedAt: Int64
     var isDirty: Bool
@@ -236,6 +239,7 @@ final class ReminderItem {
         prayerRaw = r.prayer?.rawValue
         offsetMinutes = r.offsetMinutes
         locationJSON = r.location.flatMap { try? JSONEncoder().encode($0) }
+        firedAt = r.firedAt
         createdAt = r.createdAt ?? r.updatedAt
         updatedAt = r.updatedAt
         isDirty = dirty
@@ -249,6 +253,7 @@ final class ReminderItem {
         prayerRaw = r.prayer?.rawValue
         offsetMinutes = r.offsetMinutes
         locationJSON = r.location.flatMap { try? JSONEncoder().encode($0) }
+        firedAt = r.firedAt
         if let created = r.createdAt { createdAt = created }
         updatedAt = r.updatedAt
         isDirty = false
@@ -259,7 +264,55 @@ final class ReminderItem {
         ReminderRecord(id: id, taskId: taskId, kind: ReminderRecord.Kind(rawValue: kindRaw) ?? .time, at: at,
                        prayer: prayerRaw.flatMap(Prayer.init(rawValue:)), offsetMinutes: offsetMinutes,
                        location: locationJSON.flatMap { try? JSONDecoder().decode(ReminderRecord.Location.self, from: $0) },
-                       createdAt: createdAt, updatedAt: updatedAt)
+                       firedAt: firedAt, createdAt: createdAt, updatedAt: updatedAt)
+    }
+
+    /// Where a location reminder stands: every visit, waiting for the place or the time, or done.
+    func firing(now: Date = Date()) -> ReminderFiring {
+        ReminderFiring(at: at.flatMap(ReminderPlanner.date(fromISO:)), firedAt: firedAt, now: now)
+    }
+}
+
+/// A saved place («أماكني»): «البيت», «العمل», «الاستراحة». Synced with `include=place`.
+@Model
+final class PlaceItem {
+    @Attribute(.unique) var id: UUID
+    var name: String
+    var latitude: Double
+    var longitude: Double
+    var radius: Double
+    var createdAt: Int64
+    var updatedAt: Int64
+    var isDirty: Bool
+    var pendingDelete: Bool
+    var syncError: String?
+
+    init(_ r: PlaceRecord, dirty: Bool) {
+        id = r.id
+        name = r.name
+        latitude = r.latitude
+        longitude = r.longitude
+        radius = r.radius
+        createdAt = r.createdAt ?? r.updatedAt
+        updatedAt = r.updatedAt
+        isDirty = dirty
+        pendingDelete = false
+    }
+
+    func apply(_ r: PlaceRecord) {
+        name = r.name
+        latitude = r.latitude
+        longitude = r.longitude
+        radius = r.radius
+        if let created = r.createdAt { createdAt = created }
+        updatedAt = r.updatedAt
+        isDirty = false
+        syncError = nil
+    }
+
+    var record: PlaceRecord {
+        PlaceRecord(id: id, name: name, latitude: latitude, longitude: longitude, radius: radius,
+                    createdAt: createdAt, updatedAt: updatedAt)
     }
 }
 
@@ -275,9 +328,11 @@ extension ProjectItem: SyncedItem {}
 extension SectionItem: SyncedItem {}
 extension TaskItem: SyncedItem {}
 extension ReminderItem: SyncedItem {}
+extension PlaceItem: SyncedItem {}
 
 /// Every local model, for the container and for wiping data on sign-out.
-let zimamModelTypes: [any PersistentModel.Type] = [ProjectItem.self, SectionItem.self, TaskItem.self, ReminderItem.self]
+let zimamModelTypes: [any PersistentModel.Type] = [ProjectItem.self, SectionItem.self, TaskItem.self, ReminderItem.self,
+                                                    PlaceItem.self]
 
 /// Marks a local edit: bumps `updatedAt` past the last known version so the newest edit wins.
 func nextUpdatedAt(after current: Int64) -> Int64 {

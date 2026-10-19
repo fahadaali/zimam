@@ -12,12 +12,16 @@ import ZimamKit
 /// and recomputes the window on launch, after each sync and after each local edit.
 /// The server sends what lies beyond the window over APNs.
 ///
-/// Location reminders («تذكير بالموقع») are `UNLocationNotificationTrigger`s on iPhone and iPad:
-/// the system watches each place and shows the notification itself, so location while using the
-/// app is enough (no «دائماً» permission, no background location, and the app is not woken).
-/// They take up to `LocationReminderPlanner.maxRegions` of the 60 slots (iOS also watches at most
-/// 20 regions per app), and repeat on every arrival or exit until the task is done. The Mac has
-/// no location triggers, so they do not fire there; the server never pushes them.
+/// Location reminders («تذكير بالموقع») fire on iPhone and iPad, in one of two ways:
+/// - With location «دائماً», `PlaceMonitor` watches each place (`PlaceWatchPlanner`, up to 20) and
+///   the app shows the notification when woken, so a place and a time on one reminder fire once,
+///   at whichever comes first. They take nothing from the 60 slots.
+/// - With location only while using the app, they are `UNLocationNotificationTrigger`s: the system
+///   watches each place and shows the notification itself without waking the app. They take up to
+///   `LocationReminderPlanner.maxRegions` of the 60 slots, and a place and a time on one reminder
+///   may both arrive.
+/// A place alone repeats on every arrival or exit until the task is done. The Mac watches no
+/// places; a reminder's time still reaches it. The server pushes only that time, never a place.
 @MainActor
 @Observable
 final class NotificationScheduler {
@@ -30,6 +34,7 @@ final class NotificationScheduler {
     private let sync: SyncEngine
     private let session: SessionStore
     private let location: LocationProvider
+    private let places: PlaceMonitor
     private let delegate = NotificationDelegate()
     @ObservationIgnored private var pending: Task<Void, Never>?
 
@@ -38,11 +43,12 @@ final class NotificationScheduler {
     static let snoozeAction = "zimam.task.snooze"
     private static let askedKey = "notifications.asked"
 
-    init(context: ModelContext, sync: SyncEngine, session: SessionStore, location: LocationProvider) {
+    init(context: ModelContext, sync: SyncEngine, session: SessionStore, location: LocationProvider, places: PlaceMonitor) {
         self.context = context
         self.sync = sync
         self.session = session
         self.location = location
+        self.places = places
 
         let center = UNUserNotificationCenter.current()
         let done = UNNotificationAction(identifier: Self.doneAction, title: "إنجاز", options: [])
@@ -120,11 +126,14 @@ final class NotificationScheduler {
         guard isEnabled, session.isSignedIn else {
             center.removeAllPendingNotificationRequests()
             watchedPlaces = []
+            self.places.watch([])
             return
         }
 
-        let (times, places) = plan()
-        watchedPlaces = Set(places.map(\.reminderId))
+        let (times, places, monitored) = plan()
+        watchedPlaces = Set(places.map(\.reminderId)).union(monitored.flatMap(\.reminderIds))
+        // With «دائماً» the app watches places itself; otherwise this stops it.
+        self.places.watch(monitored)
         // Everything is replaced except places already watched as planned: registering a place
         // again while the device is inside it could fire it again.
         let existing = await center.pendingNotificationRequests()
@@ -200,8 +209,10 @@ final class NotificationScheduler {
     }
     #endif
 
-    /// The time window, and the places to watch, which come out of the same budget.
-    private func plan() -> (times: [PlannedNotification], places: [PlannedRegion]) {
+    /// The time window; the places the system watches without «دائماً», which come out of the
+    /// same budget; and the places the app watches itself with it.
+    private func plan() -> (times: [PlannedNotification], places: [PlannedRegion], monitored: [WatchedPlace]) {
+        let now = Date()
         let tasks = (try? context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { !$0.pendingDelete }))) ?? []
         let reminders = (try? context.fetch(FetchDescriptor<ReminderItem>(predicate: #Predicate { !$0.pendingDelete }))) ?? []
         let plannerTasks = tasks.map { task in
@@ -212,22 +223,25 @@ final class NotificationScheduler {
             PlannerReminder(id: reminder.id, taskId: reminder.taskId,
                             kind: ReminderRecord.Kind(rawValue: reminder.kindRaw) ?? .time, at: reminder.at,
                             prayer: reminder.prayerRaw.flatMap(Prayer.init(rawValue:)), offsetMinutes: reminder.offsetMinutes,
-                            location: reminder.record.location)
+                            location: reminder.record.location, firedAt: reminder.firedAt)
+        }
+        let near = location.coordinate.map {
+            LocationReminderPlanner.Point(latitude: $0.latitude, longitude: $0.longitude)
         }
         var places: [PlannedRegion] = []
-        if location.canWatchPlaces {
-            let near = location.coordinate.map {
-                LocationReminderPlanner.Point(latitude: $0.latitude, longitude: $0.longitude)
-            }
-            places = LocationReminderPlanner.plan(tasks: plannerTasks, reminders: plannerReminders, near: near)
+        var monitored: [WatchedPlace] = []
+        if location.canMonitorPlaces {
+            monitored = PlaceWatchPlanner.plan(tasks: plannerTasks, reminders: plannerReminders, near: near, now: now)
+        } else if location.canWatchPlaces {
+            places = LocationReminderPlanner.plan(tasks: plannerTasks, reminders: plannerReminders, near: near, now: now)
         }
         let settings = session.user?.settings
         let formatter = DualDateFormatter(primary: settings?.calendar ?? .hijri, locale: ZimamLocale.current)
         let times = ReminderPlanner.plan(tasks: plannerTasks, reminders: plannerReminders,
                                          schedule: location.schedule(method: settings?.prayerMethod ?? .ummAlQura),
-                                         now: Date(), formatter: formatter,
+                                         now: now, formatter: formatter,
                                          limit: LocationReminderPlanner.timeLimit(reserving: places.count))
-        return (times, places)
+        return (times, places, monitored)
     }
 
     /// «إنجاز» completes the task; «تأجيل ساعة» adds a one-off reminder an hour from now.

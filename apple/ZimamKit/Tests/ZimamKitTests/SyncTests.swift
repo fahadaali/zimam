@@ -83,7 +83,7 @@ struct SyncTests {
         future.view = .kanban
         let chosen = try JSONSerialization.jsonObject(with: JSONEncoder().encode(future)) as! [String: Any]
         #expect((chosen["view"] as? String) == "kanban")
-        #expect(APIClient.pullQuery(cursor: 0, limit: 500).contains(URLQueryItem(name: "include", value: "timeline")))
+        #expect(APIClient.pullQuery(cursor: 0, limit: 500).contains(URLQueryItem(name: "include", value: "timeline,place")))
     }
 
     @Test func decodesResultsWithLowercaseIds() throws {
