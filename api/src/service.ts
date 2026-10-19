@@ -1,5 +1,13 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { Assistant, type AgendaRequest, type Outcome, type SignInKeys, type TaskFields, type TaskFilter } from "./assistant";
+import {
+  Assistant,
+  type AgendaRequest,
+  type Outcome,
+  type PlaceReminderRequest,
+  type SignInKeys,
+  type TaskFields,
+  type TaskFilter,
+} from "./assistant";
 import type { AppleCode } from "./auth/account";
 import { appleKeys } from "./auth/apple";
 import { type AppleTokens, appleTokensFromEnv } from "./auth/apple-tokens";
@@ -73,6 +81,14 @@ export class ZimamService extends WorkerEntrypoint<Env> {
 
   listProjects(userId: string) {
     return this.pro(userId, () => this.assistant.listProjects(userId));
+  }
+
+  listPlaces(userId: string) {
+    return this.pro(userId, () => this.assistant.listPlaces(userId));
+  }
+
+  addPlaceReminder(userId: string, request: PlaceReminderRequest) {
+    return this.pro(userId, () => this.writing(() => this.assistant.addPlaceReminder(userId, request)));
   }
 
   getAgenda(userId: string, request: AgendaRequest) {

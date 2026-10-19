@@ -55,6 +55,31 @@ export function timeIn(timeZone: string, instant: Date): string {
   return new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(instant);
 }
 
+/** Minutes `timeZone` is ahead of UTC at `instant` (180 for Riyadh). */
+function offsetMinutes(timeZone: string, instant: Date): number {
+  const name = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" })
+    .formatToParts(instant)
+    .find((p) => p.type === "timeZoneName")?.value;
+  const match = /GMT([+-])(\d{2}):?(\d{2})?/.exec(name ?? "");
+  if (!match) return 0;
+  const minutes = Number(match[2]) * 60 + Number(match[3] ?? 0);
+  return match[1] === "-" ? -minutes : minutes;
+}
+
+/** A local day and "HH:mm" in a zone as ISO 8601 with its offset: "2026-10-13T17:00:00+03:00". */
+export function localDateTime(day: string, time: string, timeZone: string): string {
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  const [hh, mm] = time.split(":").map(Number) as [number, number];
+  const wall = Date.UTC(y, m - 1, d, hh, mm);
+  // The offset at the wall time read as UTC, then again at the instant it gives (daylight saving).
+  let offset = offsetMinutes(timeZone, new Date(wall));
+  offset = offsetMinutes(timeZone, new Date(wall - offset * 60_000));
+  const sign = offset < 0 ? "-" : "+";
+  const abs = Math.abs(offset);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${day}T${time}:00${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+}
+
 export interface HijriParts {
   year: number;
   month: number;
