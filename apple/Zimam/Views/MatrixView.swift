@@ -91,8 +91,8 @@ struct MatrixView: View {
     // MARK: Actions
 
     private func complete(_ task: TaskItem) {
-        withAnimation(reduceMotion ? nil : .default) { Store(context: context, sync: sync).toggleDone(task) }
-        if task.isDone { lingering.hold(task.id, animation: reduceMotion ? nil : .default) }
+        withAnimation(.zimamComplete) { Store(context: context, sync: sync).toggleDone(task) }
+        if task.isDone { lingering.hold(task.id, animation: .zimam(reduceMotion: reduceMotion)) }
     }
 
     private func drop(_ ids: [UUID], on quadrant: PriorityQuadrant) -> Bool {
@@ -103,7 +103,7 @@ struct MatrixView: View {
     }
 
     private func move(_ task: TaskItem, to quadrant: PriorityQuadrant) {
-        let result = withAnimation(reduceMotion ? nil : .default) {
+        let result = withAnimation(.zimam(reduceMotion: reduceMotion)) {
             Store(context: context, sync: sync).move(task, to: quadrant, timeZone: formatter.timeZone)
         }
         switch result {

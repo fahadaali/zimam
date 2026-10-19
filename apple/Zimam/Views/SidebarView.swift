@@ -162,7 +162,7 @@ struct SidebarView: View {
               let task = tasks.first(where: { $0.id == id }),
               task.parentId == nil else { return false }
         if task.projectId == project && task.sectionId == section { return true }
-        withAnimation(reduceMotion ? nil : .default) {
+        withAnimation(.zimam(reduceMotion: reduceMotion)) {
             Store(context: context, sync: sync).move(task, toProject: project, section: section)
         }
         let message: String = "نُقلت «\(task.title)» إلى \(name)"

@@ -526,13 +526,11 @@ private struct SubtaskRow: View {
     let task: TaskItem
     let store: Store
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
         NavigationLink(value: TaskRoute(id: task.id)) {
             HStack(spacing: ZimamSpacing.space2) {
                 CompletionCircle(isDone: task.isDone, font: ZimamType.headline) {
-                    withAnimation(reduceMotion ? nil : .default) { store.toggleDone(task) }
+                    withAnimation(.zimamComplete) { store.toggleDone(task) }
                 }
 
                 Text(task.title)

@@ -57,6 +57,6 @@ struct UpcomingView: View {
     }
 
     private func linger(_ id: UUID) {
-        lingering.hold(id, animation: reduceMotion ? nil : .default)
+        lingering.hold(id, animation: .zimam(reduceMotion: reduceMotion))
     }
 }

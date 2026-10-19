@@ -157,7 +157,7 @@ struct GanttView: View {
     private func scrollToToday(_ proxy: ScrollViewProxy) {
         // After the layout, so the marker exists.
         DispatchQueue.main.async {
-            withAnimation(reduceMotion ? nil : .default) {
+            withAnimation(.zimam(reduceMotion: reduceMotion)) {
                 proxy.scrollTo(GanttAxis.todayID, anchor: .top)
             }
         }
@@ -227,7 +227,7 @@ struct GanttView: View {
 
     private func commit(_ task: TaskItem, _ span: DaySpan) {
         guard task.span != span else { return }
-        withAnimation(reduceMotion ? nil : .default) {
+        withAnimation(.zimam(reduceMotion: reduceMotion)) {
             Store(context: context, sync: sync).setSpan(task, span)
         }
         let message: String = "«\(task.title)» \(formatter.withKind(kind).spanText(span))"
@@ -235,8 +235,8 @@ struct GanttView: View {
     }
 
     private func complete(_ task: TaskItem) {
-        withAnimation(reduceMotion ? nil : .default) { Store(context: context, sync: sync).toggleDone(task) }
-        if task.isDone { lingering.hold(task.id, animation: reduceMotion ? nil : .default) }
+        withAnimation(.zimamComplete) { Store(context: context, sync: sync).toggleDone(task) }
+        if task.isDone { lingering.hold(task.id, animation: .zimam(reduceMotion: reduceMotion)) }
     }
 
     // MARK: State
