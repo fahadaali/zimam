@@ -27,6 +27,7 @@ public struct SyncChange: Decodable, Sendable {
         case .task: record = .task(try c.decode(TaskRecord.self, forKey: .data))
         case .reminder: record = .reminder(try c.decode(ReminderRecord.self, forKey: .data))
         case .comment: record = .comment(try c.decode(CommentRecord.self, forKey: .data))
+        case .place: record = .place(try c.decode(PlaceRecord.self, forKey: .data))
         }
     }
 }
@@ -51,6 +52,7 @@ public enum Mutation: Encodable, Sendable {
         case .upsert(.task(let r)): r.id
         case .upsert(.reminder(let r)): r.id
         case .upsert(.comment(let r)): r.id
+        case .upsert(.place(let r)): r.id
         case .delete(_, let id, _): id
         }
     }
@@ -67,6 +69,7 @@ public enum Mutation: Encodable, Sendable {
             case .task(let r): try c.encode(r, forKey: .data)
             case .reminder(let r): try c.encode(r, forKey: .data)
             case .comment(let r): try c.encode(r, forKey: .data)
+            case .place(let r): try c.encode(r, forKey: .data)
             }
         case .delete(let entity, let id, let updatedAt):
             try c.encode("delete", forKey: .op)

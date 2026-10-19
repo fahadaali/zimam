@@ -11,7 +11,7 @@ public extension Milliseconds {
 }
 
 public enum EntityKind: String, Codable, Sendable {
-    case project, section, task, reminder, comment
+    case project, section, task, reminder, comment, place
 }
 
 public enum TaskStatus: String, Codable, Sendable, CaseIterable {
@@ -216,11 +216,15 @@ public struct ReminderRecord: Codable, Equatable, Sendable {
     public var id: UUID
     public var taskId: UUID
     public var kind: Kind
-    /// ISO 8601 with offset, for `.time`.
+    /// ISO 8601 with offset, for `.time`. On `.location` it is the time that competes with the
+    /// place: the reminder fires once, at whichever comes first (`ReminderFiring`).
     public var at: String?
     public var prayer: Prayer?
     public var offsetMinutes: Int?
     public var location: Location?
+    /// When a location reminder with a time fired at the place, before its time. Left out when
+    /// nil, so the server keeps what another device set.
+    public var firedAt: Milliseconds?
     public var createdAt: Milliseconds?
     public var updatedAt: Milliseconds
 
@@ -233,20 +237,32 @@ public struct ReminderRecord: Codable, Equatable, Sendable {
         public var radius: Double
         public var name: String?
         public var trigger: Trigger
+        /// The saved place («أماكني») this copy came from. The server keeps the copy in step
+        /// when the place changes, and clears this when it is deleted.
+        public var placeId: UUID?
 
         public enum Trigger: String, Codable, Sendable { case arrive, leave }
 
-        public init(latitude: Double, longitude: Double, radius: Double, name: String? = nil, trigger: Trigger) {
+        public init(latitude: Double, longitude: Double, radius: Double, name: String? = nil, trigger: Trigger,
+                    placeId: UUID? = nil) {
             self.latitude = latitude
             self.longitude = longitude
             self.radius = radius
             self.name = name
             self.trigger = trigger
+            self.placeId = placeId
+        }
+
+        /// A reminder's copy of a saved place.
+        public init(place: PlaceRecord, trigger: Trigger) {
+            self.init(latitude: place.latitude, longitude: place.longitude, radius: place.radius, name: place.name,
+                      trigger: trigger, placeId: place.id)
         }
     }
 
     public init(id: UUID = UUID(), taskId: UUID, kind: Kind, at: String? = nil, prayer: Prayer? = nil, offsetMinutes: Int? = nil,
-                location: Location? = nil, createdAt: Milliseconds? = nil, updatedAt: Milliseconds = .now) {
+                location: Location? = nil, firedAt: Milliseconds? = nil, createdAt: Milliseconds? = nil,
+                updatedAt: Milliseconds = .now) {
         self.id = id
         self.taskId = taskId
         self.kind = kind
@@ -254,6 +270,31 @@ public struct ReminderRecord: Codable, Equatable, Sendable {
         self.prayer = prayer
         self.offsetMinutes = offsetMinutes
         self.location = location
+        self.firedAt = firedAt
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+/// A saved place («أماكني»): «البيت», «العمل», «الاستراحة». Personal, synced with
+/// `include=place`, and reused by location reminders, which keep their own copy of it.
+public struct PlaceRecord: Codable, Equatable, Sendable, Identifiable {
+    public var id: UUID
+    public var name: String
+    public var latitude: Double
+    public var longitude: Double
+    /// Meters, 50 to 10,000.
+    public var radius: Double
+    public var createdAt: Milliseconds?
+    public var updatedAt: Milliseconds
+
+    public init(id: UUID = UUID(), name: String, latitude: Double, longitude: Double, radius: Double,
+                createdAt: Milliseconds? = nil, updatedAt: Milliseconds = .now) {
+        self.id = id
+        self.name = name
+        self.latitude = latitude
+        self.longitude = longitude
+        self.radius = radius
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -274,6 +315,7 @@ public enum AnyRecord: Equatable, Sendable {
     case task(TaskRecord)
     case reminder(ReminderRecord)
     case comment(CommentRecord)
+    case place(PlaceRecord)
 
     public var kind: EntityKind {
         switch self {
@@ -282,6 +324,7 @@ public enum AnyRecord: Equatable, Sendable {
         case .task: .task
         case .reminder: .reminder
         case .comment: .comment
+        case .place: .place
         }
     }
 }

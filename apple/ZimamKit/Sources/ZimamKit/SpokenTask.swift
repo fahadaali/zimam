@@ -49,6 +49,22 @@ public struct SpokenTask: Equatable, Sendable {
             duePrayerOffset: reading.duePrayer == nil ? nil : (reading.duePrayerOffset ?? 0)
         )
     }
+
+    /// The time that competes with the sentence's place («إذا وصلت البيت أو الساعة ٥»): the
+    /// task's day and clock time, as the reminder's `at`. Nil without a place, or without a clock
+    /// time (a place with a prayer reminds at the place alone).
+    public func placeReminderAt(today: String, timeZone: TimeZone) -> String? {
+        guard suggestion.place != nil else { return nil }
+        let task = record(today: today)
+        guard let day = task.dueDate, let time = task.dueTime else { return nil }
+        let parts = (day + "-" + time.replacingOccurrences(of: ":", with: "-")).split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 5 else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let components = DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: parts[3], minute: parts[4])
+        guard let date = calendar.date(from: components) else { return nil }
+        return ReminderPlanner.isoString(from: date, timeZone: timeZone)
+    }
 }
 
 public extension APIClient {

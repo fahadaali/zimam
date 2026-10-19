@@ -30,11 +30,14 @@ public struct PlannerReminder: Sendable {
     public var at: String?
     public var prayer: Prayer?
     public var offsetMinutes: Int?
-    /// For `.location`; planned by `LocationReminderPlanner`, not here.
+    /// For `.location`; its place is watched by `PlaceWatchPlanner` or `LocationReminderPlanner`.
+    /// With `at` too, this planner schedules the time, which competes with the place.
     public var location: ReminderRecord.Location?
+    /// When the place came first, for a `.location` reminder with a time.
+    public var firedAt: Milliseconds?
 
     public init(id: UUID, taskId: UUID, kind: ReminderRecord.Kind, at: String? = nil, prayer: Prayer? = nil,
-                offsetMinutes: Int? = nil, location: ReminderRecord.Location? = nil) {
+                offsetMinutes: Int? = nil, location: ReminderRecord.Location? = nil, firedAt: Milliseconds? = nil) {
         self.id = id
         self.taskId = taskId
         self.kind = kind
@@ -42,6 +45,12 @@ public struct PlannerReminder: Sendable {
         self.prayer = prayer
         self.offsetMinutes = offsetMinutes
         self.location = location
+        self.firedAt = firedAt
+    }
+
+    /// Where a `.location` reminder stands: every visit, waiting for the place or the time, or done.
+    public func firing(now: Date) -> ReminderFiring {
+        ReminderFiring(at: at.flatMap(ReminderPlanner.date(fromISO:)), firedAt: firedAt, now: now)
     }
 }
 
@@ -70,8 +79,10 @@ public struct PlannedNotification: Equatable, Sendable {
 /// - A time reminder fires at its time.
 /// - A prayer reminder, and a task anchored to a prayer, fire at that prayer
 ///   (plus the offset) on the task's due day, or every day when it has none.
-/// - Location reminders are not planned here but by `LocationReminderPlanner`, which takes
-///   some of the same budget (`LocationReminderPlanner.timeLimit(reserving:)`).
+/// - A location reminder's place is not planned here but by `PlaceWatchPlanner` (or, without
+///   «دائماً», `LocationReminderPlanner`, which takes some of the same budget). Its time, when it
+///   has one and the place has not come first, is planned here under the same id, so the device
+///   that arrives first can take it back (`PlaceMonitor`).
 public enum ReminderPlanner {
     public static let defaultLimit = 60
     /// The server pushes what fires beyond this window after the device's last pull
@@ -141,7 +152,10 @@ public enum ReminderPlanner {
                 guard let prayer = reminder.prayer else { continue }
                 anchored(task, prayer: prayer, offset: reminder.offsetMinutes ?? 0, idPrefix: "reminder-\(reminder.id.uuidString)")
             case .location:
-                continue
+                guard case .waiting(let fireDate) = reminder.firing(now: now), let place = reminder.location else { continue }
+                consider(PlannedNotification(id: "reminder-\(reminder.id.uuidString)", taskId: task.id, date: fireDate,
+                                             title: task.title,
+                                             body: LocationReminderPlanner.timeCameFirstBody(place)))
             }
         }
 

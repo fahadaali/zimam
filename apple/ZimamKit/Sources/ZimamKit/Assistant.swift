@@ -20,9 +20,35 @@ public struct TaskSuggestion: Decodable, Equatable, Sendable {
     public var tags: [String]
     /// Only one of the user's own projects; the server drops anything else.
     public var projectId: UUID?
+    /// «إذا وصلت البيت»: the place the reminder is tied to, when the sentence names one.
+    public var place: PlaceSuggestion?
+
+    /// A place in the sentence. `placeId` is one of the user's saved places, with its saved name;
+    /// without it the user named a place they have not saved («الاستراحة»).
+    public struct PlaceSuggestion: Decodable, Equatable, Sendable {
+        public var placeId: UUID?
+        public var name: String
+        public var trigger: ReminderRecord.Location.Trigger
+
+        public init(placeId: UUID? = nil, name: String, trigger: ReminderRecord.Location.Trigger) {
+            self.placeId = placeId
+            self.name = name
+            self.trigger = trigger
+        }
+
+        private enum CodingKeys: String, CodingKey { case placeId, name, trigger }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            placeId = (try? c.decodeIfPresent(String.self, forKey: .placeId)).flatMap(UUID.init(uuidString:))
+            name = try c.decode(String.self, forKey: .name)
+            trigger = try c.decode(ReminderRecord.Location.Trigger.self, forKey: .trigger)
+        }
+    }
 
     public init(title: String, notes: String? = nil, dueDate: String? = nil, dueTime: String? = nil, duePrayer: Prayer? = nil,
-                duePrayerOffset: Int? = nil, priority: TaskPriority = .none, tags: [String] = [], projectId: UUID? = nil) {
+                duePrayerOffset: Int? = nil, priority: TaskPriority = .none, tags: [String] = [], projectId: UUID? = nil,
+                place: PlaceSuggestion? = nil) {
         self.title = title
         self.notes = notes
         self.dueDate = dueDate
@@ -32,10 +58,11 @@ public struct TaskSuggestion: Decodable, Equatable, Sendable {
         self.priority = priority
         self.tags = tags
         self.projectId = projectId
+        self.place = place
     }
 
     private enum CodingKeys: String, CodingKey {
-        case title, notes, dueDate, dueTime, duePrayer, duePrayerOffset, priority, tags, projectId
+        case title, notes, dueDate, dueTime, duePrayer, duePrayerOffset, priority, tags, projectId, place
     }
 
     public init(from decoder: Decoder) throws {
@@ -57,6 +84,8 @@ public struct TaskSuggestion: Decodable, Equatable, Sendable {
         }
         tags = (try c.decodeIfPresent([String].self, forKey: .tags)) ?? []
         projectId = (try? c.decodeIfPresent(String.self, forKey: .projectId)).flatMap(UUID.init(uuidString:))
+        // A place the app cannot read is dropped rather than failing the whole suggestion.
+        place = try? c.decodeIfPresent(PlaceSuggestion.self, forKey: .place)
     }
 }
 
