@@ -35,9 +35,10 @@ Settings: tap the person icon (الحساب والمزامنة) at the top, then
 3. Dates show in the Hijri (Umm al-Qura) and Gregorian calendars together. The Calendar tab has month and week views.
 4. Sharing: open a project, then مشاركة المشروع, and create an invite link. A second account can join with it, then both see the project's tasks and comments.
 5. Widgets, Lock Screen, the Live Activity for the current task, Siri and Shortcuts ("إضافة مهمة", "مهام اليوم"), and the Apple Watch app all read the same tasks.
+6. Saved places: in Settings > أماكني, add a place such as "البيت" (home) from Apple Maps search or the current location. In a task's details, "إضافة تذكير بالموقع" picks it with one tap, on arriving or leaving, and optionally a time too: the reminder then fires once, at whichever comes first.
 
 PERMISSIONS
-Location (optional): prayer times and location-based reminders. Microphone and speech recognition (optional): dictating a task. Reminders (optional): a one-time import of the lists the user picks. Notifications: task reminders.
+Location (optional): prayer times and location-based reminders. "Always" is requested only when the user adds a location reminder or saves a place, after a screen that explains why: the app watches the user's saved places with CLMonitor so it is woken on arriving or leaving, shows the reminder, and cancels the same reminder's time notification when the place comes first (a reminder tied to a place and a time fires once, at whichever comes first). The device's position and movements are never sent to our server. Without "Always", location reminders still work through UNLocationNotificationTrigger. Microphone and speech recognition (optional): dictating a task. Reminders (optional): a one-time import of the lists the user picks. Notifications: task reminders.
 
 SUBSCRIPTION
 "Zimam Pro" (monthly and yearly auto-renewable subscriptions) adds the AI assistant quota, connecting Claude and ChatGPT through Zimam's MCP server, and importing from other apps. It is in Settings > الاشتراك. [During this review all features are open without a subscription; the paywall shows the plans and purchases work in the sandbox.] [Without a subscription, the assistant stops after its free monthly quota and shows the paywall.]
