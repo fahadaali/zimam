@@ -13,13 +13,9 @@ let package = Package(
     targets: [
         .target(
             name: "ZimamKit",
-            dependencies: [.product(name: "Adhan", package: "adhan-swift")],
-            // Swift 6 migration, step 1: every Swift 6 concurrency diagnostic, as warnings, while
-            // still in the Swift 5 language mode. Once there are none, switch to .v6 below and
-            // remove this line.
-            swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
+            dependencies: [.product(name: "Adhan", package: "adhan-swift")]
         ),
         .testTarget(name: "ZimamKitTests", dependencies: ["ZimamKit"]),
     ],
-    swiftLanguageModes: [.v5]
+    swiftLanguageModes: [.v6]
 )
