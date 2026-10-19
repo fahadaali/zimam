@@ -248,8 +248,8 @@ private struct DayContext {
 enum WidgetCalendarChoice: String, AppEnum {
     case automatic, hijri, gregorian
 
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "التقويم"
-    static var caseDisplayRepresentations: [WidgetCalendarChoice: DisplayRepresentation] = [
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "التقويم"
+    static let caseDisplayRepresentations: [WidgetCalendarChoice: DisplayRepresentation] = [
         .automatic: "تقويمك في الإعدادات",
         .hijri: "الهجري",
         .gregorian: "الميلادي",

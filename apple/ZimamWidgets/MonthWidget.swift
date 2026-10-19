@@ -22,8 +22,8 @@ struct MonthWidget: Widget {
 
 /// The month and week widgets' setting: which calendar lays out the grid.
 struct CalendarWidgetConfiguration: WidgetConfigurationIntent {
-    static var title: LocalizedStringResource = "التقويم"
-    static var description = IntentDescription("اختر التقويم الذي تُرتَّب به الأيام.")
+    static let title: LocalizedStringResource = "التقويم"
+    static let description = IntentDescription("اختر التقويم الذي تُرتَّب به الأيام.")
 
     @Parameter(title: "التقويم", default: .automatic)
     var calendar: WidgetCalendarChoice

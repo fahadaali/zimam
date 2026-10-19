@@ -12,7 +12,11 @@ options:
 
 settings:
   base:
-    SWIFT_VERSION: "5.0"
+    # Every target: Swift 6, with Approachable Concurrency and the main actor by default (Xcode 26).
+    # Shared/ and Common/ compile into several targets, so they all use the same settings.
+    SWIFT_VERSION: "6.0"
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     # The version every bundle carries (app, widgets, watch app, complications): each Info.plist
     # below reads CFBundleShortVersionString and CFBundleVersion from these two, because
     # XcodeGen otherwise writes a fixed "1.0" and "1". Raise MARKETING_VERSION for each release;
@@ -77,10 +81,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.zimam.ios
         PRODUCT_NAME: Zimam
-        # Swift 6, with Approachable Concurrency and the main actor by default (Xcode 26).
-        SWIFT_VERSION: "6.0"
-        SWIFT_APPROACHABLE_CONCURRENCY: YES
-        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
@@ -202,11 +202,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.zimam.ios.widgets
-        # Swift 6 migration, step 3: as the app, but Swift 6's concurrency checks are warnings
-        # in the Swift 5 mode until there are none; then SWIFT_VERSION: "6.0".
-        SWIFT_STRICT_CONCURRENCY: complete
-        SWIFT_APPROACHABLE_CONCURRENCY: YES
-        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         PRODUCT_NAME: ZimamWidgets
         TARGETED_DEVICE_FAMILY: "1,2"
         # Installed inside the app, so the archive stays an app archive.
@@ -259,11 +254,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.zimam.ios.watchkitapp
-        # Swift 6 migration, step 3: as the app, but Swift 6's concurrency checks are warnings
-        # in the Swift 5 mode until there are none; then SWIFT_VERSION: "6.0".
-        SWIFT_STRICT_CONCURRENCY: complete
-        SWIFT_APPROACHABLE_CONCURRENCY: YES
-        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         PRODUCT_NAME: ZimamWatch
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
@@ -316,11 +306,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.zimam.ios.watchkitapp.widgets
-        # Swift 6 migration, step 3: as the app, but Swift 6's concurrency checks are warnings
-        # in the Swift 5 mode until there are none; then SWIFT_VERSION: "6.0".
-        SWIFT_STRICT_CONCURRENCY: complete
-        SWIFT_APPROACHABLE_CONCURRENCY: YES
-        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         PRODUCT_NAME: ZimamWatchWidgets
         SKIP_INSTALL: YES
     info:

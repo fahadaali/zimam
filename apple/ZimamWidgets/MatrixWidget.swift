@@ -25,8 +25,8 @@ struct MatrixWidget: Widget {
 enum MatrixQuadrantOption: String, AppEnum {
     case importantUrgent, important, urgent, someday
 
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "الربع"
-    static var caseDisplayRepresentations: [MatrixQuadrantOption: DisplayRepresentation] = [
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "الربع"
+    static let caseDisplayRepresentations: [MatrixQuadrantOption: DisplayRepresentation] = [
         .importantUrgent: "مهم وعاجل",
         .important: "مهم",
         .urgent: "عاجل",
@@ -44,8 +44,8 @@ enum MatrixQuadrantOption: String, AppEnum {
 }
 
 struct MatrixWidgetConfiguration: WidgetConfigurationIntent {
-    static var title: LocalizedStringResource = "المصفوفة"
-    static var description = IntentDescription("اختر الربع الذي يعرضه الويدجت.")
+    static let title: LocalizedStringResource = "المصفوفة"
+    static let description = IntentDescription("اختر الربع الذي يعرضه الويدجت.")
 
     @Parameter(title: "الربع", default: .importantUrgent)
     var quadrant: MatrixQuadrantOption
