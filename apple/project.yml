@@ -186,7 +186,7 @@ targets:
         com.apple.developer.associated-domains: ["applinks:zimam-web.fahad2ao.workers.dev"]
 
   # The app's unit tests (Swift Testing), hosted in the app on iPhone, iPad and Mac: Store edits on
-  # an in-memory SwiftData container, Lingering, and ProjectMembers over a stubbed URLSession.
+  # an in-memory SwiftData container, Lingering, and ProjectMembers and SyncEngine over a stubbed URLSession.
   # ZimamKit's own tests stay in its package (`swift test`).
   ZimamTests:
     type: bundle.unit-test
