@@ -16,6 +16,7 @@ struct TaskCommentsSection: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(SyncEngine.self) private var sync
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var comments: [TaskComment] = []
     @State private var loaded = false
     @State private var problem: String?
@@ -135,7 +136,7 @@ struct TaskCommentsSection: View {
             do {
                 let comment = try await session.api.addComment(body, to: task.id)
                 version += 1
-                withAnimation { comments.append(comment) }
+                withAnimation(reduceMotion ? nil : .default) { comments.append(comment) }
                 draft = ""
                 problem = nil
             } catch {
@@ -151,7 +152,7 @@ struct TaskCommentsSection: View {
             do {
                 try await session.api.deleteComment(comment.id)
                 version += 1
-                withAnimation { comments.removeAll { $0.id == comment.id } }
+                withAnimation(reduceMotion ? nil : .default) { comments.removeAll { $0.id == comment.id } }
             } catch {
                 problem = SharingProblem.message(for: error)
             }

@@ -16,6 +16,7 @@ struct TaskAttachmentsSection: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(SyncEngine.self) private var sync
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var list: TaskAttachments?
     @State private var problem: String?
@@ -274,7 +275,7 @@ struct TaskAttachmentsSection: View {
             var current = list ?? TaskAttachments(attachments: [], maxFileBytes: maxFileBytes, canAdd: true)
             current.attachments.append(created)
             version += 1
-            withAnimation { list = current }
+            withAnimation(reduceMotion ? nil : .default) { list = current }
             AttachmentCache.saveList(current, for: task.id)
         } catch {
             problem = AttachmentText.message(for: error, maxFileBytes: maxFileBytes, locale: locale)
@@ -313,7 +314,7 @@ struct TaskAttachmentsSection: View {
                 if var current = list {
                     current.attachments.removeAll { $0.id == attachment.id }
                     version += 1
-            withAnimation { list = current }
+            withAnimation(reduceMotion ? nil : .default) { list = current }
                     AttachmentCache.saveList(current, for: task.id)
                 }
                 problem = nil

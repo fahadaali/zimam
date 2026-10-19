@@ -106,6 +106,7 @@ struct SubtaskBreakdown: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncEngine.self) private var sync
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase: Phase = .idle
     @State private var selected: Set<Int> = []
     /// The last failure was `pro_required`: the status offers the paywall.
@@ -161,7 +162,7 @@ struct SubtaskBreakdown: View {
                 subtask.createdAt += Int64(offset)
             }
         }
-        withAnimation { phase = .idle }
+        withAnimation(reduceMotion ? nil : .default) { phase = .idle }
     }
 
     /// «٣ خطوات», «١١ خطوة»; after «إلى», so two is «خطوتين».
@@ -213,6 +214,7 @@ struct DaySummaryRow: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase: Phase = .idle
     /// The last failure was `pro_required`: the status offers the paywall.
     @State private var needsPro = false
@@ -230,7 +232,7 @@ struct DaySummaryRow: View {
             case .failed(let message):
                 AssistantStatus(phase: .failed(message), needsPro: needsPro, onRetry: load, onClose: { phase = .idle })
             case .ready(let summary):
-                AssistantSuggestion(label: "ملخص اليوم", dismissLabel: "إخفاء", onDismiss: { withAnimation { phase = .idle } }) {
+                AssistantSuggestion(label: "ملخص اليوم", dismissLabel: "إخفاء", onDismiss: { withAnimation(reduceMotion ? nil : .default) { phase = .idle } }) {
                     Text(summary.text)
                         .lineSpacing(ZimamType.calloutLineSpacing)
                         .fixedSize(horizontal: false, vertical: true)

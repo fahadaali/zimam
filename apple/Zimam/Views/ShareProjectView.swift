@@ -22,6 +22,7 @@ struct ShareProjectView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncEngine.self) private var sync
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
 
     @State private var members: [ProjectMember] = []
@@ -234,7 +235,7 @@ struct ShareProjectView: View {
         let role = inviteRole
         perform {
             let invite = try await session.api.createInvite(to: projectId, role: role)
-            withAnimation { created = invite }
+            withAnimation(reduceMotion ? nil : .default) { created = invite }
             invites = try await session.api.invites(of: projectId)
         }
     }
@@ -242,7 +243,7 @@ struct ShareProjectView: View {
     private func revoke(_ invite: ProjectInvite) {
         perform {
             try await session.api.revokeInvite(invite.id, of: projectId)
-            withAnimation {
+            withAnimation(reduceMotion ? nil : .default) {
                 invites.removeAll { $0.id == invite.id }
                 if created?.id == invite.id { created = nil }
             }
@@ -264,7 +265,7 @@ struct ShareProjectView: View {
         removing = nil
         perform {
             try await session.api.removeMember(member.userId, from: projectId)
-            withAnimation { members.removeAll { $0.userId == member.userId } }
+            withAnimation(reduceMotion ? nil : .default) { members.removeAll { $0.userId == member.userId } }
             ProjectMembers.shared.set(members, for: projectId)
         }
     }
@@ -386,6 +387,7 @@ struct JoinProjectView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncEngine.self) private var sync
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var text: String
     @State private var preview: InvitePreview?
@@ -479,7 +481,7 @@ struct JoinProjectView: View {
             do {
                 let found = try await session.api.previewInvite(code: code)
                 previewCode = code
-                withAnimation { preview = found }
+                withAnimation(reduceMotion ? nil : .default) { preview = found }
             } catch {
                 problem = SharingProblem.message(for: error)
             }
