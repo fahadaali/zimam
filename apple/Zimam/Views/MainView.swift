@@ -177,10 +177,11 @@ struct MainView: View {
     // MARK: Commands
 
     private var actions: ZimamSceneActions {
-        ZimamSceneActions(
+        let canToggle = isRegular && selectedTask.wrappedValue != nil
+        return ZimamSceneActions(
             newTask: { newTask = newTaskRequest() },
-            search: openSearch,
-            toggleSelectedDone: isRegular && selectedTask.wrappedValue != nil ? toggleSelectedDone : nil
+            search: { openSearch() },
+            toggleSelectedDone: canToggle ? { toggleSelectedDone() } : nil
         )
     }
 

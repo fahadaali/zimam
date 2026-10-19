@@ -168,11 +168,13 @@ extension EnvironmentValues {
 // MARK: Menu commands
 
 /// What the window's menu commands act on (⌘N, ⌘F, ⌘↩), published by `MainView`.
+/// The window's commands for the Mac menu. They change the window's state, so they run on
+/// the main actor, as the menu calls them.
 struct ZimamSceneActions {
-    var newTask: () -> Void
-    var search: () -> Void
+    var newTask: @MainActor () -> Void
+    var search: @MainActor () -> Void
     /// Completes or reopens the selected task; nil when no task is selected.
-    var toggleSelectedDone: (() -> Void)?
+    var toggleSelectedDone: (@MainActor () -> Void)?
 }
 
 private struct ZimamActionsKey: FocusedValueKey {
