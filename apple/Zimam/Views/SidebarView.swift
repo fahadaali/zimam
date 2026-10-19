@@ -191,7 +191,7 @@ private struct SidebarDropTarget: ViewModifier {
                         .accessibilityHidden(true)
                 }
             }
-            .dropDestination(for: TaskDragItem.self) { items, _ in
+            .taskDropDestination { items in
                 onDrop(items)
             } isTargeted: { targeted in
                 onTargeted(targeted)

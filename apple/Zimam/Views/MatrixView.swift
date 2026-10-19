@@ -222,7 +222,7 @@ private struct QuadrantCard: View {
                     .strokeBorder(ZimamColor.focusRing, lineWidth: ZimamLayout.focusRingWidth)
             }
         }
-        .dropDestination(for: TaskDragItem.self) { items, _ in
+        .taskDropDestination { items in
             onDrop(items.map(\.id))
         } isTargeted: { on in
             onTargeted(on)
@@ -269,15 +269,7 @@ private struct MatrixTaskRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .draggable(TaskDragItem(id: task.id)) {
-            Text(task.title)
-                .font(ZimamType.body)
-                .foregroundStyle(ZimamColor.ink)
-                .lineLimit(2)
-                .padding(.horizontal, ZimamSpacing.space4)
-                .padding(.vertical, ZimamSpacing.space3)
-                .background(ZimamColor.surfaceRaised, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
-        }
+        .draggable(TaskDragItem(id: task.id)) { TaskDragPreview(title: task.title) }
         .contextMenu {
             Button(task.isDone ? "إلغاء الإنجاز" : "إنجاز", systemImage: "checkmark.circle", action: onToggle)
             Menu("نقل إلى") {

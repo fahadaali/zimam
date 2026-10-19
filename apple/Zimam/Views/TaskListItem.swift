@@ -60,7 +60,7 @@ private struct ProjectMoveActions: ViewModifier {
     func body(content: Content) -> some View {
         if task.parentId == nil {
             content
-                .draggable(TaskDragItem(id: task.id))
+                .draggable(TaskDragItem(id: task.id)) { TaskDragPreview(title: task.title) }
                 .contextMenu {
                     Button("نقل إلى مشروع…", systemImage: "folder") { moving = ProjectMoveRequest(id: task.id) }
                 }

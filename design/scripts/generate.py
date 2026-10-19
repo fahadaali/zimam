@@ -111,25 +111,61 @@ public enum ZimamFontName {
 SWIFT_DYNAMIC = '''
 extension Color {
     /// A color that follows the system light/dark appearance.
-    static func zimamDynamic(light: (Double, Double, Double), dark: (Double, Double, Double)) -> Color {
+    static func zimamDynamic(
+        light: (Double, Double, Double), dark: (Double, Double, Double), lightAlpha: Double = 1, darkAlpha: Double = 1
+    ) -> Color {
         #if os(watchOS)
-        return Color(red: dark.0, green: dark.1, blue: dark.2) // watchOS is always dark
+        return Color(red: dark.0, green: dark.1, blue: dark.2, opacity: darkAlpha) // watchOS is always dark
         #elseif canImport(UIKit)
         return Color(UIColor { trait in
-            let c = trait.userInterfaceStyle == .dark ? dark : light
-            return UIColor(red: c.0, green: c.1, blue: c.2, alpha: 1)
+            let isDark = trait.userInterfaceStyle == .dark
+            let c = isDark ? dark : light
+            return UIColor(red: c.0, green: c.1, blue: c.2, alpha: isDark ? darkAlpha : lightAlpha)
         })
         #elseif canImport(AppKit)
         return Color(NSColor(name: nil) { appearance in
-            let c = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
-            return NSColor(red: c.0, green: c.1, blue: c.2, alpha: 1)
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            let c = isDark ? dark : light
+            return NSColor(red: c.0, green: c.1, blue: c.2, alpha: isDark ? darkAlpha : lightAlpha)
         })
         #else
-        return Color(red: light.0, green: light.1, blue: light.2)
+        return Color(red: light.0, green: light.1, blue: light.2, opacity: lightAlpha)
         #endif
     }
 }
 '''
+
+
+SHADOW = re.compile(r"(-?\d+)(?:px)? (-?\d+)(?:px)? (\d+)(?:px)? rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)")
+
+
+def shadow(css_value):
+    """'0 8px 24px rgba(23,27,47,0.14)' -> (x, y, blur, (r, g, b), alpha)."""
+    m = SHADOW.fullmatch(css_value.strip())
+    if not m:
+        raise ValueError(f"unsupported shadow: {css_value}")
+    x, y, blur, r, g, b, a = m.groups()
+    return int(x), int(y), int(blur), (int(r) / 255, int(g) / 255, int(b) / 255), float(a)
+
+
+def swift_shadows():
+    s = ["public enum ZimamShadow {"]
+    for t in TOKENS["shadow"]["tokens"]:
+        lx, ly, lblur, lc, la = shadow(value(t["value"], "light"))
+        dx, dy, dblur, dc, da = shadow(value(t["value"], "dark"))
+        if (lx, ly, lblur) != (dx, dy, dblur):
+            raise ValueError(f"{t['name']}: light and dark must share offset and blur")
+        name = camel(t["name"].removeprefix("shadow-"))
+        s.append(f"    /// {t['usage']}")
+        s.append(f"    public static let {name}Color = Color.zimamDynamic("
+                 f"light: ({lc[0]:.4f}, {lc[1]:.4f}, {lc[2]:.4f}), dark: ({dc[0]:.4f}, {dc[1]:.4f}, {dc[2]:.4f}), "
+                 f"lightAlpha: {la:g}, darkAlpha: {da:g})")
+        s.append(f"    /// SwiftUI's shadow radius is about half the CSS blur ({lblur:g}px).")
+        s.append(f"    public static let {name}Radius: CGFloat = {lblur / 2:g}")
+        s.append(f"    public static let {name}X: CGFloat = {lx:g}")
+        s.append(f"    public static let {name}Y: CGFloat = {ly:g}")
+    s.append("}")
+    return s
 
 
 def swift():
@@ -145,7 +181,8 @@ def swift():
     s += [f"    public static let {camel(t['name'])}: CGFloat = {t['value'].replace('px', '')}" for t in TOKENS["spacing"]["tokens"]]
     s += ["}", "", "public enum ZimamRadius {"]
     s += [f"    public static let {camel(t['name'])}: CGFloat = {t['value'].replace('px', '')}" for t in TOKENS["radius"]["tokens"]]
-    s += ["}", "", SWIFT_FONTS, "public enum ZimamType {"]
+    s += ["}", ""] + swift_shadows()
+    s += ["", SWIFT_FONTS, "public enum ZimamType {"]
     for group in TOKENS["type"]["groups"]:
         for st in group["styles"]:
             fam = st.get("family", group["family"])

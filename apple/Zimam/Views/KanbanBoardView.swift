@@ -168,6 +168,18 @@ struct KanbanBoardView: View {
     }
 }
 
+/// The opened place where a dragged card will land: a card's height, outlined in the focus
+/// ring colour (design/README.md «الحالات والحركة»).
+private struct DropGap: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: ZimamRadius.radiusMd)
+            .strokeBorder(ZimamColor.focusRing, lineWidth: ZimamLayout.focusRingWidth)
+            .frame(height: ZimamSpacing.space11)
+            .transition(.opacity)
+            .accessibilityHidden(true)
+    }
+}
+
 /// One kanban column: the name and count, the cards, and «إضافة مهمة» at the bottom.
 private struct KanbanColumnView: View {
     let column: BoardColumn
@@ -208,8 +220,12 @@ private struct KanbanColumnView: View {
                     ForEach(Array(column.tasks.enumerated()), id: \.element.id) { index, task in
                         card(task, at: index)
                     }
+                    // Dropped below the last card: the gap opens at the bottom.
+                    if isTargeted && targetedCard == nil { DropGap() }
                     addControl
                 }
+                .animation(reduceMotion ? nil : .default, value: targetedCard)
+                .animation(reduceMotion ? nil : .default, value: isTargeted)
             }
         }
         .padding(ZimamSpacing.space3)
@@ -223,7 +239,7 @@ private struct KanbanColumnView: View {
             }
         }
         // Dropped on the column outside the cards: to the bottom.
-        .dropDestination(for: TaskDragItem.self) { items, _ in
+        .taskDropDestination { items in
             drop(items, before: nil)
         } isTargeted: { targeted in
             isTargeted = targeted
@@ -291,52 +307,47 @@ private struct KanbanColumnView: View {
     // MARK: Cards
 
     private func card(_ task: TaskItem, at index: Int) -> some View {
-        KanbanCard(task: task, onToggle: { toggle(task) }, onOpen: { openTask(task.id) })
-            // Where the dragged card will land: a line above this one.
-            .overlay(alignment: .top) {
-                if targetedCard == task.id {
-                    Capsule()
-                        .fill(ZimamColor.focusRing)
-                        .frame(height: ZimamLayout.focusRingWidth)
-                        .offset(y: -ZimamSpacing.space1)
-                        .accessibilityHidden(true)
-                }
-            }
-            .dropDestination(for: TaskDragItem.self) { items, _ in
-                drop(items, before: task)
-            } isTargeted: { targeted in
-                if targeted {
-                    targetedCard = task.id
-                } else if targetedCard == task.id {
-                    targetedCard = nil
-                }
-            }
-            .contextMenu {
-                Button(task.isDone ? "إلغاء الإنجاز" : "إنجاز", systemImage: "checkmark.circle") { toggle(task) }
-                Menu("نقل إلى") {
-                    ForEach(destinations) { destination in
-                        Button(destination.name) { move(task, to: destination, at: destination.tasks.count) }
+        // Where the dragged card will land: a gap opens above this one. The gap is part of the
+        // drop target, so the card moving down under the finger does not close it again.
+        VStack(spacing: ZimamSpacing.space2) {
+            if targetedCard == task.id { DropGap() }
+            KanbanCard(task: task, onToggle: { toggle(task) }, onOpen: { openTask(task.id) })
+                .contextMenu {
+                    Button(task.isDone ? "إلغاء الإنجاز" : "إنجاز", systemImage: "checkmark.circle") { toggle(task) }
+                    Menu("نقل إلى") {
+                        ForEach(destinations) { destination in
+                            Button(destination.name) { move(task, to: destination, at: destination.tasks.count) }
+                        }
                     }
+                    Button("نقل إلى مشروع…", systemImage: "folder") { movingToProject = ProjectMoveRequest(id: task.id) }
+                    Button("حذف", systemImage: "trash", role: .destructive) { store.delete(task) }
                 }
-                Button("نقل إلى مشروع…", systemImage: "folder") { movingToProject = ProjectMoveRequest(id: task.id) }
-                Button("حذف", systemImage: "trash", role: .destructive) { store.delete(task) }
+                // Dragging is not accessible: the same moves as VoiceOver actions.
+                .accessibilityActions {
+                    if let next {
+                        Button("نقل إلى القسم التالي") { move(task, to: next, at: next.tasks.count) }
+                    }
+                    if let previous {
+                        Button("نقل إلى القسم السابق") { move(task, to: previous, at: previous.tasks.count) }
+                    }
+                    if index > 0 {
+                        Button("نقل لأعلى") { move(task, to: column, at: index - 1) }
+                    }
+                    if index + 1 < column.tasks.count {
+                        Button("نقل لأسفل") { move(task, to: column, at: index + 1) }
+                    }
+                    Button("نقل إلى مشروع…") { movingToProject = ProjectMoveRequest(id: task.id) }
+                }
+        }
+        .taskDropDestination { items in
+            drop(items, before: task)
+        } isTargeted: { targeted in
+            if targeted {
+                targetedCard = task.id
+            } else if targetedCard == task.id {
+                targetedCard = nil
             }
-            // Dragging is not accessible: the same moves as VoiceOver actions.
-            .accessibilityActions {
-                if let next {
-                    Button("نقل إلى القسم التالي") { move(task, to: next, at: next.tasks.count) }
-                }
-                if let previous {
-                    Button("نقل إلى القسم السابق") { move(task, to: previous, at: previous.tasks.count) }
-                }
-                if index > 0 {
-                    Button("نقل لأعلى") { move(task, to: column, at: index - 1) }
-                }
-                if index + 1 < column.tasks.count {
-                    Button("نقل لأسفل") { move(task, to: column, at: index + 1) }
-                }
-                Button("نقل إلى مشروع…") { movingToProject = ProjectMoveRequest(id: task.id) }
-            }
+        }
     }
 
     /// `index` counts places in the destination without the task.
@@ -429,7 +440,7 @@ private struct KanbanCard: View {
             .background(ZimamColor.surfaceRaised, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
             .contentShape(RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
             .onTapGesture(perform: onOpen)
-            .draggable(TaskDragItem(id: task.id))
+            .draggable(TaskDragItem(id: task.id)) { TaskDragPreview(title: task.title) }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(task.title)
             .accessibilityValue(task.isDone ? "منجزة" : "")

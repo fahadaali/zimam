@@ -80,6 +80,15 @@ public enum ZimamRadius {
     public static let radiusPill: CGFloat = 999
 }
 
+public enum ZimamShadow {
+    /// المهمة أثناء السحب والإفلات، والقوائم المنبثقة. لا يُستعمل للبطاقات الثابتة.
+    public static let liftColor = Color.zimamDynamic(light: (0.0902, 0.1059, 0.1843), dark: (0.0000, 0.0000, 0.0000), lightAlpha: 0.14, darkAlpha: 0.5)
+    /// SwiftUI's shadow radius is about half the CSS blur (24px).
+    public static let liftRadius: CGFloat = 12
+    public static let liftX: CGFloat = 0
+    public static let liftY: CGFloat = 8
+}
+
 /// PostScript names of the fonts in design/fonts/apple. Add the .otf files to every app target
 /// (iPhone, iPad, Mac, Watch, widgets) and list them under UIAppFonts / ATSApplicationFontsPath.
 public enum ZimamFontName {
@@ -137,21 +146,25 @@ public enum ZimamType {
 
 extension Color {
     /// A color that follows the system light/dark appearance.
-    static func zimamDynamic(light: (Double, Double, Double), dark: (Double, Double, Double)) -> Color {
+    static func zimamDynamic(
+        light: (Double, Double, Double), dark: (Double, Double, Double), lightAlpha: Double = 1, darkAlpha: Double = 1
+    ) -> Color {
         #if os(watchOS)
-        return Color(red: dark.0, green: dark.1, blue: dark.2) // watchOS is always dark
+        return Color(red: dark.0, green: dark.1, blue: dark.2, opacity: darkAlpha) // watchOS is always dark
         #elseif canImport(UIKit)
         return Color(UIColor { trait in
-            let c = trait.userInterfaceStyle == .dark ? dark : light
-            return UIColor(red: c.0, green: c.1, blue: c.2, alpha: 1)
+            let isDark = trait.userInterfaceStyle == .dark
+            let c = isDark ? dark : light
+            return UIColor(red: c.0, green: c.1, blue: c.2, alpha: isDark ? darkAlpha : lightAlpha)
         })
         #elseif canImport(AppKit)
         return Color(NSColor(name: nil) { appearance in
-            let c = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
-            return NSColor(red: c.0, green: c.1, blue: c.2, alpha: 1)
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            let c = isDark ? dark : light
+            return NSColor(red: c.0, green: c.1, blue: c.2, alpha: isDark ? darkAlpha : lightAlpha)
         })
         #else
-        return Color(red: light.0, green: light.1, blue: light.2)
+        return Color(red: light.0, green: light.1, blue: light.2, opacity: lightAlpha)
         #endif
     }
 }
