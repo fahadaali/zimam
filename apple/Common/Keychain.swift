@@ -1,8 +1,10 @@
 import Foundation
 import Security
 
-/// Stores the session token in the Keychain, never in UserDefaults.
-enum Keychain {
+/// Stores the session token in the Keychain, never in UserDefaults. The Keychain is safe to
+/// use from any thread, so this is not tied to the main actor: the API client reads the token
+/// from its own tasks, and intents from theirs.
+nonisolated enum Keychain {
     private static let service = "app.zimam.session"
 
     static func read(_ account: String) -> String? {

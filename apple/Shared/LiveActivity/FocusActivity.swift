@@ -6,8 +6,9 @@ import SwiftData
 /// «المهمة الجارية»: a Live Activity for the task the user is focusing on, with a timer
 /// on the Lock Screen and in the Dynamic Island. Started from the task's details in the app;
 /// its views live in the widget extension (ZimamWidgets/FocusLiveActivity.swift).
-struct FocusActivityAttributes: ActivityAttributes {
-    struct ContentState: Codable, Hashable {
+/// Not tied to the main actor: ActivityKit reads the attributes from its own threads.
+nonisolated struct FocusActivityAttributes: ActivityAttributes {
+    nonisolated struct ContentState: Codable, Hashable {
         /// When the focus started; the timer counts up from here.
         var startedAt: Date
     }

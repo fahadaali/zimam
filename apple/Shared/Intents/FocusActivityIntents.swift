@@ -8,10 +8,10 @@ import SwiftData
 /// the app's process, launched in the background if needed, so the edit syncs through the
 /// app's engine when it has one.
 struct CompleteFocusTaskIntent: LiveActivityIntent {
-    static var title: LocalizedStringResource = "إنجاز المهمة الجارية"
-    static var description = IntentDescription("ينجز المهمة الجارية في زمام وينهي التركيز عليها.")
+    static let title: LocalizedStringResource = "إنجاز المهمة الجارية"
+    static let description = IntentDescription("ينجز المهمة الجارية في زمام وينهي التركيز عليها.")
     /// Only the Live Activity's button runs it; Siri and Shortcuts have CompleteTaskIntent.
-    static var isDiscoverable = false
+    static let isDiscoverable = false
 
     @Parameter(title: "المهمة")
     var taskId: String
@@ -38,9 +38,9 @@ struct CompleteFocusTaskIntent: LiveActivityIntent {
 
 /// «إنهاء» on the focus Live Activity: ends the focus without completing the task.
 struct EndFocusIntent: LiveActivityIntent {
-    static var title: LocalizedStringResource = "إنهاء التركيز"
-    static var description = IntentDescription("ينهي التركيز على المهمة الجارية دون إنجازها.")
-    static var isDiscoverable = false
+    static let title: LocalizedStringResource = "إنهاء التركيز"
+    static let description = IntentDescription("ينهي التركيز على المهمة الجارية دون إنجازها.")
+    static let isDiscoverable = false
 
     @Parameter(title: "المهمة")
     var taskId: String

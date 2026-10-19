@@ -11,8 +11,8 @@ import ZimamKit
 enum PrayerOption: String, AppEnum, CaseIterable {
     case fajr, dhuhr, asr, maghrib, isha
 
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "الصلاة"
-    static var caseDisplayRepresentations: [PrayerOption: DisplayRepresentation] = [
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "الصلاة"
+    static let caseDisplayRepresentations: [PrayerOption: DisplayRepresentation] = [
         .fajr: "الفجر",
         .dhuhr: "الظهر",
         .asr: "العصر",
@@ -28,9 +28,9 @@ enum PrayerOption: String, AppEnum, CaseIterable {
 /// «أضف مهمة في زمام»: a title, and optionally a day and a prayer with minutes after it
 /// (negative for before). A prayer without a day means today.
 struct AddTaskIntent: AppIntent {
-    static var title: LocalizedStringResource = "إضافة مهمة"
-    static var description = IntentDescription("يضيف مهمة إلى زمام، بتاريخ أو بوقت صلاة إن شئت.")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "إضافة مهمة"
+    static let description = IntentDescription("يضيف مهمة إلى زمام، بتاريخ أو بوقت صلاة إن شئت.")
+    static let openAppWhenRun: Bool = false
 
     @Parameter(title: "العنوان")
     var taskTitle: String
@@ -81,9 +81,9 @@ struct AddTaskIntent: AppIntent {
 
 /// «ما مهام اليوم في زمام»: reads today's open tasks, overdue ones included.
 struct TodayTasksIntent: AppIntent {
-    static var title: LocalizedStringResource = "مهام اليوم"
-    static var description = IntentDescription("يقرأ مهام اليوم المفتوحة في زمام.")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "مهام اليوم"
+    static let description = IntentDescription("يقرأ مهام اليوم المفتوحة في زمام.")
+    static let openAppWhenRun: Bool = false
 
     init() {}
 

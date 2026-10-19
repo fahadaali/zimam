@@ -2,8 +2,9 @@ import Foundation
 import ZimamKit
 
 /// The account (for its calendar and prayer method) and the place for prayer times,
-/// kept in the App Group so the widgets and intents read what the app saved.
-enum SharedSettings {
+/// kept in the App Group so the widgets and intents read what the app saved. UserDefaults is
+/// safe from any thread, so this is not tied to the main actor.
+nonisolated enum SharedSettings {
     private static let userKey = "session.user"
     private static let latitudeKey = "location.latitude"
     private static let longitudeKey = "location.longitude"

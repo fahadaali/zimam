@@ -85,7 +85,7 @@ WEIGHT = {300: ".light", 400: ".regular", 500: ".medium", 600: ".semibold", 700:
 
 SWIFT_FONTS = '''/// PostScript names of the fonts in design/fonts/apple. Add the .otf files to every app target
 /// (iPhone, iPad, Mac, Watch, widgets) and list them under UIAppFonts / ATSApplicationFontsPath.
-public enum ZimamFontName {
+nonisolated public enum ZimamFontName {
     public static func sans(_ weight: Font.Weight) -> String {
         switch weight {
         case .light: return "thmanyahsans-Light"
@@ -109,7 +109,7 @@ public enum ZimamFontName {
 '''
 
 SWIFT_DYNAMIC = '''
-extension Color {
+nonisolated extension Color {
     /// A color that follows the system light/dark appearance.
     static func zimamDynamic(
         light: (Double, Double, Double), dark: (Double, Double, Double), lightAlpha: Double = 1, darkAlpha: Double = 1
@@ -149,7 +149,7 @@ def shadow(css_value):
 
 
 def swift_shadows():
-    s = ["public enum ZimamShadow {"]
+    s = ["nonisolated public enum ZimamShadow {"]
     for t in TOKENS["shadow"]["tokens"]:
         lx, ly, lblur, lc, la = shadow(value(t["value"], "light"))
         dx, dy, dblur, dc, da = shadow(value(t["value"], "dark"))
@@ -169,20 +169,22 @@ def swift_shadows():
 
 
 def swift():
+    # The tokens are constants, so they are `nonisolated`: usable from any thread and in
+    # SwiftUI's Sendable closures, also in targets that default to the main actor.
     s = ["// Zimam design tokens — generated from design/tokens.json. Do not edit by hand.",
          "import SwiftUI", "#if canImport(UIKit)", "import UIKit", "#elseif canImport(AppKit)", "import AppKit", "#endif",
-         "", "public enum ZimamColor {"]
+         "", "nonisolated public enum ZimamColor {"]
     for c in TOKENS["color"]["tokens"]:
         l, d = rgb(resolve(c["name"], "light")), rgb(resolve(c["name"], "dark"))
         s.append(f"    /// {c['usage']}")
         s.append(f"    public static let {camel(c['name'])} = Color.zimamDynamic("
                  f"light: ({l[0]:.4f}, {l[1]:.4f}, {l[2]:.4f}), dark: ({d[0]:.4f}, {d[1]:.4f}, {d[2]:.4f}))")
-    s += ["}", "", "public enum ZimamSpacing {"]
+    s += ["}", "", "nonisolated public enum ZimamSpacing {"]
     s += [f"    public static let {camel(t['name'])}: CGFloat = {t['value'].replace('px', '')}" for t in TOKENS["spacing"]["tokens"]]
-    s += ["}", "", "public enum ZimamRadius {"]
+    s += ["}", "", "nonisolated public enum ZimamRadius {"]
     s += [f"    public static let {camel(t['name'])}: CGFloat = {t['value'].replace('px', '')}" for t in TOKENS["radius"]["tokens"]]
     s += ["}", ""] + swift_shadows()
-    s += ["", SWIFT_FONTS, "public enum ZimamType {"]
+    s += ["", SWIFT_FONTS, "nonisolated public enum ZimamType {"]
     for group in TOKENS["type"]["groups"]:
         for st in group["styles"]:
             fam = st.get("family", group["family"])

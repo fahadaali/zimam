@@ -3,7 +3,7 @@ import SwiftData
 import WidgetKit
 
 /// What the app, its widgets and its intents share on this device.
-enum ZimamShared {
+nonisolated enum ZimamShared {
     /// The App Group that holds the local store and the few settings the widgets read.
     /// Register it in the developer account (see docs/setup.md).
     static let appGroup = "group.app.zimam.ios"
