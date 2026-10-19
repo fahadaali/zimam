@@ -30,14 +30,7 @@ extension DualDateFormatter {
     }
 
     private func formatted(_ date: Date, in kind: CalendarKind, pattern: String) -> String {
-        let formatter = DateFormatter()
-        var calendar = Calendar(identifier: kind.identifier)
-        calendar.timeZone = timeZone
-        formatter.calendar = calendar
-        formatter.locale = locale
-        formatter.timeZone = timeZone
-        formatter.dateFormat = pattern
-        return formatter.string(from: date)
+        DateFormatterCache.string(from: date, calendar: kind.identifier, locale: locale, timeZone: timeZone, pattern: pattern)
     }
 }
 

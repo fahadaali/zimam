@@ -42,6 +42,10 @@ struct SidebarView: View {
     var body: some View {
         let open = tasks.filter { !$0.isDone && $0.parentId == nil }
         let today = formatter.dayString(from: Date())
+        // Counted once, then looked up per row, rather than filtering every task per row.
+        let openByProject = Dictionary(grouping: open, by: \.projectId).mapValues(\.count)
+        let openBySection = Dictionary(grouping: open, by: \.sectionId).mapValues(\.count)
+        let sectionsByProject = Dictionary(grouping: sections, by: \.projectId)
         List(selection: $selection) {
             Section {
                 row("اليوم", systemImage: "sun.max", item: .today,
@@ -63,8 +67,8 @@ struct SidebarView: View {
                         .foregroundStyle(ZimamColor.inkMuted)
                 }
                 ForEach(projects) { project in
-                    let own = sections.filter { $0.projectId == project.id }
-                    let count = open.filter { $0.projectId == project.id }.count
+                    let own = sectionsByProject[project.id] ?? []
+                    let count = openByProject[project.id] ?? 0
                     if own.isEmpty {
                         projectRow(project, count: count)
                     } else {
@@ -72,7 +76,7 @@ struct SidebarView: View {
                             ForEach(own) { section in
                                 row(section.name, systemImage: "rectangle.split.3x1",
                                     item: .section(project: project.id, section: section.id),
-                                    count: open.filter { $0.sectionId == section.id }.count)
+                                    count: openBySection[section.id] ?? 0)
                                     .modifier(taskDrop(.section(project: project.id, section: section.id), name: section.name,
                                                          project: project.id, section: section.id))
                             }
@@ -191,7 +195,7 @@ private struct SidebarDropTarget: ViewModifier {
                         .accessibilityHidden(true)
                 }
             }
-            .dropDestination(for: TaskDragItem.self) { items, _ in
+            .taskDropDestination { items in
                 onDrop(items)
             } isTargeted: { targeted in
                 onTargeted(targeted)

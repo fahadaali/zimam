@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 import SwiftData
 import ZimamKit
 
@@ -19,6 +20,9 @@ final class SyncEngine {
     @ObservationIgnored private var runAgain = false
     @ObservationIgnored private var realtime: RealtimeChannel?
     @ObservationIgnored private var remoteSync: Task<Void, Never>?
+    /// Bumped by `reset()`. A sync started before it stops at its next step instead of writing
+    /// the previous account's records, or its cursor, into the wiped store.
+    @ObservationIgnored private var generation = 0
     /// Called when the server no longer accepts the session.
     @ObservationIgnored var onUnauthorized: (() -> Void)?
     /// Called after local edits and after each sync, so what depends on the data
@@ -26,6 +30,13 @@ final class SyncEngine {
     @ObservationIgnored var onDataChanged: (@MainActor () -> Void)?
 
     private static let cursorKey = "sync.cursor"
+    /// Set before a wipe and cleared once it is saved. While set, nothing is sent, so a wipe
+    /// that failed at sign-out never lets the next account push this one's records.
+    private static let wipePendingKey = "sync.wipePending"
+    private static let logger = Logger(subsystem: "app.zimam.ios", category: "sync")
+
+    /// The account changed under a sync in progress.
+    private struct Superseded: Error {}
 
     init(api: APIClient, context: ModelContext) {
         self.api = api
@@ -59,15 +70,24 @@ final class SyncEngine {
             runAgain = true
             return
         }
+        guard wipeIfPending() else {
+            lastError = "تعذّرت المزامنة، وستُعاد المحاولة تلقائياً."
+            onDataChanged?()
+            return
+        }
         isSyncing = true
         defer { isSyncing = false }
         repeat {
             runAgain = false
+            let started = generation
             do {
-                try await push()
-                try await pull()
+                try await push(started)
+                try await pull(started)
                 lastSyncedAt = Date()
                 lastError = nil
+            } catch is Superseded {
+                // Signed out mid-sync: the new account's request, if any, runs from scratch.
+                continue
             } catch let error as APIError where error.isUnauthorized {
                 onUnauthorized?()
                 return
@@ -117,17 +137,36 @@ final class SyncEngine {
         }
     }
 
-    /// Removes every local record and starts the next sync from scratch.
-    func reset() throws {
+    /// Removes every local record and starts the next sync from scratch. A sync in progress
+    /// stops at its next step. If the wipe fails it is retried before the next sync sends
+    /// anything (`wipeIfPending`).
+    func reset() {
+        generation += 1
         scheduled?.cancel()
         stopRealtime()
-        try context.delete(model: ReminderItem.self)
-        try context.delete(model: TaskItem.self)
-        try context.delete(model: SectionItem.self)
-        try context.delete(model: ProjectItem.self)
-        try context.save()
-        cursor = 0
+        ZimamShared.defaults.set(true, forKey: Self.wipePendingKey)
+        wipeIfPending()
         onDataChanged?()
+    }
+
+    /// Finishes a pending wipe. False while it still fails; the store is left as it was.
+    @discardableResult
+    func wipeIfPending() -> Bool {
+        guard ZimamShared.defaults.bool(forKey: Self.wipePendingKey) else { return true }
+        do {
+            try context.delete(model: ReminderItem.self)
+            try context.delete(model: TaskItem.self)
+            try context.delete(model: SectionItem.self)
+            try context.delete(model: ProjectItem.self)
+            try context.save()
+        } catch {
+            context.rollback()
+            Self.logger.error("Wiping local data failed: \(error.localizedDescription)")
+            return false
+        }
+        cursor = 0
+        ZimamShared.defaults.set(false, forKey: Self.wipePendingKey)
+        return true
     }
 
     // MARK: Push
@@ -137,7 +176,7 @@ final class SyncEngine {
         let settle: (MutationResult) -> Void
     }
 
-    private func push() async throws {
+    private func push(_ started: Int) async throws {
         let projects = try context.fetch(FetchDescriptor<ProjectItem>(predicate: #Predicate { $0.isDirty }))
         let sections = try context.fetch(FetchDescriptor<SectionItem>(predicate: #Predicate { $0.isDirty }))
         let tasks = try context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { $0.isDirty }))
@@ -179,6 +218,8 @@ final class SyncEngine {
         while start < all.count {
             let batch = Array(all[start..<min(start + APIClient.maxPushBatch, all.count)])
             let results = try await api.push(batch.map(\.mutation))
+            // After a reset these records are deleted: settling them would touch freed models.
+            guard generation == started else { throw Superseded() }
             for (item, result) in zip(batch, results) { item.settle(result) }
             try context.save()
             start += batch.count
@@ -232,10 +273,11 @@ final class SyncEngine {
 
     // MARK: Pull
 
-    private func pull() async throws {
+    private func pull(_ started: Int) async throws {
         var hasMore = true
         while hasMore {
             let page = try await api.pull(cursor: cursor)
+            guard generation == started else { throw Superseded() }
             for change in page.changes { apply(change) }
             try context.save()
             cursor = page.cursor

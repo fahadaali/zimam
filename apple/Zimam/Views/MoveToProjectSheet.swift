@@ -28,6 +28,7 @@ struct MoveToProjectSheet: View {
     }
 
     var body: some View {
+        let sectionsByProject = Dictionary(grouping: sections, by: \.projectId)
         NavigationStack {
             Group {
                 if let task = matches.first, !task.pendingDelete {
@@ -48,7 +49,7 @@ struct MoveToProjectSheet: View {
                             }
                             ForEach(projects) { project in
                                 destination(project.name, systemImage: "folder", project: project.id, section: nil, task: task)
-                                ForEach(sections.filter { $0.projectId == project.id }) { section in
+                                ForEach(sectionsByProject[project.id] ?? []) { section in
                                     destination(section.name, systemImage: "rectangle.split.3x1",
                                                 project: project.id, section: section.id, task: task)
                                         .padding(.leading, ZimamSpacing.space6)

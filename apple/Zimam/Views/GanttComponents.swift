@@ -313,12 +313,14 @@ struct GanttAxis: View {
         let primary = calendar(kind)
         let other = calendar(kind.other)
         let weekdays = Calendar(identifier: .gregorian)
+        // Once for the row, not per day: each call builds a calendar and its symbols.
+        let symbols = formatter.weekdaySymbols(Array(1...7), short: true)
         return HStack(spacing: 0) {
             ForEach(dates.indices, id: \.self) { index in
                 let date = dates[index]
                 let isToday = index == todayIndex
                 VStack(spacing: 0) {
-                    Text(formatter.weekdaySymbols([weekdays.component(.weekday, from: date)], short: true).first ?? "")
+                    Text(symbols[weekdays.component(.weekday, from: date) - 1])
                         .font(ZimamType.caption)
                         .foregroundStyle(ZimamColor.inkMuted)
                     Text(formatter.number(primary.component(.day, from: date)))

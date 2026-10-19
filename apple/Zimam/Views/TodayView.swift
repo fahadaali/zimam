@@ -7,11 +7,12 @@ import ZimamKit
 struct TodayView: View {
     @Environment(\.dateFormatterZimam) private var formatter
     @Environment(\.taskSelection) private var taskSelection
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder), SortDescriptor(\TaskItem.createdAt)])
     private var tasks: [TaskItem]
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
     @State private var showingAdd = false
-    @State private var lingering: Set<UUID> = []
+    @State private var lingering = Lingering()
     /// The Apple Calendar event whose details are open.
     @State private var openEvent: ShownEvent?
 
@@ -28,6 +29,8 @@ struct TodayView: View {
     var body: some View {
         let names = projectNames(projects)
         let events = todayEvents
+        // Once per render, not once per use.
+        let items = self.items
         List(selection: taskSelection) {
             Section {
                 // «ملخص اليوم» from the assistant; hidden offline.
@@ -69,10 +72,6 @@ struct TodayView: View {
     }
 
     private func linger(_ id: UUID) {
-        lingering.insert(id)
-        Task {
-            try? await Task.sleep(for: .seconds(1))
-            _ = withAnimation { lingering.remove(id) }
-        }
+        lingering.hold(id, animation: reduceMotion ? nil : .default)
     }
 }

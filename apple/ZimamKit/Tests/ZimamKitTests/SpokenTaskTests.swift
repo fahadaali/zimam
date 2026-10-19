@@ -1,50 +1,51 @@
-import XCTest
+import Foundation
+import Testing
 @testable import ZimamKit
 
-final class SpokenTaskTests: XCTestCase {
-    func testTheAssistantsReadingBecomesTheRecord() {
+struct SpokenTaskTests {
+    @Test func theAssistantsReadingBecomesTheRecord() {
         let suggestion = TaskSuggestion(title: "مراجعة العقد", notes: "  ", dueDate: "2026-10-16", duePrayer: .asr,
                                         duePrayerOffset: 30, priority: .high, tags: ["عمل"])
         let record = SpokenTask(suggestion: suggestion).record(today: "2026-10-15")
-        XCTAssertEqual(record.title, "مراجعة العقد")
-        XCTAssertNil(record.notes)
-        XCTAssertEqual(record.dueDate, "2026-10-16")
-        XCTAssertEqual(record.duePrayer, .asr)
-        XCTAssertEqual(record.duePrayerOffset, 30)
-        XCTAssertNil(record.dueTime)
-        XCTAssertEqual(record.priority, .high)
-        XCTAssertEqual(record.tags, ["عمل"])
+        #expect(record.title == "مراجعة العقد")
+        #expect(record.notes == nil)
+        #expect(record.dueDate == "2026-10-16")
+        #expect(record.duePrayer == .asr)
+        #expect(record.duePrayerOffset == 30)
+        #expect(record.dueTime == nil)
+        #expect(record.priority == .high)
+        #expect(record.tags == ["عمل"])
     }
 
-    func testAPrayerWithoutADayIsToday() {
+    @Test func aPrayerWithoutADayIsToday() {
         let record = SpokenTask(suggestion: TaskSuggestion(title: "اتصال بأبي", duePrayer: .maghrib)).record(today: "2026-10-15")
-        XCTAssertEqual(record.dueDate, "2026-10-15")
-        XCTAssertEqual(record.duePrayerOffset, 0)
+        #expect(record.dueDate == "2026-10-15")
+        #expect(record.duePrayerOffset == 0)
     }
 
-    func testATimeNeedsADayAndNoPrayer() {
+    @Test func aTimeNeedsADayAndNoPrayer() {
         let undated = SpokenTask(suggestion: TaskSuggestion(title: "شراء الخبز", dueTime: "21:30")).record(today: "2026-10-15")
-        XCTAssertNil(undated.dueDate)
-        XCTAssertNil(undated.dueTime)
+        #expect(undated.dueDate == nil)
+        #expect(undated.dueTime == nil)
 
         let dated = SpokenTask(suggestion: TaskSuggestion(title: "شراء الخبز", dueDate: "2026-10-15", dueTime: "21:30"))
             .record(today: "2026-10-15")
-        XCTAssertEqual(dated.dueTime, "21:30")
+        #expect(dated.dueTime == "21:30")
     }
 
-    func testTheWatchDefaultsToToday() {
+    @Test func theWatchDefaultsToToday() {
         let record = SpokenTask(text: "  اشتر الحليب ", problem: .offline).record(today: "2026-10-15", defaultDueDate: "2026-10-15")
-        XCTAssertEqual(record.title, "اشتر الحليب")
-        XCTAssertEqual(record.dueDate, "2026-10-15")
-        XCTAssertNil(record.duePrayer)
+        #expect(record.title == "اشتر الحليب")
+        #expect(record.dueDate == "2026-10-15")
+        #expect(record.duePrayer == nil)
     }
 
-    func testTheSentenceIsKeptWhenTheAssistantCannotReadIt() {
+    @Test func theSentenceIsKeptWhenTheAssistantCannotReadIt() {
         let spoken = SpokenTask(text: "ذكرني أراجع العقد بعد العصر بكرة", problem: .proRequired)
-        XCTAssertFalse(spoken.isRead)
-        XCTAssertEqual(spoken.suggestion.title, "ذكرني أراجع العقد بعد العصر بكرة")
-        XCTAssertEqual(spoken.suggestion.priority, TaskPriority.none)
-        XCTAssertNil(spoken.suggestion.dueDate)
-        XCTAssertTrue(SpokenTask(suggestion: TaskSuggestion(title: "مهمة")).isRead)
+        #expect(!spoken.isRead)
+        #expect(spoken.suggestion.title == "ذكرني أراجع العقد بعد العصر بكرة")
+        #expect(spoken.suggestion.priority == TaskPriority.none)
+        #expect(spoken.suggestion.dueDate == nil)
+        #expect(SpokenTask(suggestion: TaskSuggestion(title: "مهمة")).isRead)
     }
 }

@@ -78,15 +78,17 @@ struct TaskEntityQuery: EntityStringQuery {
     @MainActor
     func entities(for identifiers: [UUID]) async throws -> [TaskEntity] {
         let wanted = Set(identifiers)
+        let formatter = TaskEntity.userFormatter()
         return allTasks()
             .filter { wanted.contains($0.id) }
-            .map { TaskEntity($0) }
+            .map { TaskEntity($0, formatter: formatter) }
     }
 
     @MainActor
     func entities(matching string: String) async throws -> [TaskEntity] {
         let matches = allTasks().filter { !$0.isDone && ArabicSearch.matches($0.title, query: string) }
-        return Array(matches.prefix(20)).map { TaskEntity($0) }
+        let formatter = TaskEntity.userFormatter()
+        return Array(matches.prefix(20)).map { TaskEntity($0, formatter: formatter) }
     }
 
     @MainActor
@@ -94,7 +96,8 @@ struct TaskEntityQuery: EntityStringQuery {
         let context = ZimamStore.shared.mainContext
         let today = TodayTasks.fetch(in: context, today: TodayTasks.todayString())
         let tasks = today.isEmpty ? allTasks().filter { !$0.isDone && $0.parentId == nil } : today
-        return Array(tasks.prefix(20)).map { TaskEntity($0) }
+        let formatter = TaskEntity.userFormatter()
+        return Array(tasks.prefix(20)).map { TaskEntity($0, formatter: formatter) }
     }
 
     @MainActor

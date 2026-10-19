@@ -21,6 +21,8 @@ struct ProjectsView: View {
     }
 
     var body: some View {
+        // Grouped once, then looked up per card, rather than filtering every task per project.
+        let byProject = Dictionary(grouping: tasks.filter { $0.parentId == nil }, by: \.projectId)
         List {
             // The timeline and the matrix of every project, at the top of the iPhone's projects tab
             // (the iPad and the Mac list them in the sidebar).
@@ -40,7 +42,7 @@ struct ProjectsView: View {
             Section {
                 if projects.isEmpty { EmptyLine(text: "لا مشاريع بعد.") }
                 ForEach(projects) { project in
-                    let own = tasks.filter { $0.projectId == project.id && $0.parentId == nil }
+                    let own = byProject[project.id] ?? []
                     NavigationLink(value: project.id) {
                         ProjectCard(name: project.name, done: own.filter(\.isDone).count, total: own.count)
                     }
@@ -94,6 +96,7 @@ struct ProjectDetailView: View {
     @Environment(SyncEngine.self) private var sync
     @Environment(\.taskSelection) private var taskSelection
     @Environment(\.projectOpened) private var projectOpened
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var sharing = false
 
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder), SortDescriptor(\TaskItem.createdAt)])
@@ -105,6 +108,8 @@ struct ProjectDetailView: View {
     @State private var showingAdd = false
     /// A board card opened on the iPhone, where the board has no list to select in.
     @State private var opened: TaskRoute?
+    /// A task completed in the list stays among the open ones for a second so it can be undone.
+    @State private var lingering = Lingering()
 
     init(projectId: UUID, sectionId: UUID? = nil) {
         self.projectId = projectId
@@ -164,13 +169,13 @@ struct ProjectDetailView: View {
             guard let sectionId else { return true }
             return task.sectionId == sectionId
         }
-        let open = shown.filter { !$0.isDone }
-        let done = shown.filter(\.isDone)
+        let open = shown.filter { !$0.isDone || lingering.contains($0.id) }
+        let done = shown.filter { $0.isDone && !lingering.contains($0.id) }
         List(selection: taskSelection) {
             if let sectionId {
                 Section {
                     if open.isEmpty { EmptyLine(text: "لا مهام مفتوحة في هذا القسم.") }
-                    ForEach(open) { TaskListItem(task: $0) }
+                    ForEach(open) { TaskListItem(task: $0, onCompleted: linger) }
                 } header: {
                     ScreenHeader(title: sections.first { $0.id == sectionId }?.name ?? name, subtitle: name)
                 }
@@ -178,7 +183,7 @@ struct ProjectDetailView: View {
                 // Tasks with no section (or one deleted elsewhere) first, then each section.
                 Section {
                     if open.isEmpty { EmptyLine(text: "لا مهام مفتوحة في هذا المشروع.") }
-                    ForEach(open.filter { $0.sectionId.map { !known.contains($0) } ?? true }) { TaskListItem(task: $0) }
+                    ForEach(open.filter { $0.sectionId.map { !known.contains($0) } ?? true }) { TaskListItem(task: $0, onCompleted: linger) }
                 } header: {
                     ScreenHeader(title: name)
                 }
@@ -186,7 +191,7 @@ struct ProjectDetailView: View {
                     let items = open.filter { $0.sectionId == section.id }
                     if !items.isEmpty {
                         Section {
-                            ForEach(items) { TaskListItem(task: $0) }
+                            ForEach(items) { TaskListItem(task: $0, onCompleted: linger) }
                         } header: {
                             ListSectionHeader(title: section.name)
                         }
@@ -224,6 +229,10 @@ struct ProjectDetailView: View {
         } else {
             opened = TaskRoute(id: taskId)
         }
+    }
+
+    private func linger(_ id: UUID) {
+        lingering.hold(id, animation: reduceMotion ? nil : .default)
     }
 }
 

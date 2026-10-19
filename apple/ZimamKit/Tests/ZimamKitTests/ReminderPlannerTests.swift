@@ -1,7 +1,8 @@
-import XCTest
+import Foundation
+import Testing
 @testable import ZimamKit
 
-final class ReminderPlannerTests: XCTestCase {
+final class ReminderPlannerTests {
     let riyadh = TimeZone(identifier: "Asia/Riyadh")!
     /// 2026-10-13 12:00 in Riyadh.
     let now = Date(timeIntervalSince1970: 1_791_882_000)
@@ -17,35 +18,35 @@ final class ReminderPlannerTests: XCTestCase {
         formatter.date(fromDay: day)!.addingTimeInterval(12 * 3600)
     }
 
-    func testISOStringsRoundTripWithOffset() {
-        XCTAssertEqual(ReminderPlanner.isoString(from: now, timeZone: riyadh), "2026-10-13T12:00:00+03:00")
-        XCTAssertEqual(ReminderPlanner.date(fromISO: "2026-10-13T12:00:00+03:00"), now)
-        XCTAssertEqual(ReminderPlanner.date(fromISO: "2026-10-13T09:00:00Z"), now)
-        XCTAssertEqual(ReminderPlanner.date(fromISO: "2026-10-13T09:00:00.000Z"), now)
-        XCTAssertNil(ReminderPlanner.date(fromISO: "tomorrow"))
+    @Test func isoStringsRoundTripWithOffset() {
+        #expect(ReminderPlanner.isoString(from: now, timeZone: riyadh) == "2026-10-13T12:00:00+03:00")
+        #expect(ReminderPlanner.date(fromISO: "2026-10-13T12:00:00+03:00") == now)
+        #expect(ReminderPlanner.date(fromISO: "2026-10-13T09:00:00Z") == now)
+        #expect(ReminderPlanner.date(fromISO: "2026-10-13T09:00:00.000Z") == now)
+        #expect(ReminderPlanner.date(fromISO: "tomorrow") == nil)
     }
 
-    func testTimeRemindersInsideTheWindowOnly() {
+    @Test func timeRemindersInsideTheWindowOnly() {
         let task = PlannerTask(id: UUID(), title: "مراجعة العقد", dueDay: "2026-10-14")
         let soon = PlannerReminder(id: UUID(), taskId: task.id, kind: .time, at: "2026-10-13T15:00:00+03:00")
         let past = PlannerReminder(id: UUID(), taskId: task.id, kind: .time, at: "2026-10-13T11:00:00+03:00")
         let far = PlannerReminder(id: UUID(), taskId: task.id, kind: .time, at: "2026-10-28T12:00:00+03:00")
         let result = plan([task], [soon, past, far], schedule: schedule)
-        XCTAssertEqual(result.count, 1)
-        XCTAssertEqual(result[0].id, "reminder-\(soon.id.uuidString)")
-        XCTAssertEqual(result[0].taskId, task.id)
-        XCTAssertEqual(result[0].date, now.addingTimeInterval(3 * 3600))
-        XCTAssertEqual(result[0].title, "مراجعة العقد")
-        XCTAssertEqual(result[0].body, "موعدها غداً")
+        #expect(result.count == 1)
+        #expect(result[0].id == "reminder-\(soon.id.uuidString)")
+        #expect(result[0].taskId == task.id)
+        #expect(result[0].date == now.addingTimeInterval(3 * 3600))
+        #expect(result[0].title == "مراجعة العقد")
+        #expect(result[0].body == "موعدها غداً")
     }
 
-    func testTimeReminderForTaskWithoutDueDay() {
+    @Test func timeReminderForTaskWithoutDueDay() {
         let task = PlannerTask(id: UUID(), title: "اتصال")
         let reminder = PlannerReminder(id: UUID(), taskId: task.id, kind: .time, at: "2026-10-14T09:00:00+03:00")
-        XCTAssertEqual(plan([task], [reminder], schedule: nil).first?.body, "تذكير بمهمتك")
+        #expect(plan([task], [reminder], schedule: nil).first?.body == "تذكير بمهمتك")
     }
 
-    func testDoneTasksOrphansAndLocationRemindersAreSkipped() {
+    @Test func doneTasksOrphansAndLocationRemindersAreSkipped() {
         let done = PlannerTask(id: UUID(), title: "منجزة", isDone: true)
         let open = PlannerTask(id: UUID(), title: "مفتوحة")
         let reminders = [
@@ -53,54 +54,54 @@ final class ReminderPlannerTests: XCTestCase {
             PlannerReminder(id: UUID(), taskId: UUID(), kind: .time, at: "2026-10-13T15:00:00+03:00"),
             PlannerReminder(id: UUID(), taskId: open.id, kind: .location),
         ]
-        XCTAssertTrue(plan([done, open], reminders, schedule: schedule).isEmpty)
+        #expect(plan([done, open], reminders, schedule: schedule).isEmpty)
     }
 
-    func testPrayerReminderWithDueDayFiresOnThatDay() {
+    @Test func prayerReminderWithDueDayFiresOnThatDay() {
         let task = PlannerTask(id: UUID(), title: "زيارة الوالدة", dueDay: "2026-10-15")
         let reminder = PlannerReminder(id: UUID(), taskId: task.id, kind: .prayer, prayer: .asr, offsetMinutes: 20)
         let result = plan([task], [reminder], schedule: schedule)
-        XCTAssertEqual(result.count, 1)
-        XCTAssertEqual(result[0].id, "reminder-\(reminder.id.uuidString)@2026-10-15")
-        XCTAssertEqual(result[0].date, schedule.time(of: .asr, on: noon("2026-10-15"), offsetMinutes: 20))
-        XCTAssertEqual(result[0].body, "بعد العصر بـ٢٠ د")
+        #expect(result.count == 1)
+        #expect(result[0].id == "reminder-\(reminder.id.uuidString)@2026-10-15")
+        #expect(result[0].date == schedule.time(of: .asr, on: noon("2026-10-15"), offsetMinutes: 20))
+        #expect(result[0].body == "بعد العصر بـ٢٠ د")
     }
 
-    func testPrayerReminderWithoutDueDayRepeatsDaily() {
+    @Test func prayerReminderWithoutDueDayRepeatsDaily() {
         let task = PlannerTask(id: UUID(), title: "ورد يومي")
         let reminder = PlannerReminder(id: UUID(), taskId: task.id, kind: .prayer, prayer: .asr, offsetMinutes: 20)
         let result = plan([task], [reminder], schedule: schedule)
         // Today's Asr is still ahead at noon; the 15th Asr falls after the 14-day window.
-        XCTAssertEqual(result.count, 14)
-        XCTAssertEqual(result.first?.date, schedule.time(of: .asr, on: now, offsetMinutes: 20))
-        XCTAssertEqual(result.first?.id, "reminder-\(reminder.id.uuidString)@2026-10-13")
-        XCTAssertEqual(result.last?.id, "reminder-\(reminder.id.uuidString)@2026-10-26")
-        XCTAssertEqual(Set(result.map(\.id)).count, 14)
-        XCTAssertEqual(result.map(\.date), result.map(\.date).sorted())
+        #expect(result.count == 14)
+        #expect(result.first?.date == schedule.time(of: .asr, on: now, offsetMinutes: 20))
+        #expect(result.first?.id == "reminder-\(reminder.id.uuidString)@2026-10-13")
+        #expect(result.last?.id == "reminder-\(reminder.id.uuidString)@2026-10-26")
+        #expect(Set(result.map(\.id)).count == 14)
+        #expect(result.map(\.date) == result.map(\.date).sorted())
     }
 
-    func testPrayerRemindersNeedASchedule() {
+    @Test func prayerRemindersNeedASchedule() {
         let task = PlannerTask(id: UUID(), title: "ورد يومي", duePrayer: .fajr)
         let reminder = PlannerReminder(id: UUID(), taskId: task.id, kind: .prayer, prayer: .asr)
-        XCTAssertTrue(plan([task], [reminder], schedule: nil).isEmpty)
+        #expect(plan([task], [reminder], schedule: nil).isEmpty)
     }
 
-    func testTaskAnchoredToAPrayerFiresAtItsTime() {
+    @Test func taskAnchoredToAPrayerFiresAtItsTime() {
         let task = PlannerTask(id: UUID(), title: "شراء الخبز", dueDay: "2026-10-14", duePrayer: .maghrib, duePrayerOffset: -10)
         let result = plan([task], [], schedule: schedule)
-        XCTAssertEqual(result.count, 1)
-        XCTAssertEqual(result[0].id, "task-\(task.id.uuidString)@2026-10-14")
-        XCTAssertEqual(result[0].date, schedule.time(of: .maghrib, on: noon("2026-10-14"), offsetMinutes: -10))
-        XCTAssertEqual(result[0].body, "قبل المغرب بـ١٠ د")
+        #expect(result.count == 1)
+        #expect(result[0].id == "task-\(task.id.uuidString)@2026-10-14")
+        #expect(result[0].date == schedule.time(of: .maghrib, on: noon("2026-10-14"), offsetMinutes: -10))
+        #expect(result[0].body == "قبل المغرب بـ١٠ د")
     }
 
-    func testAReminderRepeatingTheTaskAnchorIsSentOnce() {
+    @Test func aReminderRepeatingTheTaskAnchorIsSentOnce() {
         let task = PlannerTask(id: UUID(), title: "مراجعة", dueDay: "2026-10-14", duePrayer: .asr, duePrayerOffset: 20)
         let reminder = PlannerReminder(id: UUID(), taskId: task.id, kind: .prayer, prayer: .asr, offsetMinutes: 20)
-        XCTAssertEqual(plan([task], [reminder], schedule: schedule).count, 1)
+        #expect(plan([task], [reminder], schedule: schedule).count == 1)
     }
 
-    func testKeepsTheSoonestUpToTheLimit() {
+    @Test func keepsTheSoonestUpToTheLimit() {
         let task = PlannerTask(id: UUID(), title: "كل ساعة")
         var reminders: [PlannerReminder] = []
         for hour in 1...100 {
@@ -108,9 +109,9 @@ final class ReminderPlannerTests: XCTestCase {
             reminders.append(PlannerReminder(id: UUID(), taskId: task.id, kind: .time, at: at))
         }
         let result = plan([task], reminders.reversed(), schedule: nil)
-        XCTAssertEqual(result.count, ReminderPlanner.defaultLimit)
-        XCTAssertEqual(result.first?.date, now.addingTimeInterval(3600))
-        XCTAssertEqual(result.last?.date, now.addingTimeInterval(TimeInterval(ReminderPlanner.defaultLimit) * 3600))
-        XCTAssertEqual(plan([task], reminders, schedule: nil, limit: 5).count, 5)
+        #expect(result.count == ReminderPlanner.defaultLimit)
+        #expect(result.first?.date == now.addingTimeInterval(3600))
+        #expect(result.last?.date == now.addingTimeInterval(TimeInterval(ReminderPlanner.defaultLimit) * 3600))
+        #expect(plan([task], reminders, schedule: nil, limit: 5).count == 5)
     }
 }

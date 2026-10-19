@@ -161,7 +161,11 @@ struct AddTaskView: View {
             .onChange(of: latestStart) { _, latest in
                 if let latest, startDate > latest { startDate = latest }
             }
-            .onDisappear { dictation.cancel() }
+            .onDisappear {
+                dictation.cancel()
+                // The closure holds this view, whose state holds the dictation: let go on close.
+                dictation.onFinish = nil
+            }
             .onChange(of: dictation.transcript) { _, words in
                 if dictation.isActive { title = dictationPrefix + words }
             }

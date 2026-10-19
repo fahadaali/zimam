@@ -9,8 +9,11 @@ extension Store {
     /// Puts a top-level task in `projectId` (nil is the inbox) and in `sectionId` there (nil
     /// is the project without a section). A new section takes it at the bottom.
     func move(_ task: TaskItem, toProject projectId: UUID?, section sectionId: UUID?) {
-        move(task, toProject: projectId)
-        guard task.sectionId != sectionId else { return }
+        // One save and one version bump for the whole move, not one for the project and another
+        // for the section.
+        let changesProject = task.projectId != projectId
+        if changesProject { reassign(task, toProject: projectId) }
+        guard changesProject || task.sectionId != sectionId else { return }
         if let sectionId {
             let id = task.id
             let all = (try? context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { !$0.pendingDelete }))) ?? []

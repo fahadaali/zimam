@@ -16,6 +16,8 @@ struct SearchView: View {
 
     var body: some View {
         let names = projectNames(projects)
+        // Once per render: the search folds every task's text.
+        let results = self.results
         List(selection: taskSelection) {
             if query.trimmingCharacters(in: .whitespaces).isEmpty {
                 EmptyLine(text: "ابحث في عناوين المهام وملاحظاتها ووسومها.")

@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 import ZimamKit
 
@@ -18,6 +19,8 @@ protocol SyncScheduling: AnyObject {
 struct Store {
     let context: ModelContext
     let sync: (any SyncScheduling)?
+
+    private static let logger = Logger(subsystem: "app.zimam.ios", category: "store")
 
     init(context: ModelContext, sync: (any SyncScheduling)?) {
         self.context = context
@@ -68,10 +71,16 @@ struct Store {
     /// follow, as they do on the server, which also sends them to other devices.
     func move(_ task: TaskItem, toProject projectId: UUID?) {
         guard task.projectId != projectId else { return }
-        let all = (try? context.fetch(FetchDescriptor<TaskItem>())) ?? []
+        reassign(task, toProject: projectId)
+        touch(task)
+    }
+
+    /// `move(_:toProject:)` without saving, for a move that changes more before its one save.
+    func reassign(_ task: TaskItem, toProject projectId: UUID?) {
+        let children = Dictionary(grouping: (try? context.fetch(FetchDescriptor<TaskItem>())) ?? [], by: \.parentId)
         var queue = [task.id]
         while let id = queue.popLast() {
-            for child in all where child.parentId == id {
+            for child in children[id] ?? [] {
                 child.projectId = projectId
                 child.sectionId = nil
                 queue.append(child.id)
@@ -81,7 +90,6 @@ struct Store {
         task.sectionId = nil
         // The assignee may not be a member of the new project; the server rejects that.
         task.assigneeId = nil
-        touch(task)
     }
 
     /// Moves a task to another day ("2026-10-15"), from the calendar's drag and drop or «نقل إلى…».
@@ -110,10 +118,10 @@ struct Store {
 
     /// Deletes a task and its subtasks; the server does the same for other devices.
     func delete(_ task: TaskItem) {
-        let all = (try? context.fetch(FetchDescriptor<TaskItem>())) ?? []
+        let children = Dictionary(grouping: (try? context.fetch(FetchDescriptor<TaskItem>())) ?? [], by: \.parentId)
         var queue = [task.id]
         while let id = queue.popLast() {
-            for child in all where child.parentId == id && !child.pendingDelete {
+            for child in children[id] ?? [] where !child.pendingDelete {
                 child.pendingDelete = true
                 child.isDirty = false // the parent's deletion covers it
                 queue.append(child.id)
@@ -179,7 +187,12 @@ struct Store {
 
     /// Saves and tells the sync engine. Internal so `Store+Board` can save a batch of edits once.
     func commit() {
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // The context keeps the unsaved edit; the next save that succeeds writes it.
+            Self.logger.error("Saving a local edit failed: \(error.localizedDescription)")
+        }
         if let sync {
             // The app's listener reschedules notifications and reloads the widgets.
             sync.scheduleSync()

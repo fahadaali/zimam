@@ -7,21 +7,6 @@ import ZimamKit
 
 // MARK: Drag and drop
 
-/// What follows the finger while a task is dragged.
-private struct TaskDragPreview: View {
-    let title: String
-
-    var body: some View {
-        Text(title)
-            .font(ZimamType.body)
-            .foregroundStyle(ZimamColor.ink)
-            .lineLimit(2)
-            .padding(.horizontal, ZimamSpacing.space4)
-            .padding(.vertical, ZimamSpacing.space3)
-            .background(ZimamColor.surfaceRaised, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
-    }
-}
-
 /// Dragging, plus the same move without dragging: «نقل إلى…» in the context menu and as a
 /// VoiceOver action.
 private struct CalendarTaskActions: ViewModifier {
@@ -195,7 +180,7 @@ private struct DayCell: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .dropDestination(for: TaskDragItem.self) { items, _ in
+        .taskDropDestination { items in
             onDrop(items.map(\.id))
         } isTargeted: { targeted in
             isTargeted = targeted
@@ -307,7 +292,7 @@ struct DayTasksSection: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .dropDestination(for: TaskDragItem.self) { items, _ in
+        .taskDropDestination { items in
             onDrop(items.map(\.id))
         } isTargeted: { targeted in
             isTargeted = targeted
@@ -476,7 +461,7 @@ private struct WeekColumn: View {
         .frame(maxWidth: .infinity, minHeight: ZimamSpacing.space8 * 6, alignment: .top)
         .background(isTargeted ? ZimamColor.brandSoft : ZimamColor.surfaceSunken,
                     in: RoundedRectangle(cornerRadius: ZimamRadius.radiusLg))
-        .dropDestination(for: TaskDragItem.self) { items, _ in
+        .taskDropDestination { items in
             onDrop(items.map(\.id))
         } isTargeted: { targeted in
             isTargeted = targeted

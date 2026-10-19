@@ -6,6 +6,7 @@ import ZimamKit
 struct WatchTodayView: View {
     @Environment(WatchModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var newTitle = ""
 
     init() {}
@@ -51,6 +52,8 @@ struct WatchTodayView: View {
                     }
                 }
             }
+            // A completed task leaves the list a second after the tap.
+            .animation(reduceMotion ? nil : .default, value: model.tasks.map(\.id))
             .navigationTitle("اليوم")
         }
         .task { await model.refresh() }
@@ -73,12 +76,15 @@ private struct WatchTaskRow: View {
     let isDone: Bool
     let onComplete: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Button(action: onComplete) {
             HStack(spacing: ZimamSpacing.space2) {
                 Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
                     .font(ZimamType.title)
                     .foregroundStyle(isDone ? ZimamColor.brand : ZimamColor.lineStrong)
+                    .contentTransition(.symbolEffect(.replace))
                     .accessibilityHidden(true)
                 Text(title)
                     .font(ZimamType.body)
@@ -87,9 +93,12 @@ private struct WatchTaskRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(minHeight: ZimamSpacing.space11)
-            .animation(.default, value: isDone)
+            .animation(reduceMotion ? nil : .default, value: isDone)
         }
         .disabled(isDone)
+        // Only the tap turns isDone on (a failed push turns it back off), so the haptic
+        // plays on the same frame as the circle fills.
+        .sensoryFeedback(trigger: isDone) { _, done in done ? .success : nil }
         .accessibilityLabel(label)
     }
 
