@@ -30,7 +30,7 @@
 | Sensitive Info | Sensitive Info | لا | | | | انظر الملاحظة عن الصلاة أدناه |
 | Contacts | Contacts | لا | | | | لا وصول لجهات الاتصال؛ أعضاء المشروع مستخدمو زمام دعاهم المالك برابط |
 | User Content | Emails or Text Messages | لا | | | | التعليقات تُعلن في Other User Content |
-| User Content | Photos or Videos | نعم | نعم | لا | App Functionality | الصور التي يرفعها المستخدم مرفقاً من مكتبة الصور (`PhotosPicker` في `TaskAttachmentsSection.swift`)، محفوظة في R2 حتى تُحذف. اختياري |
+| User Content | Photos or Videos | نعم | نعم | لا | App Functionality | الصور التي يرفعها المستخدم مرفقاً من مكتبة الصور (`PhotosPicker` في `TaskAttachmentsSection.swift`)، وصورة العرض التي يختارها للحساب (`AccountCard`، أو صورة حساب Google عند الدخول الأول به)، محفوظة في R2 حتى تُحذف. اختياري |
 | User Content | Audio Data | لا | | | | الإملاء يحوّله نظام أبل إلى نص على الجهاز أو في خوادمها، ولا يُرسل الصوت إلى زمام ولا يُحفظ (`SpeechDictation.swift`). النص الناتج يُرسل إلى المساعد، فيدخل في Other User Content |
 | User Content | Gameplay Content | لا | | | | |
 | User Content | Customer Support | لا | | | | لا دعم داخل التطبيق. إن أضفت نموذج تواصل فيه فأعلنه |

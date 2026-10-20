@@ -334,6 +334,8 @@ public struct User: Codable, Equatable, Sendable {
     public var name: String?
     public var email: String?
     public var settings: Settings
+    /// When the photo last changed (milliseconds), or nil without one (`APIClient.avatar()`).
+    public var avatarVersion: Milliseconds?
 
     public struct Settings: Codable, Equatable, Sendable {
         public var calendar: CalendarKind

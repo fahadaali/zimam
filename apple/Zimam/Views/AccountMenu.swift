@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The account and sync menu in the toolbar.
+/// The account and sync menu in the toolbar, under the account's photo (or a sync warning).
 struct AccountMenu: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncEngine.self) private var sync
@@ -23,8 +23,14 @@ struct AccountMenu: View {
                 }
             }
         } label: {
-            Image(systemName: sync.lastError == nil ? "person.crop.circle" : "exclamationmark.arrow.triangle.2.circlepath")
-                .accessibilityLabel("الحساب والمزامنة")
+            if sync.lastError == nil {
+                AvatarView(name: session.user?.name, size: ZimamSpacing.space8)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("الحساب والمزامنة")
+            } else {
+                Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                    .accessibilityLabel("الحساب والمزامنة")
+            }
         }
         .sheet(isPresented: $showingSettings) { SettingsView() }
     }

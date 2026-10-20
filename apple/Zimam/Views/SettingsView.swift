@@ -4,13 +4,15 @@ import ZimamKit
 import UIKit
 #endif
 
-/// Calendar, prayer times, saved places, notifications and the account. Settings are saved
-/// to the API (`PATCH /v1/me`) and applied at once, so dates switch calendars
-/// as soon as the choice changes.
+/// Settings: the account's photo and name on top (`AccountCard`), then one page per subject:
+/// general (the calendar), prayer times, places, notifications, the subscription, import, and
+/// the account (sync, sign-out, deletion). Settings are saved to the API (`PATCH /v1/me`) and
+/// applied at once, so dates switch calendars as soon as the choice changes.
 struct SettingsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncEngine.self) private var sync
     @Environment(NotificationScheduler.self) private var notifications
+    @Environment(LocationProvider.self) private var location
     @Environment(SubscriptionStore.self) private var subscriptions
     @Environment(\.dateFormatterZimam) private var formatter
     @Environment(\.dismiss) private var dismiss
@@ -27,13 +29,38 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                calendarSection
-                prayerSection
-                placesSection
-                notificationsSection
-                subscriptionSection
-                importSection
-                accountSection
+                AccountCard()
+                Section {
+                    page("عام", systemImage: "calendar", value: settings.calendar == .hijri ? "هجري" : "ميلادي") {
+                        Form { calendarSection }.settingsPage("عام")
+                    }
+                    page("أوقات الصلاة", systemImage: "moon.stars", value: location.placeName) {
+                        PrayerTimesView()
+                    }
+                    page("أماكني", systemImage: "mappin.and.ellipse") {
+                        PlacesView()
+                    }
+                    page("الإشعارات", systemImage: "bell", value: notifications.isEnabled ? "مفعّلة" : "متوقفة") {
+                        Form { notificationsSection }.settingsPage("الإشعارات")
+                    }
+                }
+                Section {
+                    page("الاشتراك", systemImage: "star", value: subscriptions.isPro ? "الاحترافية" : "المجانية") {
+                        Form { subscriptionSection }.settingsPage("الاشتراك")
+                    }
+                    page("استيراد المهام", systemImage: "square.and.arrow.down") {
+                        ImportView()
+                    }
+                }
+                Section {
+                    page("الحساب والمزامنة", systemImage: "person.crop.circle") {
+                        Form {
+                            syncSection
+                            accountSection
+                        }
+                        .settingsPage("الحساب والمزامنة")
+                    }
+                }
                 LegalLinksSection()
             }
             .scrollContentBackground(.hidden)
@@ -52,7 +79,46 @@ struct SettingsView: View {
         #endif
     }
 
+    // MARK: Pages
+
+    /// One row that opens a page, with its current value at the trailing edge when it has one.
+    private func page<Destination: View>(_ title: String, systemImage: String, value: String? = nil,
+                                         @ViewBuilder destination: @escaping () -> Destination) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            LabeledContent {
+                if let value {
+                    Text(value)
+                        .foregroundStyle(ZimamColor.inkMuted)
+                }
+            } label: {
+                Label(title, systemImage: systemImage)
+            }
+        }
+        .frame(minHeight: ZimamSpacing.space11)
+    }
+
     // MARK: Sections
+
+    /// «مزامنة الآن», with the last sync's error if it failed.
+    private var syncSection: some View {
+        Section {
+            Button("مزامنة الآن", systemImage: "arrow.triangle.2.circlepath") {
+                Task { await sync.sync() }
+            }
+            .frame(minHeight: ZimamSpacing.space11)
+        } header: {
+            Text("المزامنة")
+        } footer: {
+            if let error = sync.lastError {
+                Text(error)
+                    .foregroundStyle(ZimamColor.priorityHigh)
+            } else {
+                Text("تتزامن مهامك تلقائياً بين أجهزتك.")
+            }
+        }
+    }
 
     private var calendarSection: some View {
         Section {
@@ -77,34 +143,6 @@ struct SettingsView: View {
                 Text("تعذّر حفظ الإعدادات. تحقّق من الاتصال وحاول مرة أخرى.")
                     .foregroundStyle(ZimamColor.priorityHigh)
             }
-        }
-    }
-
-    /// «أوقات الصلاة» has its own screen: the place, the calculation, and the adhan and iqama alerts.
-    private var prayerSection: some View {
-        Section {
-            NavigationLink {
-                PrayerTimesView()
-            } label: {
-                Label("أوقات الصلاة", systemImage: "moon.stars")
-            }
-            .frame(minHeight: ZimamSpacing.space11)
-        } footer: {
-            Text("المواقيت، والموقع، وطريقة الحساب، وتنبيهات الأذان والإقامة.")
-        }
-    }
-
-    /// «أماكني»: places the user names once and reuses for location reminders.
-    private var placesSection: some View {
-        Section {
-            NavigationLink {
-                PlacesView()
-            } label: {
-                Label("أماكني", systemImage: "mappin.and.ellipse")
-            }
-            .frame(minHeight: ZimamSpacing.space11)
-        } footer: {
-            Text("البيت والعمل وغيرهما، لتذكيرك بمهمة حين تصل إلى المكان أو تغادره.")
         }
     }
 
@@ -147,27 +185,8 @@ struct SettingsView: View {
         }
     }
 
-    /// Tasks from Todoist, TickTick, Google Tasks, a CSV file or Apple Reminders (Import/ImportView.swift).
-    private var importSection: some View {
-        Section {
-            NavigationLink {
-                ImportView()
-            } label: {
-                Label("استيراد المهام", systemImage: "square.and.arrow.down")
-            }
-            .frame(minHeight: ZimamSpacing.space11)
-        } header: {
-            Text("الاستيراد")
-        } footer: {
-            Text("انقل مهامك من Todoist أو TickTick أو Google Tasks أو تذكيرات أبل أو ملف CSV.")
-        }
-    }
-
     private var accountSection: some View {
         Section {
-            if let name = session.user?.name {
-                LabeledContent("الاسم", value: name)
-            }
             Button("تسجيل الخروج", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
                 confirmingSignOut = true
             }
@@ -267,4 +286,16 @@ struct SettingsView: View {
     #else
     private static var systemSettingsURL: URL? { URL(string: "x-apple.systempreferences:com.apple.preference.notifications") }
     #endif
+}
+
+private extension View {
+    /// A settings page: the Zimam background behind the form, and a small title.
+    func settingsPage(_ title: String) -> some View {
+        scrollContentBackground(.hidden)
+            .background(ZimamColor.surface)
+            .navigationTitle(title)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+    }
 }

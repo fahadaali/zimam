@@ -132,6 +132,8 @@ struct ZimamApp: App {
                 .environment(sync)
                 .environment(location)
                 .environment(notifications)
+                // The subscription page (Settings/SettingsView.swift) reads it here too.
+                .environment(subscriptions)
         }
         .modelContainer(container)
         #endif
