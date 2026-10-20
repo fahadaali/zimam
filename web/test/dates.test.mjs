@@ -87,3 +87,11 @@ test("only real ISO dates parse", () => {
   assert.equal(isIsoDate(""), false);
   assert.throws(() => parseIsoDate(null), RangeError);
 });
+
+test("a task's clock time in Arabic digits", async () => {
+  const { timeLabel } = await import("../public/app/lib/dates.js");
+  assert.match(timeLabel("15:00"), /^٣:٠٠/);
+  assert.match(timeLabel("09:05"), /^٩:٠٥/);
+  assert.equal(timeLabel(null), null);
+  assert.equal(timeLabel("9:5"), null);
+});

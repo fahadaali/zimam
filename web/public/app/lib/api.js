@@ -144,6 +144,8 @@ export const api = {
   me: () => request("GET", "/v1/me"),
   projects: () => request("GET", "/v1/projects"),
   project: (id) => request("GET", `/v1/projects/${encodeURIComponent(id)}`),
+  createProject: (name) => request("POST", "/v1/projects", { name }),
+  task: (id) => request("GET", `/v1/tasks/${encodeURIComponent(id)}`),
   tasks: (params = {}) => request("GET", `/v1/tasks${query({ limit: 500, ...params })}`),
   createTask: (task) => request("POST", "/v1/tasks", task),
   completeTask: (id) => request("POST", `/v1/tasks/${encodeURIComponent(id)}/complete`),

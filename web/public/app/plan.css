@@ -1,107 +1,25 @@
-/* زمام على الويب: «المزيد» in the phone tab bar, spanning bars in the calendar (calendar-view.js),
+/* زمام على الويب: spanning bars in the calendar (calendar-view.js),
    «المخطط الزمني» (timeline-view.js), «المصفوفة» (matrix-view.js) and the start date
    (duration-view.js). Tokens only; logical properties only, so the time axis and the bars flow
    from right to left in Arabic; every control is at least a 44px target (space-11). A timeline
    bar's resize handles stay thin and reach 44px past the bar's ends; «تغيير المدة…» does the
    same for keyboard and screen readers. */
 
-/* ——— Navigation: seven views, «المزيد» on phones ——— */
-
-.nav-more {
-  display: none;
-}
-
-.nav-more-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 100%;
-  min-block-size: var(--space-11);
-  padding-inline: var(--space-1);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--ink-muted);
-  cursor: pointer;
-}
-
-.nav-more-button:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-/* The menu sits above the tab bar, at the inline end (the left in Arabic), under «المزيد». */
-.nav-more-menu {
-  position: fixed;
-  inset: auto;
-  inset-block-end: calc(var(--tabbar) + var(--space-2) + env(safe-area-inset-bottom));
-  inset-inline-end: var(--gutter);
-  min-inline-size: calc(var(--space-11) * 4);
-  margin: 0;
-  padding: var(--space-1);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-  color: var(--ink);
-  box-shadow: var(--shadow-lift);
-}
-
-.app-nav .nav-more-menu ul {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.app-nav .nav-more-menu a {
-  justify-content: flex-start;
-}
-
-@media (max-width: 59.99rem) {
-  .app-nav .nav-wide {
-    display: none;
-  }
-
-  .nav-more {
-    display: block;
-  }
-
-  /* «المزيد» reads as the current tab while one of its views is open. */
-  .app-nav:has(.nav-more-menu a[aria-current="page"]) .nav-more-button {
-    color: var(--ink);
-    font-weight: 700;
-    background: var(--surface-sunken);
-  }
-}
-
 /* ——— Spanning bars (calendar and timeline) ——— */
 
-/* The stripe at the inline start says the priority; the task's row says it in words too. */
+/* A multi-day task as a bar (SpanLanes in CalendarView.swift, GanttRow.swift): timeline-bar filled,
+   its title in on-timeline-bar. The task's row says its priority. */
 .span-bar {
-  --bar-tone: var(--line-strong);
   display: flex;
   align-items: center;
   min-inline-size: 0;
   padding-inline: var(--space-2);
-  border: 1px solid var(--line-strong);
-  border-inline-start: var(--space-1) solid var(--bar-tone);
+  border: 1px solid var(--timeline-bar);
   border-radius: var(--radius-sm);
-  /* A light wash of the stripe's colour, as the reference's coloured chips; the text stays ink. */
-  background: color-mix(in srgb, var(--bar-tone) 14%, var(--surface-raised));
-  color: var(--ink);
+  background: var(--timeline-bar);
+  color: var(--on-timeline-bar);
   text-align: start;
   cursor: pointer;
-}
-
-.span-bar.is-low {
-  --bar-tone: var(--priority-low);
-}
-
-.span-bar.is-medium {
-  --bar-tone: var(--priority-medium);
-}
-
-.span-bar.is-high {
-  --bar-tone: var(--priority-high);
 }
 
 .span-bar-title {
@@ -174,7 +92,7 @@ button.span-bar:focus-visible {
 }
 
 .span-day.is-today {
-  color: var(--brand);
+  color: var(--ink);
   font-weight: 700;
 }
 
@@ -182,11 +100,7 @@ button.span-bar:focus-visible {
   min-block-size: var(--space-11);
 }
 
-@media (min-width: 90rem) {
-  .week-wrap {
-    inline-size: min(100vw - var(--sidebar) - var(--space-8) - var(--gutter), var(--page));
-  }
-
+@container content (min-width: 75rem) {
   .week-wrap .week {
     inline-size: auto;
   }
@@ -229,14 +143,6 @@ button.span-bar:focus-visible {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  /* Wider than the text column on large screens, like the board. */
-  inline-size: min(100vw - 2 * var(--gutter), var(--page));
-}
-
-@media (min-width: 60rem) {
-  .timeline {
-    inline-size: min(100vw - var(--sidebar) - var(--space-8) - var(--gutter), var(--page));
-  }
 }
 
 .tl-toolbar {
@@ -277,7 +183,7 @@ button.span-bar:focus-visible {
   --tl-day: var(--space-3);
 }
 
-@media (min-width: 60rem) {
+@container content (min-width: 40rem) {
   .tl-sheet {
     --tl-label: var(--card-min);
   }
@@ -365,13 +271,8 @@ button.span-bar:focus-visible {
 }
 
 .tl-cell.is-today {
-  background: var(--brand-soft);
-  color: var(--brand-ink);
+  color: var(--timeline-today);
   font-weight: 700;
-}
-
-.tl-cell.is-today .tl-cell-secondary {
-  color: var(--brand-ink);
 }
 
 .tl-body {
@@ -391,14 +292,14 @@ button.span-bar:focus-visible {
 }
 
 .tl-grid-cell.is-today {
-  background: color-mix(in srgb, var(--brand-soft) 50%, transparent);
+  background: color-mix(in srgb, var(--timeline-today) 8%, transparent);
 }
 
 /* Today: a line through the middle of the day. */
 .tl-grid > .tl-today {
   inset-inline-start: calc((var(--tl-start) + 0.5) * var(--tl-day) - 1px);
   inline-size: 2px;
-  background: var(--priority-high);
+  background: var(--timeline-today);
 }
 
 .tl-group-title {
@@ -450,8 +351,8 @@ button.span-bar:focus-visible {
   margin-inline-end: var(--space-1);
 }
 
-/* Wide screens: «تغيير المدة…» beside the task, so rows stay dense. */
-@media (min-width: 60rem) {
+/* Wide columns: «تغيير المدة…» beside the task, so rows stay dense. */
+@container content (min-width: 40rem) {
   .tl-label {
     flex-direction: row;
     align-items: center;
@@ -561,7 +462,7 @@ button.span-bar:focus-visible {
 
 @media (prefers-reduced-motion: no-preference) {
   .tl-bar {
-    transition: box-shadow 150ms ease;
+    transition: box-shadow var(--duration-complete) ease;
   }
 }
 
@@ -573,14 +474,14 @@ button.span-bar:focus-visible {
   gap: var(--space-3);
 }
 
-/* Two by two from a small tablet up: «مهم وعاجل» at the inline start of the first row. */
-@media (min-width: 40rem) {
+/* Two by two once the column has room: «مهم وعاجل» at the inline start of the first row. */
+@container content (min-width: 30rem) {
   .matrix {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-/* Each quadrant's colour, from the priority tokens (none new): its icon, title, count and circles. */
+/* Each quadrant's colour, from the quadrant tokens (MatrixQuadrantCard.swift): its icon, title, count and circles. */
 .matrix-quad {
   --quad: var(--ink-muted);
   display: flex;
@@ -594,19 +495,19 @@ button.span-bar:focus-visible {
 }
 
 .quad-urgent-important {
-  --quad: var(--priority-high);
+  --quad: var(--quadrant-urgent-important);
 }
 
 .quad-important {
-  --quad: var(--priority-low);
+  --quad: var(--quadrant-important);
 }
 
 .quad-urgent {
-  --quad: var(--priority-medium);
+  --quad: var(--quadrant-urgent);
 }
 
 .quad-someday {
-  --quad: var(--ink-muted);
+  --quad: var(--quadrant-someday);
 }
 
 .matrix-quad.is-target {
@@ -636,8 +537,7 @@ button.span-bar:focus-visible {
   padding-inline: var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--quad);
-  color: var(--on-brand);
-  font-weight: 700;
+  color: var(--on-quadrant);
   text-align: center;
 }
 

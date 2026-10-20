@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>زمام على الويب</title>
 <meta name="description" content="مهامك ومشاريعك في زمام من المتصفح.">
@@ -17,6 +17,8 @@
 <link rel="stylesheet" href="/app/features.css">
 <link rel="stylesheet" href="/app/attachments.css">
 <link rel="stylesheet" href="/app/plan.css">
+<!-- Last, so the frame's shared controls (icon buttons) win over the feature sheets. -->
+<link rel="stylesheet" href="/app/shell.css">
 <link rel="modulepreload" href="/app/lib/dates.js">
 <script type="module" src="/app/main.js"></script>
 <!-- Sign in with Apple JS (popup mode): the only third-party script, allowed by the CSP in _headers.
@@ -63,63 +65,134 @@
   </div>
 </section>
 
-<div class="shell" id="shell" hidden>
-  <header class="app-header">
-    <a class="app-logo" href="#/today">
-      <picture>
-        <source srcset="/design/logos/zimam-lockup-ar-on-dark.svg" media="(prefers-color-scheme: dark)">
-        <img src="/design/logos/zimam-lockup-ar.svg" alt="زمام: اليوم" width="496" height="160">
-      </picture>
-    </a>
-    <div class="app-header-actions">
-      <button type="button" class="zm-btn zm-btn-primary add-button" id="add-button" aria-haspopup="dialog">
-        إضافة مهمة
-      </button>
-      <a class="zm-btn zm-btn-quiet zm-btn-link header-link" href="#/import" data-route="import">استيراد</a>
-      <button type="button" class="zm-btn zm-btn-quiet signout" id="signout-button">تسجيل الخروج</button>
+<!-- The app's frame, as MainView.swift lays it out by width (shell.css, shell.js):
+     phones: one column, the tab bar at the bottom and the add button floating above it; a task opens
+     on its own page. Wider: the sidebar on the right, the list, and the task's details in an
+     inspector at the left that is there only while a task is open. -->
+<div class="shell" id="shell" data-layout="compact" hidden>
+  <nav class="sidebar" id="sidebar" aria-labelledby="sidebar-title">
+    <div class="sidebar-toolbar">
+      <h2 class="title sidebar-title" id="sidebar-title">زمام</h2>
+      <div class="toolbar-actions">
+        <button type="button" class="icon-button" id="new-project-button" aria-label="مشروع جديد" title="مشروع جديد" aria-haspopup="dialog"><span data-icon="folder-plus"></span></button>
+        <button type="button" class="icon-button" id="join-button" aria-label="الانضمام بدعوة" title="الانضمام بدعوة" aria-haspopup="dialog"><span data-icon="user-plus"></span></button>
+        <a class="icon-button" href="#/search" aria-label="بحث" title="بحث"><span data-icon="search"></span></a>
+      </div>
     </div>
-  </header>
-
-  <nav class="app-nav" aria-label="الأقسام">
-    <ul role="list">
-      <li><a class="callout" href="#/today" data-route="today">اليوم</a></li>
-      <li><a class="callout" href="#/upcoming" data-route="upcoming">القادم</a></li>
-      <li><a class="callout" href="#/calendar" data-route="calendar">التقويم</a></li>
-      <li><a class="callout" href="#/projects" data-route="projects">المشاريع</a></li>
-      <li class="nav-wide"><a class="callout" href="#/search" data-route="search">البحث</a></li>
-      <li class="nav-wide"><a class="callout" href="#/timeline" data-route="timeline">المخطط</a></li>
-      <li class="nav-wide"><a class="callout" href="#/matrix" data-route="matrix">المصفوفة</a></li>
-      <!-- Phones: the last three tabs move into «المزيد» (a popover, so no script is needed). -->
-      <li class="nav-more">
-        <button type="button" class="callout nav-more-button" popovertarget="nav-more-menu" aria-haspopup="true">المزيد</button>
-        <div class="nav-more-menu" id="nav-more-menu" popover>
-          <ul role="list" aria-label="المزيد">
-            <li><a class="callout" href="#/search" data-route="search">البحث</a></li>
-            <li><a class="callout" href="#/timeline" data-route="timeline">المخطط الزمني</a></li>
-            <li><a class="callout" href="#/matrix" data-route="matrix">المصفوفة</a></li>
-          </ul>
-        </div>
-      </li>
+    <ul class="sidebar-list" role="list">
+      <li><a class="sidebar-row body" href="#/today" data-item="today"><span data-icon="sun"></span><span class="sidebar-label">اليوم</span><span class="sidebar-count caption" data-count="today"></span></a></li>
+      <li><a class="sidebar-row body" href="#/upcoming" data-item="upcoming"><span data-icon="calendar"></span><span class="sidebar-label">القادم</span></a></li>
+      <li><a class="sidebar-row body" href="#/inbox" data-item="inbox" data-drop="inbox"><span data-icon="inbox"></span><span class="sidebar-label">صندوق المهام</span><span class="sidebar-count caption" data-count="inbox"></span></a></li>
+      <li><a class="sidebar-row body" href="#/calendar" data-item="calendar"><span data-icon="calendar-clock"></span><span class="sidebar-label">التقويم</span></a></li>
+      <li><a class="sidebar-row body" href="#/timeline" data-item="timeline"><span data-icon="timeline"></span><span class="sidebar-label">المخطط الزمني</span></a></li>
+      <li><a class="sidebar-row body" href="#/matrix" data-item="matrix"><span data-icon="matrix"></span><span class="sidebar-label">المصفوفة</span></a></li>
+      <li><a class="sidebar-row body" href="#/search" data-item="search"><span data-icon="search"></span><span class="sidebar-label">البحث</span></a></li>
     </ul>
+    <h3 class="caption muted sidebar-heading" id="sidebar-projects-title">المشاريع</h3>
+    <!-- Filled by shell.js: a row per project, its sections under it. -->
+    <ul class="sidebar-list" id="sidebar-projects" role="list" aria-labelledby="sidebar-projects-title"></ul>
   </nav>
 
-  <main class="app-main" id="main" tabindex="-1">
-    <p class="callout app-error" id="app-error" role="alert"></p>
-    <div id="view"></div>
-    <nav class="legal-links app-legal caption" aria-label="عن زمام">
-      <a href="/">عن زمام</a>
-      <a href="/privacy/">سياسة الخصوصية</a>
-      <a href="/terms/">شروط الاستخدام</a>
-    </nav>
-  </main>
+  <div class="content" id="content">
+    <main class="app-main" id="main" tabindex="-1">
+      <p class="callout app-error" id="app-error" role="alert"></p>
+      <div id="view"></div>
+      <nav class="legal-links app-legal caption" aria-label="عن زمام">
+        <a href="/">عن زمام</a>
+        <a href="/privacy/">سياسة الخصوصية</a>
+        <a href="/terms/">شروط الاستخدام</a>
+      </nav>
+    </main>
+    <!-- AddTaskButton (TaskListItem.swift): a brand circle at the bottom inline end, the left in Arabic. -->
+    <button type="button" class="fab" id="add-button" aria-label="إضافة مهمة" title="إضافة مهمة" aria-haspopup="dialog"><span data-icon="plus" data-icon-size="lg"></span></button>
+  </div>
+
+  <!-- The open task: an inspector beside the list on wide screens, its own page on phones (task-pane.js). -->
+  <aside class="inspector" id="inspector" hidden aria-labelledby="task-title">
+    <div class="pane-toolbar">
+      <button type="button" class="icon-button pane-back" id="task-back" aria-label="رجوع" title="رجوع"><span data-icon="chevron-back"></span></button>
+      <button type="button" class="icon-button pane-close" id="task-close" aria-label="إغلاق" title="إغلاق"><span data-icon="x"></span></button>
+      <p class="headline pane-title">تفاصيل المهمة</p>
+      <button type="button" class="zm-btn zm-btn-primary pane-primary" id="task-toggle"><span data-icon="check"></span><span id="task-toggle-label">إنجاز</span></button>
+    </div>
+    <div class="pane-body" id="pane-body">
+      <h2 class="title task-title" id="task-title" tabindex="-1"></h2>
+      <p class="callout muted" id="task-missing" hidden>لم تعد هذه المهمة موجودة.</p>
+      <dl class="details" id="task-details"></dl>
+      <!-- Filled by task-extras.js: duration, assignee, subtasks and comments. -->
+      <div class="task-extras" id="task-extras"></div>
+      <!-- Filled by attachments-view.js. -->
+      <section class="task-attachments" id="task-attachments" aria-labelledby="task-attachments-title"></section>
+      <p class="callout field-error" id="task-error" role="alert"></p>
+      <div class="sheet-actions" id="task-actions">
+        <button type="button" class="zm-btn zm-btn-secondary danger" id="task-delete">حذف المهمة</button>
+      </div>
+      <div class="sheet-actions confirm" id="task-confirm" hidden>
+        <p class="callout confirm-text" id="task-confirm-text"><strong class="headline">حذف المهمة؟</strong> تُحذف معها مهامها الفرعية وتذكيراتها.</p>
+        <button type="button" class="zm-btn zm-btn-secondary danger" id="task-delete-confirm" aria-describedby="task-confirm-text">حذف</button>
+        <button type="button" class="zm-btn zm-btn-quiet" id="task-delete-cancel">إلغاء</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Phones: the tab bar of MainView.swift, four tabs and search apart, floating glass. -->
+  <nav class="tabbar" id="tabbar" aria-label="الأقسام">
+    <ul class="tabbar-tabs" role="list">
+      <li><a class="tab" href="#/today" data-tab="today"><span data-icon="sun"></span><span class="tab-label caption">اليوم</span></a></li>
+      <li><a class="tab" href="#/upcoming" data-tab="upcoming"><span data-icon="calendar"></span><span class="tab-label caption">القادم</span></a></li>
+      <li><a class="tab" href="#/calendar" data-tab="calendar"><span data-icon="calendar-clock"></span><span class="tab-label caption">التقويم</span></a></li>
+      <li><a class="tab" href="#/projects" data-tab="projects"><span data-icon="folder"></span><span class="tab-label caption">المشاريع</span></a></li>
+    </ul>
+    <a class="tabbar-search" href="#/search" data-tab="search" aria-label="البحث" title="البحث"><span data-icon="search"></span></a>
+  </nav>
 </div>
+
+<!-- AccountMenu.swift: opened by the photo at the top of «اليوم» and of the sidebar. -->
+<div class="account-menu" id="account-menu" popover>
+  <p class="callout account-name" id="account-name"></p>
+  <ul class="menu-list" role="list">
+    <li><a class="menu-row callout" href="#/import" id="account-import"><span data-icon="download"></span>استيراد المهام</a></li>
+    <li><button type="button" class="menu-row callout" id="sync-button"><span data-icon="refresh"></span>مزامنة الآن</button></li>
+    <li><button type="button" class="menu-row callout danger" id="signout-button"><span data-icon="log-out"></span>تسجيل الخروج</button></li>
+  </ul>
+</div>
+
+<dialog class="sheet sheet-small" id="project-dialog" aria-labelledby="project-dialog-title">
+  <form class="sheet-form" id="project-form" method="dialog" novalidate>
+    <h2 class="title" id="project-dialog-title">مشروع جديد</h2>
+    <div class="field">
+      <label class="visually-hidden" for="project-name">اسم المشروع</label>
+      <input class="input body" id="project-name" name="name" type="text" required maxlength="200" placeholder="اسم المشروع" enterkeyhint="done" autocomplete="off">
+    </div>
+    <p class="callout field-error" id="project-error" role="alert"></p>
+    <div class="sheet-actions">
+      <button type="submit" class="zm-btn zm-btn-primary" id="project-submit">إضافة</button>
+      <button type="button" class="zm-btn zm-btn-secondary" id="project-cancel">إلغاء</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="sheet sheet-small" id="join-dialog" aria-labelledby="join-dialog-title">
+  <form class="sheet-form" id="join-form" method="dialog" novalidate>
+    <h2 class="title" id="join-dialog-title">الانضمام بدعوة</h2>
+    <div class="field">
+      <label class="visually-hidden" for="join-code">رمز الدعوة أو رابطها</label>
+      <input class="input body" id="join-code" name="code" type="text" required placeholder="رمز الدعوة أو رابطها" enterkeyhint="go" autocomplete="off" spellcheck="false" dir="auto">
+    </div>
+    <p class="callout field-error" id="join-error" role="alert"></p>
+    <div class="sheet-actions">
+      <button type="submit" class="zm-btn zm-btn-primary">عرض الدعوة</button>
+      <button type="button" class="zm-btn zm-btn-secondary" id="join-cancel">إلغاء</button>
+    </div>
+  </form>
+</dialog>
 
 <!-- One polite region for status announcements. -->
 <div class="visually-hidden" id="announcer" aria-live="polite"></div>
 
 <dialog class="sheet" id="add-dialog" aria-labelledby="add-title">
   <form class="sheet-form" id="add-form" method="dialog" novalidate>
-    <h2 class="title" id="add-title">إضافة مهمة</h2>
+    <h2 class="title" id="add-title">مهمة جديدة</h2>
 
     <div class="field">
       <label class="headline" for="add-title-input">العنوان</label>
@@ -182,35 +255,17 @@
     <div class="field">
       <label class="headline" for="add-project">المشروع</label>
       <select class="input body" id="add-project" name="projectId">
-        <option value="">بلا مشروع</option>
+        <option value="">صندوق المهام</option>
       </select>
     </div>
 
     <p class="callout field-error" id="add-error" role="alert"></p>
     <div class="sheet-actions">
-      <button type="submit" class="zm-btn zm-btn-primary" id="add-submit" value="add">إضافة مهمة</button>
+      <button type="submit" class="zm-btn zm-btn-primary" id="add-submit" value="add">إضافة</button>
       <button type="button" class="zm-btn zm-btn-secondary" id="add-cancel">إلغاء</button>
     </div>
   </form>
 </dialog>
 
-<dialog class="sheet" id="task-dialog" closedby="any" aria-labelledby="task-dialog-title">
-  <div class="sheet-form">
-    <h2 class="title task-dialog-title" id="task-dialog-title"></h2>
-    <dl class="details" id="task-details"></dl>
-    <!-- Filled by attachments-view.js when the dialog opens. -->
-    <section class="task-attachments" id="task-attachments" aria-labelledby="task-attachments-title"></section>
-    <p class="callout field-error" id="task-error" role="alert"></p>
-    <div class="sheet-actions" id="task-actions">
-      <button type="button" class="zm-btn zm-btn-secondary" id="task-delete">حذف المهمة</button>
-      <button type="button" class="zm-btn zm-btn-quiet" id="task-close">إغلاق</button>
-    </div>
-    <div class="sheet-actions confirm" id="task-confirm" hidden>
-      <p class="callout confirm-text" id="task-confirm-text">حذف هذه المهمة نهائياً؟</p>
-      <button type="button" class="zm-btn zm-btn-secondary danger" id="task-delete-confirm" aria-describedby="task-confirm-text">حذف</button>
-      <button type="button" class="zm-btn zm-btn-quiet" id="task-delete-cancel">إبقاء المهمة</button>
-    </div>
-  </div>
-</dialog>
 </body>
 </html>

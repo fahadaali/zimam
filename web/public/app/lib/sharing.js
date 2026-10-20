@@ -58,3 +58,9 @@ export function sharingErrorText(code) {
     }[code] ?? null
   );
 }
+
+/** The letter in a person's avatar (AvatarView.swift): the first letter of their name, or «ز» without one. */
+export function avatarInitial(name) {
+  const first = [...(name ?? "").trim()][0];
+  return first ?? "ز";
+}

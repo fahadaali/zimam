@@ -2,13 +2,6 @@
    kanban board (board-view.js) and the calendar (calendar-view.js). Tokens only; logical properties
    only; every control is at least a 44px target (space-11). */
 
-/* Five tabs on phones: a little less side padding so «المشاريع» fits. */
-@media (max-width: 59.99rem) {
-  .app-nav a {
-    padding-inline: var(--space-1);
-  }
-}
-
 /* ——— Shared pieces ——— */
 
 .segmented {
@@ -319,15 +312,7 @@
   gap: var(--space-4);
   overflow-x: auto;
   padding-block-end: var(--space-4);
-  /* Wider than the text column on large screens: up to the page width. */
-  inline-size: min(100vw - 2 * var(--gutter), var(--page));
   scroll-snap-type: inline proximity;
-}
-
-@media (min-width: 60rem) {
-  .board {
-    inline-size: min(100vw - var(--sidebar) - var(--space-8) - var(--gutter), var(--page));
-  }
 }
 
 .board-column,
@@ -381,7 +366,7 @@
 }
 
 .board-card.is-dragged {
-  opacity: 0.6;
+  opacity: var(--opacity-pressed);
 }
 
 .board-card .zm-task {
@@ -446,7 +431,7 @@ body.is-dragging .zm-task-open {
 
 @media (prefers-reduced-motion: no-preference) {
   .drop-placeholder {
-    transition: block-size 150ms ease;
+    transition: block-size var(--duration-complete) ease;
   }
 }
 
@@ -522,8 +507,16 @@ body.is-dragging .zm-task-open {
   border-color: var(--line-strong);
 }
 
+/* Today's number sits in a brand circle (DayCell in CalendarComponents.swift). */
 .cal-day.is-today .cal-primary {
-  color: var(--brand);
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: var(--space-6);
+  block-size: var(--space-6);
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--brand);
+  color: var(--on-brand);
 }
 
 .cal-day[aria-pressed="true"] {
@@ -585,12 +578,11 @@ body.is-dragging .zm-task-open {
   list-style: none;
 }
 
-@media (min-width: 90rem) {
-  /* Seven columns side by side, the first at the inline start, wider than the text column. */
+@container content (min-width: 75rem) {
+  /* Seven columns side by side, the first at the inline start, once the column has room. */
   .week {
     grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: var(--space-2);
-    inline-size: min(100vw - var(--sidebar) - var(--space-8) - var(--gutter), var(--page));
   }
 }
 
@@ -624,8 +616,9 @@ body.is-dragging .zm-task-open {
   color: var(--brand-ink);
 }
 
-.week-head.is-today .headline {
-  color: var(--brand);
+.week-head.is-today {
+  outline: 2px solid var(--line-strong);
+  outline-offset: -2px;
 }
 
 .week-tasks {
@@ -642,7 +635,7 @@ body.is-dragging .zm-task-open {
 }
 
 /* In a narrow day column, «نقل إلى…» goes under the task instead of beside it. */
-@media (min-width: 90rem) {
+@container content (min-width: 75rem) {
   .week-tasks > .task-item:has(.card-tools) {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -688,16 +681,13 @@ body.is-dragging .zm-task-open {
   background: var(--surface-sunken);
 }
 
-/* «نقل إلى…» under a task in the calendar's lists. */
+/* «نقل إلى…» under a task in the calendar's lists: the card holds the row and its tools. */
 .task-list > .task-item:has(.card-tools) {
   background: var(--surface-raised);
-  border-block-end: 1px solid var(--line);
-}
-
-.task-list > .task-item:last-child:has(.card-tools) {
-  border-block-end: 0;
+  border-radius: var(--radius-lg);
 }
 
 .task-list > .task-item:has(.card-tools) .zm-task {
   border-block-end: 0;
+  background: transparent;
 }
