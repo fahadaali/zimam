@@ -281,7 +281,7 @@ final class NotificationScheduler {
         let schedule = location.schedule(settings)
         // Adhan and iqama alerts first (at most `PrayerAlertPlanner.limit`); the reminders get the rest.
         let prayers = PrayerAlertPlanner.plan(settings: settings?.prayerAlerts ?? PrayerAlertSettings(), schedule: schedule,
-                                              now: now, locale: ZimamLocale.current)
+                                              now: now)
         let times = ReminderPlanner.plan(tasks: plannerTasks, reminders: plannerReminders, schedule: schedule,
                                          now: now, formatter: formatter,
                                          limit: LocationReminderPlanner.timeLimit(

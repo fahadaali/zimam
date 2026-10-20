@@ -90,7 +90,6 @@ public enum PrayerAlertPlanner {
         settings: PrayerAlertSettings,
         schedule: PrayerSchedule?,
         now: Date,
-        locale: Locale = Locale(identifier: "ar-SA"),
         limit: Int = Self.limit
     ) -> [PlannedPrayerAlert] {
         guard let schedule, settings.isAnyOn else { return [] }
@@ -118,7 +117,7 @@ public enum PrayerAlertPlanner {
                     planned.append(PlannedPrayerAlert(
                         id: "\(idPrefix)\(prayer.rawValue)-iqama@\(day)", prayer: prayer, kind: .iqama, date: iqama,
                         title: "إقامة \(prayer.arabicName)",
-                        body: iqamaBody(prayer, minutes: alert.iqamaMinutes, locale: locale)))
+                        body: iqamaBody(prayer)))
                 }
             }
         }
@@ -131,9 +130,8 @@ public enum PrayerAlertPlanner {
         "حان الآن وقت صلاة \(prayer.arabicName)"
     }
 
-    /// «حان وقت إقامة صلاة العصر، بعد الأذان بـ٢٠ دقيقة».
-    static func iqamaBody(_ prayer: Prayer, minutes: Int, locale: Locale) -> String {
-        let number = minutes.formatted(.number.locale(locale).grouping(.never))
-        return "حان وقت إقامة صلاة \(prayer.arabicName)، بعد الأذان بـ\(number) دقيقة"
+    /// «حان وقت إقامة صلاة العصر».
+    static func iqamaBody(_ prayer: Prayer) -> String {
+        "حان وقت إقامة صلاة \(prayer.arabicName)"
     }
 }
