@@ -68,7 +68,7 @@ final class PrayerAlertPlannerTests {
         #expect(planned.first?.body == "حان الآن وقت صلاة العصر")
         #expect(planned[1].kind == .iqama)
         #expect(planned[1].date == asr.addingTimeInterval(15 * 60))
-        #expect(planned[1].body == "حان وقت إقامة صلاة العصر، بعد الأذان بـ١٥ دقيقة")
+        #expect(planned[1].body == "حان وقت إقامة صلاة العصر")
         // Today, tomorrow and the day after.
         #expect(planned.count == 6)
     }
