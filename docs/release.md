@@ -25,7 +25,7 @@
 
 ### الإصدار ورقم البناء
 
-- **الإصدار** (`CFBundleShortVersionString`) من `MARKETING_VERSION` في `apple/project.yml`، وهو الآن `0.1.0`. ارفعه في طلب دمج مع كل إصدار جديد تُرسله للمراجعة (مثلاً `1.0.0` للإطلاق).
+- **الإصدار** (`CFBundleShortVersionString`) من `MARKETING_VERSION` في `apple/project.yml`، وهو الآن `1.0.0` للإطلاق. ارفعه في طلب دمج مع كل إصدار جديد تُرسله للمراجعة (مثلاً `1.0.1` لإصلاح، و`1.1.0` لميزة).
 - **رقم البناء** (`CFBundleVersion`) يضعه Xcode Cloud ويزيده في كل بناء. ولتبدأ من رقم معيّن: **App Store Connect ← Apps ← زمام ← Xcode Cloud ← Settings ← Build Number**. البناء المحلي في Xcode يبقى رقمه `1`.
 
 ## قبل أول بناء (مرة واحدة)
