@@ -31,7 +31,7 @@ struct SiriSettingsView: View {
                             .foregroundStyle(ZimamColor.inkMuted)
                     }
                 }
-                if askedAndDenied || bridge.isDenied, let url = LocationProvider.systemSettingsURL {
+                if askedAndDenied || bridge.isDenied, let url = Self.remindersSettingsURL {
                     Link(destination: url) {
                         Label("السماح بالتذكيرات من إعدادات النظام", systemImage: "gear")
                     }
@@ -63,6 +63,15 @@ struct SiriSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .onAppear { lists = bridge.lists() }
+    }
+
+    /// Where the user allows Reminders for Zimam: the app's page on iPhone and iPad, the privacy pane on the Mac.
+    private static var remindersSettingsURL: URL? {
+        #if os(iOS)
+        LocationProvider.systemSettingsURL
+        #else
+        URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders")
+        #endif
     }
 
     private func phrase(_ words: String, _ detail: String) -> some View {

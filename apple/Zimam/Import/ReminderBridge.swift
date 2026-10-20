@@ -119,13 +119,13 @@ final class ReminderBridge {
             timeZone: .current, now: Date(),
             bridge: .init(userId: userId, schedule: SharedSettings.prayerSchedule()))
 
-        // A task another device brought over and this one has pulled is not added twice.
-        let fresh = plan.tasks.filter { task in
-            let id = task.id
+        func existsHere(_ id: UUID) -> Bool {
             var descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.id == id })
             descriptor.fetchLimit = 1
-            return ((try? context.fetchCount(descriptor)) ?? 0) == 0
+            return ((try? context.fetchCount(descriptor)) ?? 0) > 0
         }
+        // A task another device brought over and this one has pulled is not added twice.
+        let fresh = plan.tasks.filter { !existsHere($0.id) }
         let freshIds = Set(fresh.map(\.id))
         do {
             try Store(context: context, sync: sync).insertImported(
@@ -137,8 +137,12 @@ final class ReminderBridge {
         }
         refs.remember(tasks: plan.taskRefs, projects: [:])
 
-        // Saved (now or before): out of Reminders, so its alarm does not ring twice.
-        let saved = Set(plan.taskRefs.keys).union(refs.tasks.keys)
+        // Out of Reminders, so its alarm does not ring twice: only a reminder whose bridged task is
+        // now in Zimam (saved here, or by another device). One imported before (the import keeps
+        // Reminders as it is) or whose task was since deleted stays in Reminders.
+        let saved = Set(movable.map(\.item.externalId).filter {
+            existsHere(AppleRemindersImport.bridgedTaskId(userId: userId, externalId: $0))
+        })
         var removed = 0
         for reminder in movable where saved.contains(reminder.item.externalId) {
             guard let item = store.calendarItem(withIdentifier: reminder.localId) as? EKReminder else { continue }
