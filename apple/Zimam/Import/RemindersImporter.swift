@@ -116,7 +116,7 @@ final class RemindersImporter {
         guard !calendars.isEmpty else { return [] }
         let predicate = store.predicateForReminders(in: calendars)
         return await withCheckedContinuation { continuation in
-            _ = store.fetchReminders(matching: predicate) { reminders in
+            _ = store.fetchReminders(matching: predicate) { @Sendable reminders in
                 let items = (reminders ?? []).map(EventKitReminders.item(from:))
                 continuation.resume(returning: items)
             }
@@ -126,7 +126,7 @@ final class RemindersImporter {
 
 /// EventKit's reminders as `AppleRemindersImport` values. Not tied to an actor: EventKit
 /// hands the reminders over on a queue of its own.
-enum EventKitReminders {
+nonisolated enum EventKitReminders {
     static func item(from reminder: EKReminder) -> AppleRemindersImport.Item {
         let external: String? = reminder.calendarItemExternalIdentifier
         let id: String

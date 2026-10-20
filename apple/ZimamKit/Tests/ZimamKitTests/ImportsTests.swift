@@ -277,6 +277,38 @@ struct AppleRemindersImportTests {
         #expect(plan.alreadyImported == 2)
     }
 
+    @Test func siriRemindersGoToTheInboxWithTheSameIdOnEveryDevice() {
+        let user = UUID()
+        let items = [
+            AppleRemindersImport.Item(externalId: "s1", listId: "L1", title: "أتصل بأبي بعد العصر بكرة"),
+            AppleRemindersImport.Item(externalId: "s2", listId: "L1", title: "أشتري خبز",
+                                      due: DateComponents(year: 2026, month: 10, day: 14, hour: 18, minute: 0)),
+        ]
+        let bridge = AppleRemindersImport.BridgeOptions(userId: user)
+        let plan = AppleRemindersImport.plan(items: items, lists: [home], knownTasks: [:], knownProjects: [:],
+                                             timeZone: riyadh, now: now, bridge: bridge)
+        #expect(plan.projects.isEmpty)
+        #expect(plan.tasks.allSatisfy { $0.projectId == nil })
+
+        let call = plan.tasks[0]
+        #expect(call.title == "أتصل بأبي")
+        #expect(call.duePrayer == .asr)
+        #expect(call.duePrayerOffset == 0)
+        #expect(call.dueDate == "2026-10-14")
+        #expect(call.dueTime == nil)
+        #expect(call.id == AppleRemindersImport.bridgedTaskId(userId: user, externalId: "s1"))
+
+        // A time Reminders set is kept, and the title is left as it is.
+        let bread = plan.tasks[1]
+        #expect(bread.title == "أشتري خبز")
+        #expect(bread.dueTime == "18:00")
+
+        let again = AppleRemindersImport.plan(items: items, lists: [home], knownTasks: [:], knownProjects: [:],
+                                              timeZone: riyadh, now: now, bridge: bridge)
+        #expect(again.tasks.map(\.id) == plan.tasks.map(\.id))
+        #expect(AppleRemindersImport.bridgedTaskId(userId: UUID(), externalId: "s1") != call.id)
+    }
+
     @Test func rulesZimamCannotExpressAreNotedAndLongTitlesKept() {
         let long = String(repeating: "م", count: 600)
         let items = [

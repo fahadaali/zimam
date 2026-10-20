@@ -101,10 +101,26 @@ public enum AppleRemindersImport {
     static let maxNotes = 20_000
     static let maxProjectName = 200
 
+    /// How reminders brought over from Siri («ذكرني …», `ReminderBridge` in the app) differ from an import.
+    public struct BridgeOptions: Sendable {
+        /// The account, so the same reminder becomes the same task on every device (`bridgedTaskId`).
+        public var userId: UUID?
+        /// Reads «بعد العصر» and other times left in the title when Reminders gave no time.
+        public var schedule: PrayerSchedule?
+
+        public init(userId: UUID?, schedule: PrayerSchedule? = nil) {
+            self.userId = userId
+            self.schedule = schedule
+        }
+    }
+
     /// Turns reminders into projects, tasks and time reminders. Lists are imported in the order given;
-    /// reminders keep their order within each list.
+    /// reminders keep their order within each list. With `bridge`, the tasks go to the inbox (no
+    /// projects), their ids come from the reminders (`bridgedTaskId`), and the time words left in a
+    /// title are read on the device (`SpokenTime`).
     public static func plan(items: [Item], lists: [List], knownTasks: [String: UUID], knownProjects: [String: UUID],
-                            timeZone: TimeZone = .current, now: Date = Date(), firstProjectSortOrder: Double = 0) -> Plan {
+                            timeZone: TimeZone = .current, now: Date = Date(), firstProjectSortOrder: Double = 0,
+                            bridge: BridgeOptions? = nil) -> Plan {
         var plan = Plan()
         let stamp = Milliseconds(now.timeIntervalSince1970 * 1000)
         var nextProjectOrder = firstProjectSortOrder
@@ -127,9 +143,11 @@ public enum AppleRemindersImport {
                 continue
             }
 
-            // The list's project: the one it became before, or a new one.
-            let projectId: UUID
-            if let existing = plan.projectRefs[list.id] {
+            // The list's project: the one it became before, or a new one. Siri's reminders go to the inbox.
+            let projectId: UUID?
+            if bridge != nil {
+                projectId = nil
+            } else if let existing = plan.projectRefs[list.id] {
                 projectId = existing
             } else {
                 let name = projectName(list.title)
@@ -153,7 +171,22 @@ public enum AppleRemindersImport {
                 noteLines.append(url.absoluteString)
             }
 
-            let due = item.due.flatMap { self.due($0, timeZone: timeZone) }
+            var due = item.due.flatMap { self.due($0, timeZone: timeZone) }
+            var prayer: Prayer?
+            var prayerOffset: Int?
+            // «ذكرني أتصل بأبي بعد العصر»: Reminders keeps the prayer in the title; read it, and a
+            // day or time Reminders did not set, unless it already has a time.
+            if let bridge, due?.time == nil {
+                let spoken = SpokenTime.read(title, now: now, timeZone: timeZone, schedule: bridge.schedule)
+                if spoken.hasWhen {
+                    title = spoken.title
+                    prayer = spoken.duePrayer
+                    prayerOffset = spoken.duePrayerOffset
+                    if let day = due?.day ?? spoken.dueDate {
+                        due = (day: day, time: prayer == nil ? spoken.dueTime : nil)
+                    }
+                }
+            }
             var recurrence: String?
             if let rule = item.repeatRule, !item.isCompleted {
                 if rule.isExact {
@@ -169,13 +202,16 @@ public enum AppleRemindersImport {
             var notes = noteLines.joined(separator: "\n\n")
             if notes.count > maxNotes { notes = String(notes.prefix(maxNotes)) }
 
-            let order = taskOrder[projectId, default: 0]
-            taskOrder[projectId] = order + 1
+            let orderKey = projectId ?? Self.inboxKey
+            let order = taskOrder[orderKey, default: 0]
+            taskOrder[orderKey] = order + 1
             let completedAt = item.isCompleted ? Milliseconds((item.completedAt ?? now).timeIntervalSince1970 * 1000) : nil
-            let task = TaskRecord(projectId: projectId, title: title, notes: notes.isEmpty ? nil : notes,
+            let id = bridge.map { bridgedTaskId(userId: $0.userId, externalId: item.externalId) } ?? UUID()
+            let task = TaskRecord(id: id, projectId: projectId, title: title, notes: notes.isEmpty ? nil : notes,
                                   status: item.isCompleted ? .done : .todo, priority: priority(fromEventKit: item.priority),
-                                  dueDate: due?.day, dueTime: due?.time, recurrence: recurrence, sortOrder: order,
-                                  completedAt: completedAt, createdAt: stamp, updatedAt: stamp)
+                                  dueDate: due?.day, dueTime: due?.time, duePrayer: prayer,
+                                  duePrayerOffset: prayer == nil ? nil : (prayerOffset ?? 0), recurrence: recurrence,
+                                  sortOrder: order, completedAt: completedAt, createdAt: stamp, updatedAt: stamp)
             plan.tasks.append(task)
             plan.taskRefs[item.externalId] = task.id
 
@@ -189,6 +225,36 @@ public enum AppleRemindersImport {
             }
         }
         return plan
+    }
+
+    /// The order key of tasks without a project.
+    private static let inboxKey = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+
+    /// The task a reminder brought over from Siri becomes, the same on every device of the account:
+    /// two devices that bring it over before either removes it from Reminders make one task on the
+    /// server, not two. Two FNV-1a hashes of the account and the reminder's external identifier,
+    /// shaped as a version 8 (custom) UUID.
+    public static func bridgedTaskId(userId: UUID?, externalId: String) -> UUID {
+        let text = "zimam-bridge|\(userId?.uuidString.lowercased() ?? "local")|\(externalId)"
+        func fnv(_ seed: UInt64) -> UInt64 {
+            var hash = seed
+            for byte in text.utf8 {
+                hash ^= UInt64(byte)
+                hash = hash &* 0x0000_0100_0000_01B3
+            }
+            return hash
+        }
+        let high = fnv(0xCBF2_9CE4_8422_2325)
+        let low = fnv(0x84222325CBF29CE4)
+        var bytes = [UInt8](repeating: 0, count: 16)
+        for i in 0..<8 {
+            bytes[i] = UInt8(truncatingIfNeeded: high >> (56 - 8 * UInt64(i)))
+            bytes[8 + i] = UInt8(truncatingIfNeeded: low >> (56 - 8 * UInt64(i)))
+        }
+        bytes[6] = (bytes[6] & 0x0F) | 0x80
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                           bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
     }
 
     /// EventKit's priority (1 highest … 9 lowest, 0 none) on Zimam's scale, as Reminders shows it:

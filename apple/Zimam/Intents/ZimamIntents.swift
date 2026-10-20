@@ -25,8 +25,85 @@ enum PrayerOption: String, AppEnum, CaseIterable {
     }
 }
 
-/// «أضف مهمة في زمام»: a title, and optionally a day and a prayer with minutes after it
-/// (negative for before). A prayer without a day means today.
+/// Before or after a prayer, for the «add task» intent.
+enum PrayerRelationOption: String, AppEnum, CaseIterable {
+    case before, after
+
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "قبل الصلاة أو بعدها"
+    static let caseDisplayRepresentations: [PrayerRelationOption: DisplayRepresentation] = [
+        .before: "قبل",
+        .after: "بعد",
+    ]
+}
+
+/// A prayer and before or after it, said in one Siri phrase: «ذكرني في زمام قبل المغرب».
+/// One parameter per phrase is all App Shortcuts allow, so the two are one value. «قبل» alone is
+/// a quarter of an hour before the adhan (`SpokenTime.defaultBeforeMinutes`), «بعد» at the adhan.
+enum PrayerMoment: String, AppEnum, CaseIterable {
+    case beforeFajr, afterFajr, beforeDhuhr, afterDhuhr, beforeAsr, afterAsr
+    case beforeMaghrib, afterMaghrib, beforeIsha, afterIsha
+
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "وقت الصلاة"
+    static let caseDisplayRepresentations: [PrayerMoment: DisplayRepresentation] = [
+        .beforeFajr: "قبل الفجر",
+        .afterFajr: "بعد الفجر",
+        .beforeDhuhr: "قبل الظهر",
+        .afterDhuhr: "بعد الظهر",
+        .beforeAsr: "قبل العصر",
+        .afterAsr: "بعد العصر",
+        .beforeMaghrib: "قبل المغرب",
+        .afterMaghrib: "بعد المغرب",
+        .beforeIsha: "قبل العشاء",
+        .afterIsha: "بعد العشاء",
+    ]
+
+    var prayer: Prayer {
+        switch self {
+        case .beforeFajr, .afterFajr: .fajr
+        case .beforeDhuhr, .afterDhuhr: .dhuhr
+        case .beforeAsr, .afterAsr: .asr
+        case .beforeMaghrib, .afterMaghrib: .maghrib
+        case .beforeIsha, .afterIsha: .isha
+        }
+    }
+
+    var offset: Int {
+        switch self {
+        case .beforeFajr, .beforeDhuhr, .beforeAsr, .beforeMaghrib, .beforeIsha: -SpokenTime.defaultBeforeMinutes
+        default: 0
+        }
+    }
+}
+
+/// «ذكرني في زمام بعد العصر» then «أتصل بأبي»: the task at that prayer, today or, once it has
+/// passed, tomorrow. A day in the sentence («بكرة») is kept, and a prayer in it wins over the phrase's.
+struct AddPrayerTaskIntent: AppIntent {
+    static let title: LocalizedStringResource = "إضافة مهمة بوقت صلاة"
+    static let description = IntentDescription(
+        "قل «ذكرني في زمام قبل المغرب» أو «بعد العصر» ثم المهمة، فتُضاف مرتبطة بالصلاة. «قبل» تذكّرك قبل الأذان بربع ساعة.")
+    static let openAppWhenRun: Bool = false
+
+    @Parameter(title: "وقت الصلاة", requestValueDialog: IntentDialog("قبل أي صلاة أو بعدها؟"))
+    var moment: PrayerMoment
+
+    @Parameter(title: "المهمة", requestValueDialog: IntentDialog("ما المهمة؟"))
+    var sentence: String
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("أضف «\(\.$sentence)» \(\.$moment)")
+    }
+
+    init() {}
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let message = await AddTaskFromSentenceIntent.add(sentence: sentence, moment: moment)
+        return .result(dialog: "\(message)")
+    }
+}
+
+/// «أضف مهمة في زمام»: a title, and optionally a day and a prayer with minutes before or after it.
+/// A prayer without a day means today.
 struct AddTaskIntent: AppIntent {
     static let title: LocalizedStringResource = "إضافة مهمة"
     static let description = IntentDescription("يضيف مهمة إلى زمام، بتاريخ أو بوقت صلاة إن شئت.")
@@ -41,13 +118,19 @@ struct AddTaskIntent: AppIntent {
     @Parameter(title: "الصلاة")
     var prayer: PrayerOption?
 
-    @Parameter(title: "الدقائق بعد الصلاة")
+    @Parameter(title: "قبل الصلاة أو بعدها")
+    var relation: PrayerRelationOption?
+
+    /// Minutes before or after the prayer (`relation`). Negative still means before, as shortcuts
+    /// made before `relation` existed send it.
+    @Parameter(title: "الدقائق")
     var offsetMinutes: Int?
 
     static var parameterSummary: some ParameterSummary {
         Summary("أضف «\(\.$taskTitle)» إلى زمام") {
             \.$date
             \.$prayer
+            \.$relation
             \.$offsetMinutes
         }
     }
@@ -63,7 +146,13 @@ struct AddTaskIntent: AppIntent {
         let formatter = DualDateFormatter(primary: SharedSettings.user()?.settings.calendar ?? .hijri, locale: ZimamLocale.current)
         let day: Date? = date ?? (prayer == nil ? nil : Date())
         let duePrayer = prayer?.prayer
-        let offset = duePrayer == nil ? nil : (offsetMinutes ?? 0)
+        let offset: Int? = duePrayer == nil ? nil : {
+            switch relation {
+            case .before?: return -abs(offsetMinutes ?? SpokenTime.defaultBeforeMinutes)
+            case .after?: return abs(offsetMinutes ?? 0)
+            case nil: return offsetMinutes ?? 0
+            }
+        }()
         let task = Store(context: ZimamStore.shared.mainContext, sync: LiveSync.engine).addTask(
             title: trimmed,
             dueDate: day.map { formatter.dayString(from: $0) },
@@ -124,6 +213,17 @@ struct ZimamShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "مهمة بجملة",
             systemImageName: "text.bubble"
+        )
+        // The prayer in the phrase («بعد العصر»), then «ما المهمة؟».
+        AppShortcut(
+            intent: AddPrayerTaskIntent(),
+            phrases: [
+                "ذكرني في \(.applicationName) \(\.$moment)",
+                "أضف مهمة في \(.applicationName) \(\.$moment)",
+                "سجّل في \(.applicationName) مهمة \(\.$moment)",
+            ],
+            shortTitle: "مهمة بوقت صلاة",
+            systemImageName: "moon.stars"
         )
         // One parameter per phrase: the saved place, so Siri knows «البيت» and «العمل».
         AppShortcut(
