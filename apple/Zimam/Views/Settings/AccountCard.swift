@@ -36,8 +36,11 @@ struct AccountCard: View {
                 }
             }
             .padding(.vertical, ZimamSpacing.space2)
+            // Worked out here: the picker's label is a Sendable closure, which cannot read the
+            // view's main-actor state.
+            let photoTitle = hasPhoto ? "تغيير الصورة" : "إضافة صورة"
             PhotosPicker(selection: $photoItem, matching: .images) {
-                Label(hasPhoto ? "تغيير الصورة" : "إضافة صورة", systemImage: "photo")
+                Label(photoTitle, systemImage: "photo")
             }
             .disabled(AvatarStore.shared.isSaving)
             .frame(minHeight: ZimamSpacing.space11)
