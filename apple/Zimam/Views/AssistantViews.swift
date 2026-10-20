@@ -131,8 +131,11 @@ struct SubtaskBreakdown: View {
         switch phase {
         case .idle:
             if NetworkMonitor.shared.isOnline {
+                // A form row already has its height and margins: no extra button padding here.
                 Button("تقسيم إلى خطوات", systemImage: "list.bullet.indent", action: start)
-                    .buttonStyle(.zimamQuiet)
+                    .buttonStyle(.borderless)
+                    .font(ZimamType.callout.weight(.semibold))
+                    .foregroundStyle(ZimamColor.brand)
             }
         case .loading:
             AssistantStatus(phase: .loading("يقسّم المساعد المهمة…"))

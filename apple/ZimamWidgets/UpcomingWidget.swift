@@ -169,9 +169,9 @@ private struct MiniCalendar: View {
                 .lineLimit(1)
             WeekdayHeader(grid: grid, dates: dates, tone: tone)
             VStack(spacing: 0) {
-                ForEach(weeks.indices, id: \.self) { index in
+                ForEach(weeks, id: \.self) { week in
                     HStack(spacing: 0) {
-                        ForEach(weeks[index]) { day in
+                        ForEach(week) { day in
                             dayNumber(day, isBusy: busy.contains(day.day), dates: dates)
                                 .frame(maxWidth: .infinity)
                         }

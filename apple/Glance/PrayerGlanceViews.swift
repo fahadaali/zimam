@@ -172,10 +172,12 @@ private struct PrayerCorner: View {
             Text(state.time, style: .timer)
                 .font(ZimamType.caption)
                 .monospacedDigit()
+                .widgetAccentable()
                 .widgetLabel(prayerStateTitle(state))
         } else {
             Image(systemName: "moon.stars")
                 .font(ZimamType.title)
+                .widgetAccentable()
                 .widgetLabel(noPlaceText)
         }
     }

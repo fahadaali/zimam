@@ -34,13 +34,13 @@ struct PrayerPlacePicker: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                searchField
+                PrayerPlaceSearchField(query: $query)
                 if !results.isEmpty {
-                    resultsList
+                    PrayerPlaceResultsList(results: results, onPick: { pick($0) })
                 } else {
-                    map
+                    PrayerPlaceMap(position: $position, onMove: { cameraMoved(to: $0) })
                 }
-                chooseBar
+                PrayerPlaceChooseBar(chosenName: chosenName, isSaving: isSaving, onChoose: { confirm() })
             }
             .background(ZimamColor.surface)
             .navigationTitle("اختيار المكان")
@@ -53,91 +53,37 @@ struct PrayerPlacePicker: View {
                 }
             }
             .task(id: query) { await search(query) }
-            .onAppear {
-                if let coordinate = location.coordinate {
-                    move(to: CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude), name: nil)
-                }
-            }
+            .onAppear(perform: startAtLocation)
         }
         #if os(macOS)
         .frame(minWidth: ZimamLayout.settingsWidth, minHeight: ZimamLayout.windowMinHeight)
         #endif
     }
 
-    private var searchField: some View {
-        HStack(spacing: ZimamSpacing.space2) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(ZimamColor.inkMuted)
-            TextField("ابحث عن مدينة أو حي", text: $query)
-                .autocorrectionDisabled()
+    // MARK: Actions
+
+    private func startAtLocation() {
+        if let coordinate = location.coordinate {
+            move(to: CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude), name: nil)
         }
-        .padding(.horizontal, ZimamSpacing.space3)
-        .frame(minHeight: ZimamSpacing.space11)
-        .background(ZimamColor.surfaceRaised, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
-        .overlay(RoundedRectangle(cornerRadius: ZimamRadius.radiusMd).stroke(ZimamColor.lineStrong))
-        .padding(ZimamSpacing.space4)
     }
 
-    private var resultsList: some View {
-        List(results) { option in
-            Button {
-                query = ""
-                results = []
-                move(to: CLLocationCoordinate2D(latitude: option.latitude, longitude: option.longitude), name: option.name)
-            } label: {
-                PlaceOptionRow(option: option, isSelected: false)
-            }
-            .buttonStyle(.plain)
-        }
-        .scrollContentBackground(.hidden)
+    private func pick(_ option: PlaceOption) {
+        query = ""
+        results = []
+        move(to: CLLocationCoordinate2D(latitude: option.latitude, longitude: option.longitude), name: option.name)
     }
 
-    /// The map moves under a fixed pin; where the pin points is the place.
-    private var map: some View {
-        Map(position: $position, interactionModes: [.pan, .zoom]) {
-            UserAnnotation()
+    /// The map was moved by hand: a search result's name no longer applies.
+    private func cameraMoved(to moved: CLLocationCoordinate2D) {
+        if abs(moved.latitude - center.latitude) > 0.0001 || abs(moved.longitude - center.longitude) > 0.0001 {
+            chosenName = nil
         }
-            .onMapCameraChange(frequency: .onEnd) { context in
-                let moved = context.region.center
-                if abs(moved.latitude - center.latitude) > 0.0001 || abs(moved.longitude - center.longitude) > 0.0001 {
-                    chosenName = nil
-                }
-                center = moved
-            }
-            .overlay {
-                Image(systemName: "mappin")
-                    .font(ZimamType.display)
-                    .foregroundStyle(ZimamColor.brand)
-                    // The pin's tip, not its middle, marks the place.
-                    .offset(y: -ZimamSpacing.space4)
-                    .accessibilityHidden(true)
-            }
-            .accessibilityLabel("حرّك الخريطة ليكون الدبوس على مكانك")
+        center = moved
     }
 
-    private var chooseBar: some View {
-        VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
-            if let chosenName {
-                Text(chosenName)
-                    .font(ZimamType.headline)
-                    .foregroundStyle(ZimamColor.ink)
-            }
-            Button {
-                Task { await choose() }
-            } label: {
-                if isSaving {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                } else {
-                    Text("اعتماد هذا المكان")
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .buttonStyle(.zimamPrimary)
-            .disabled(isSaving)
-        }
-        .padding(ZimamSpacing.space4)
-        .background(ZimamColor.surface)
+    private func confirm() {
+        Task { await choose() }
     }
 
     private func move(to coordinate: CLLocationCoordinate2D, name: String?) {
@@ -177,5 +123,96 @@ struct PrayerPlacePicker: View {
         let response = try? await MKLocalSearch(request: request).start()
         guard !Task.isCancelled else { return }
         results = response?.mapItems.prefix(8).map(PlaceOption.init(item:)) ?? []
+    }
+}
+
+/// The search field above the map.
+private struct PrayerPlaceSearchField: View {
+    @Binding var query: String
+
+    var body: some View {
+        HStack(spacing: ZimamSpacing.space2) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(ZimamColor.inkMuted)
+            TextField("ابحث عن مدينة أو حي", text: $query)
+                .autocorrectionDisabled()
+        }
+        .padding(.horizontal, ZimamSpacing.space3)
+        .frame(minHeight: ZimamSpacing.space11)
+        .background(ZimamColor.surfaceRaised, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
+        .overlay(RoundedRectangle(cornerRadius: ZimamRadius.radiusMd).stroke(ZimamColor.lineStrong))
+        .padding(ZimamSpacing.space4)
+    }
+}
+
+/// The search's results, in place of the map while there are any.
+private struct PrayerPlaceResultsList: View {
+    let results: [PlaceOption]
+    let onPick: (PlaceOption) -> Void
+
+    var body: some View {
+        List(results) { option in
+            Button {
+                onPick(option)
+            } label: {
+                PlaceOptionRow(option: option, isSelected: false)
+            }
+            .buttonStyle(.plain)
+        }
+        .scrollContentBackground(.hidden)
+    }
+}
+
+/// The map moves under a fixed pin; where the pin points is the place.
+private struct PrayerPlaceMap: View {
+    @Binding var position: MapCameraPosition
+    let onMove: (CLLocationCoordinate2D) -> Void
+
+    var body: some View {
+        Map(position: $position, interactionModes: [.pan, .zoom]) {
+            UserAnnotation()
+        }
+            .onMapCameraChange(frequency: .onEnd) { context in
+                onMove(context.region.center)
+            }
+            .overlay {
+                Image(systemName: "mappin")
+                    .font(ZimamType.display)
+                    .foregroundStyle(ZimamColor.brand)
+                    // The pin's tip, not its middle, marks the place.
+                    .offset(y: -ZimamSpacing.space4)
+                    .accessibilityHidden(true)
+            }
+            .accessibilityLabel("حرّك الخريطة ليكون الدبوس على مكانك")
+    }
+}
+
+/// The chosen place's name, and «اعتماد هذا المكان».
+private struct PrayerPlaceChooseBar: View {
+    let chosenName: String?
+    let isSaving: Bool
+    let onChoose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
+            if let chosenName {
+                Text(chosenName)
+                    .font(ZimamType.headline)
+                    .foregroundStyle(ZimamColor.ink)
+            }
+            Button(action: onChoose) {
+                if isSaving {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Text("اعتماد هذا المكان")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.zimamPrimary)
+            .disabled(isSaving)
+        }
+        .padding(ZimamSpacing.space4)
+        .background(ZimamColor.surface)
     }
 }

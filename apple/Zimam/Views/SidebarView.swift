@@ -88,8 +88,8 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .background(ZimamColor.surfaceSunken)
+        // The system glass column on iOS and macOS 26, the sunken surface before.
+        .zimamSidebarBackground()
         .navigationTitle("زمام")
         .toolbar {
             ToolbarItem {

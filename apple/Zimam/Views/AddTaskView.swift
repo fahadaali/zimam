@@ -53,6 +53,33 @@ struct AddTaskView: View {
     @State private var dictationPrefix = ""
     @FocusState private var titleFocused: Bool
 
+    private var trimmedTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// Splits on the Latin or the Arabic comma, dropping blanks and repeats.
+    private var parsedTags: [String] {
+        var result: [String] = []
+        for part in tagsText.split(whereSeparator: { $0 == "," || $0 == "،" }) {
+            let tag = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !tag.isEmpty && !result.contains(tag) { result.append(tag) }
+        }
+        return result
+    }
+
+    /// The chosen due day, nil when unscheduled.
+    private var dueDay: Date? {
+        switch due {
+        case .unscheduled: nil
+        case .today: Date()
+        case .tomorrow: Calendar.current.date(byAdding: .day, value: 1, to: Date())
+        case .pickedDate: pickedDate
+        }
+    }
+
+    /// The latest start day: the day before the due day (the start of that day, in the user's zone).
+    private var latestStart: Date? {
+        dueDay.flatMap { DayMath.adding(-1, to: formatter.dayString(from: $0)) }.flatMap { formatter.date(fromDay: $0) }
+    }
+
     /// `date` is the day `.pickedDate` starts on (the calendar passes its selected day).
     init(due: Due = .unscheduled, projectId: UUID? = nil, date: Date = Date()) {
         _due = State(initialValue: due)
@@ -60,93 +87,48 @@ struct AddTaskView: View {
         _pickedDate = State(initialValue: date)
     }
 
-    private var trimmedTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
-
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    TextField("عنوان المهمة", text: $title)
-                        .focused($titleFocused)
-                        .onSubmit(add)
-                    dictationControl
-                    if NetworkMonitor.shared.isOnline {
-                        Button("اقتراح بالمساعد", systemImage: "text.badge.checkmark", action: suggest)
-                            .buttonStyle(.zimamQuiet)
-                            .disabled(trimmedTitle.isEmpty || assistant == .loading)
-                    }
-                    if fromAssistant {
-                        TextField("ملاحظات", text: $notes, axis: .vertical)
-                            .lineLimit(1...4)
-                        TextField("الوسوم، مفصولة بفاصلة", text: $tagsText)
-                    }
-                } footer: {
-                    Text(NetworkMonitor.shared.isOnline
-                         ? "اكتب المهمة كما تقولها، مثل «ذكرني أراجع العقد بعد المغرب يوم الخميس»، ثم اطلب اقتراح المساعد."
-                         : "المساعد يحتاج اتصالاً بالإنترنت، والإضافة اليدوية تعمل دونه.")
-                }
+                AddTaskTitleSection(
+                    title: $title,
+                    notes: $notes,
+                    tagsText: $tagsText,
+                    titleFocused: $titleFocused,
+                    fromAssistant: fromAssistant,
+                    dictation: dictation,
+                    assistantIsLoading: assistant == .loading,
+                    onSubmit: add,
+                    onToggleDictation: toggleDictation,
+                    onSuggest: suggest
+                )
 
-                assistantSection
+                AddTaskAssistantSection(
+                    phase: assistant,
+                    needsPro: assistantNeedsPro,
+                    canAddAsIs: !trimmedTitle.isEmpty,
+                    projects: projects,
+                    onRetry: suggest,
+                    onClose: closeAssistant,
+                    onAddAsIs: add,
+                    onAccept: accept,
+                    onEdit: edit,
+                    onDismiss: dismissSuggestion
+                )
 
-                Section {
-                    Picker("الموعد", selection: $due) {
-                        Text("بلا موعد").tag(Due.unscheduled)
-                        Text("اليوم").tag(Due.today)
-                        Text("غداً").tag(Due.tomorrow)
-                        Text("تاريخ آخر").tag(Due.pickedDate)
-                    }
-                    if due == .pickedDate {
-                        DatePicker("التاريخ", selection: $pickedDate, displayedComponents: .date)
-                        Text(formatter.dual(pickedDate, withYear: true))
-                            .font(ZimamType.caption)
-                            .foregroundStyle(ZimamColor.inkMuted)
-                    }
-                    if due != .unscheduled, let latestStart {
-                        Toggle("تاريخ البداية", isOn: $hasStart)
-                        if hasStart {
-                            DatePicker("البداية", selection: $startDate, in: ...latestStart, displayedComponents: .date)
-                            Text(formatter.dual(startDate, withYear: true))
-                                .font(ZimamType.caption)
-                                .foregroundStyle(ZimamColor.inkMuted)
-                        }
-                    }
-                    if let dueTime, due != .unscheduled, !linkPrayer,
-                       let time = clockTime(dueTime, formatter: formatter) {
-                        HStack(spacing: ZimamSpacing.space2) {
-                            Text("الوقت: \(time)")
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Button("إزالة") { self.dueTime = nil }
-                                .buttonStyle(.zimamQuiet)
-                        }
-                    }
-                }
+                AddTaskDueSection(
+                    due: $due,
+                    pickedDate: $pickedDate,
+                    hasStart: $hasStart,
+                    startDate: $startDate,
+                    dueTime: $dueTime,
+                    latestStart: latestStart,
+                    linkPrayer: linkPrayer
+                )
 
-                Section {
-                    Toggle("مرتبطة بوقت صلاة", isOn: $linkPrayer)
-                    if linkPrayer {
-                        Picker("الصلاة", selection: $prayer) {
-                            ForEach(Prayer.allCases, id: \.self) { Text($0.arabicName).tag($0) }
-                        }
-                        Stepper(value: $offset, in: -120...120, step: 5) {
-                            PrayerChip(text: PrayerPhrase.text(prayer, offsetMinutes: offset, locale: formatter.locale))
-                        }
-                    }
-                }
+                AddTaskPrayerSection(linkPrayer: $linkPrayer, prayer: $prayer, offset: $offset)
 
-                Section {
-                    Picker("الأولوية", selection: $priority) {
-                        Text("بلا أولوية").tag(TaskPriority.none)
-                        Text("منخفضة").tag(TaskPriority.low)
-                        Text("متوسطة").tag(TaskPriority.medium)
-                        Text("عالية").tag(TaskPriority.high)
-                    }
-                    if !projects.isEmpty {
-                        Picker("المشروع", selection: $projectId) {
-                            Text("صندوق المهام").tag(UUID?.none)
-                            ForEach(projects) { Text($0.name).tag(Optional($0.id)) }
-                        }
-                    }
-                }
+                AddTaskPrioritySection(priority: $priority, projectId: $projectId, projects: projects)
             }
             .navigationTitle("مهمة جديدة")
             .toolbar {
@@ -159,49 +141,33 @@ struct AddTaskView: View {
             }
             .onAppear { titleFocused = true }
             // A new start begins the day before the due day; a due day moved before it pulls it back.
-            .onChange(of: hasStart) { _, on in
-                if on, let latestStart { startDate = latestStart }
-            }
-            .onChange(of: latestStart) { _, latest in
-                if let latest, startDate > latest { startDate = latest }
-            }
-            .onDisappear {
-                dictation.cancel()
-                // The closure holds this view, whose state holds the dictation: let go on close.
-                dictation.onFinish = nil
-            }
-            .onChange(of: dictation.transcript) { _, words in
-                if dictation.isActive { title = dictationPrefix + words }
-            }
+            .onChange(of: hasStart) { _, on in startToggled(on) }
+            .onChange(of: latestStart) { _, latest in latestStartChanged(latest) }
+            .onDisappear(perform: stopDictation)
+            .onChange(of: dictation.transcript) { _, words in transcriptChanged(words) }
         }
+    }
+
+    // MARK: Form
+
+    private func startToggled(_ on: Bool) {
+        if on, let latestStart { startDate = latestStart }
+    }
+
+    private func latestStartChanged(_ latest: Date?) {
+        if let latest, startDate > latest { startDate = latest }
     }
 
     // MARK: Dictation
 
-    /// «إملاء» and, while listening, the words heard so far go into the title field.
-    @ViewBuilder private var dictationControl: some View {
-        let listening = dictation.phase == .listening
-        Button(listening ? "إيقاف الإملاء" : "إملاء",
-               systemImage: listening ? "stop.circle" : "mic",
-               action: toggleDictation)
-            .buttonStyle(.zimamQuiet)
-            .disabled(dictation.phase == .starting || assistant == .loading)
-            .accessibilityHint(listening ? "يوقف الاستماع ويقرأ المساعد المهمة." : "قل المهمة بصوتك، مثل «ذكرني أراجع العقد بعد العصر بكرة».")
-        switch dictation.phase {
-        case .listening:
-            Label("أستمع… قل المهمة كما تقولها لشخص.", systemImage: "waveform")
-                .font(ZimamType.callout)
-                .foregroundStyle(ZimamColor.inkMuted)
-                .frame(minHeight: ZimamSpacing.space11, alignment: .leading)
-                .accessibilityElement(children: .combine)
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.circle")
-                .font(ZimamType.callout)
-                .foregroundStyle(ZimamColor.inkMuted)
-                .frame(minHeight: ZimamSpacing.space11, alignment: .leading)
-        case .idle, .starting:
-            EmptyView()
-        }
+    private func stopDictation() {
+        dictation.cancel()
+        // The closure holds this view, whose state holds the dictation: let go on close.
+        dictation.onFinish = nil
+    }
+
+    private func transcriptChanged(_ words: String) {
+        if dictation.isActive { title = dictationPrefix + words }
     }
 
     private func toggleDictation() {
@@ -224,34 +190,12 @@ struct AddTaskView: View {
 
     // MARK: Assistant
 
-    @ViewBuilder private var assistantSection: some View {
-        switch assistant {
-        case .idle:
-            EmptyView()
-        case .loading:
-            Section { AssistantStatus(phase: .loading("يقرأ المساعد المهمة…")) }
-        case .failed(let message):
-            Section {
-                AssistantStatus(phase: .failed(message), needsPro: assistantNeedsPro, onRetry: suggest, onClose: { assistant = .idle })
-                // The assistant never blocks adding: the sentence can go in as it is.
-                if !trimmedTitle.isEmpty {
-                    Button("إضافة بالنص كما هو", systemImage: "plus.circle", action: add)
-                        .buttonStyle(.zimamQuiet)
-                }
-            }
-        case .suggestion(let suggestion):
-            Section {
-                TaskSuggestionCard(
-                    suggestion: suggestion,
-                    projectName: suggestion.projectId.flatMap { id in projects.first(where: { $0.id == id })?.name },
-                    onAccept: { accept(suggestion) },
-                    onEdit: { edit(suggestion) },
-                    onDismiss: { withAnimation(.zimam(reduceMotion: reduceMotion)) { assistant = .idle } }
-                )
-            }
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets())
-        }
+    private func closeAssistant() {
+        assistant = .idle
+    }
+
+    private func dismissSuggestion() {
+        withAnimation(.zimam(reduceMotion: reduceMotion)) { assistant = .idle }
     }
 
     private func suggest() {
@@ -346,30 +290,7 @@ struct AddTaskView: View {
         withAnimation(.zimam(reduceMotion: reduceMotion)) { assistant = .idle }
     }
 
-    /// Splits on the Latin or the Arabic comma, dropping blanks and repeats.
-    private var parsedTags: [String] {
-        var result: [String] = []
-        for part in tagsText.split(whereSeparator: { $0 == "," || $0 == "،" }) {
-            let tag = part.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !tag.isEmpty && !result.contains(tag) { result.append(tag) }
-        }
-        return result
-    }
-
-    /// The chosen due day, nil when unscheduled.
-    private var dueDay: Date? {
-        switch due {
-        case .unscheduled: nil
-        case .today: Date()
-        case .tomorrow: Calendar.current.date(byAdding: .day, value: 1, to: Date())
-        case .pickedDate: pickedDate
-        }
-    }
-
-    /// The latest start day: the day before the due day (the start of that day, in the user's zone).
-    private var latestStart: Date? {
-        dueDay.flatMap { DayMath.adding(-1, to: formatter.dayString(from: $0)) }.flatMap { formatter.date(fromDay: $0) }
-    }
+    // MARK: Adding
 
     private func add() {
         guard !trimmedTitle.isEmpty else { return }
