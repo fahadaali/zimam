@@ -252,9 +252,7 @@ final class LocationProvider {
 
     /// Names the city of a reading, for the prayer screen. Without a network the place stays unnamed.
     private func nameReading(latitude: Double, longitude: Double) async {
-        let reading = CLLocation(latitude: latitude, longitude: longitude)
-        let placemark = try? await CLGeocoder().reverseGeocodeLocation(reading, preferredLocale: Locale(identifier: "ar")).first
-        guard let name = placemark?.locality ?? placemark?.administrativeArea,
+        guard let name = await CityName.find(latitude: latitude, longitude: longitude),
               coordinate == Coordinate(latitude: latitude, longitude: longitude), !isManual else { return }
         placeName = name
         SharedSettings.savePlaceName(name)
@@ -273,6 +271,17 @@ final class LocationProvider {
         default:
             stopReading(message: Self.failedMessage)
         }
+    }
+}
+
+/// The city at a point («الرياض»), in Arabic where Apple has it. Only the name leaves this function,
+/// so the geocoder's placemarks never cross to the main actor.
+nonisolated enum CityName {
+    static func find(latitude: Double, longitude: Double) async -> String? {
+        let point = CLLocation(latitude: latitude, longitude: longitude)
+        guard let placemarks = try? await CLGeocoder().reverseGeocodeLocation(point, preferredLocale: Locale(identifier: "ar")),
+              let placemark = placemarks.first else { return nil }
+        return placemark.locality ?? placemark.administrativeArea
     }
 }
 
