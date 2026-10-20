@@ -5,20 +5,27 @@ import ZimamKit
 /// Open tasks after today, grouped by day. A task completed here stays for a second so it can
 /// be undone.
 struct UpcomingView: View {
-    @Environment(\.dateFormatterZimam) private var formatter
-    @Environment(\.taskSelection) private var taskSelection
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder)])
-    private var tasks: [TaskItem]
-    @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
-    @State private var showingAdd = false
-    @State private var lingering = Lingering()
+    /// Every sheet this screen opens, so only one is ever up at a time.
+    private enum SheetRoute: Identifiable {
+        case add
+
+        var id: Self { self }
+    }
 
     private struct DayGroup: Identifiable {
         let day: String
         let tasks: [TaskItem]
         var id: String { day }
     }
+
+    @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.taskSelection) private var taskSelection
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder)])
+    private var tasks: [TaskItem]
+    @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
+    @State private var lingering = Lingering()
+    @State private var sheet: SheetRoute?
 
     private var days: [DayGroup] {
         let today = formatter.dayString(from: Date())
@@ -52,8 +59,12 @@ struct UpcomingView: View {
             }
         }
         .zimamList()
-        .overlay(alignment: .bottomTrailing) { AddTaskButton { showingAdd = true } }
-        .sheet(isPresented: $showingAdd) { AddTaskView(due: .tomorrow) }
+        .overlay(alignment: .bottomTrailing) { AddTaskButton { sheet = .add } }
+        .sheet(item: $sheet) { route in
+            switch route {
+            case .add: AddTaskView(due: .tomorrow)
+            }
+        }
     }
 
     private func linger(_ id: UUID) {

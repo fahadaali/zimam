@@ -40,8 +40,12 @@ struct TaskListItem: View {
                 }
             }
         }
-        // The task open in the details column (iPad and Mac) stands out in brand-soft.
-        .listRowBackground(selected ? ZimamColor.brandSoft : ZimamColor.surfaceRaised)
+        // Each task is its own rounded card, as in the calendar's day list; the task open in the
+        // details column (iPad and Mac) stands out in brand-soft.
+        .listRowInsets(EdgeInsets(top: ZimamSpacing.space2, leading: ZimamSpacing.space4 * 2,
+                                  bottom: ZimamSpacing.space2, trailing: ZimamSpacing.space4 * 2))
+        .listRowSeparator(.hidden)
+        .listRowBackground(TaskCardBackground(selected: selected))
         .swipeActions(edge: .trailing) {
             Button("حذف", role: .destructive) { store.delete(task) }
         }
@@ -73,6 +77,19 @@ private struct ProjectMoveActions: ViewModifier {
     }
 }
 
+/// The card behind a task row in a list: inset from the screen's edges, with a small gap to the
+/// next card. Radius and colors from the tokens (design/components/TaskRow).
+private struct TaskCardBackground: View {
+    let selected: Bool
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: ZimamRadius.radiusLg)
+            .fill(selected ? ZimamColor.brandSoft : ZimamColor.surfaceRaised)
+            .padding(.horizontal, ZimamSpacing.space4)
+            .padding(.vertical, ZimamSpacing.space1 / 2)
+    }
+}
+
 /// The floating add button, at the bottom trailing corner (bottom left in Arabic).
 struct AddTaskButton: View {
     let action: () -> Void
@@ -83,10 +100,9 @@ struct AddTaskButton: View {
                 .font(ZimamType.title)
                 .foregroundStyle(ZimamColor.onBrand)
                 .frame(width: ZimamSpacing.space11, height: ZimamSpacing.space11)
-                .padding(ZimamSpacing.space1)
-                .background(ZimamColor.brand, in: Circle())
         }
-        .buttonStyle(.plain)
+        // Brand glass on iOS and macOS 26, the brand circle before (Components/ZimamGlass.swift).
+        .zimamFloatingActionStyle()
         .keyboardShortcut("n", modifiers: .command)
         .accessibilityLabel("إضافة مهمة")
         .padding(ZimamSpacing.space4)
@@ -128,10 +144,18 @@ struct EmptyLine: View {
 
 extension View {
     /// The plain list look used across Zimam: surface background, no system tint.
+    /// On the iPhone the bar keeps no room for a large title: each screen draws its own
+    /// (`ScreenHeader`), so an empty large-title area would only push the list down.
     func zimamList() -> some View {
         listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(ZimamColor.surface)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            // The list's own top margin before the first header, on top of the bar's: gone, so the
+            // screen's title sits right under the toolbar.
+            .contentMargins(.top, 0, for: .scrollContent)
+            #endif
     }
 }
 

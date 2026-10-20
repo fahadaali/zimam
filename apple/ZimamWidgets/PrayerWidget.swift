@@ -47,6 +47,7 @@ struct PrayerProvider: TimelineProvider {
 struct PrayerWidgetView: View {
     let entry: PrayerEntry
     @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetRenderingMode) private var mode
 
     var body: some View {
         switch family {
@@ -63,25 +64,28 @@ struct PrayerWidgetView: View {
         }
     }
 
+    /// Sand in full color; on tinted and clear home screens, in StandBy at night and on the Mac
+    /// desktop behind windows the system's levels, with the countdown in the accent group.
     @ViewBuilder
     private var home: some View {
+        let tone = WidgetTone(mode: mode)
         if let place = entry.place, let state = entry.state {
             switch family {
             case .systemSmall:
-                PrayerCountdown(state: state, placeName: place.name, large: false)
+                PrayerCountdown(state: state, placeName: place.name, large: false, tone: tone)
             case .systemMedium:
                 HStack(alignment: .top, spacing: ZimamSpacing.space4) {
-                    PrayerCountdown(state: state, placeName: place.name, large: false)
-                    PrayerDayList(schedule: place.schedule, date: entry.date, next: state, withSunrise: false)
+                    PrayerCountdown(state: state, placeName: place.name, large: false, tone: tone)
+                    PrayerDayList(schedule: place.schedule, date: entry.date, next: state, withSunrise: false, tone: tone)
                 }
             default:
                 VStack(alignment: .leading, spacing: ZimamSpacing.space3) {
                     Text(DualDateFormatter(primary: SharedSettings.user()?.settings.calendar ?? .hijri,
                                            locale: ZimamLocale.current).dual(entry.date))
                         .font(ZimamType.caption)
-                        .foregroundStyle(ZimamColor.inkMuted)
-                    PrayerCountdown(state: state, placeName: place.name, large: true)
-                    PrayerDayList(schedule: place.schedule, date: entry.date, next: state, withSunrise: true)
+                        .foregroundStyle(tone.muted)
+                    PrayerCountdown(state: state, placeName: place.name, large: true, tone: tone)
+                    PrayerDayList(schedule: place.schedule, date: entry.date, next: state, withSunrise: true, tone: tone)
                 }
             }
         } else {
@@ -93,7 +97,8 @@ struct PrayerWidgetView: View {
                 Text("حدّد موقعك في زمام لتظهر الصلاة القادمة.")
                     .font(ZimamType.caption)
             }
-            .foregroundStyle(ZimamColor.sand)
+            .foregroundStyle(tone.tinted(ZimamColor.sand))
+            .widgetAccentable()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
@@ -104,6 +109,7 @@ private struct PrayerCountdown: View {
     let state: PrayerClock.State
     let placeName: String?
     let large: Bool
+    let tone: WidgetTone
 
     var body: some View {
         let formatter = DualDateFormatter(locale: ZimamLocale.current)
@@ -122,11 +128,12 @@ private struct PrayerCountdown: View {
             if let placeName {
                 Text(placeName)
                     .font(ZimamType.caption)
-                    .foregroundStyle(ZimamColor.inkMuted)
+                    .foregroundStyle(tone.muted)
                     .lineLimit(1)
             }
         }
-        .foregroundStyle(ZimamColor.sand)
+        .foregroundStyle(tone.tinted(ZimamColor.sand))
+        .widgetAccentable()
         .frame(maxWidth: .infinity, maxHeight: large ? nil : .infinity, alignment: .topLeading)
         .accessibilityElement(children: .combine)
     }
@@ -145,6 +152,7 @@ private struct PrayerDayList: View {
     let date: Date
     let next: PrayerClock.State
     let withSunrise: Bool
+    let tone: WidgetTone
 
     var body: some View {
         let formatter = DualDateFormatter(locale: ZimamLocale.current)
@@ -170,13 +178,17 @@ private struct PrayerDayList: View {
                 .monospacedDigit()
         }
         .font(isNext ? ZimamType.headline : (withSunrise ? ZimamType.callout : ZimamType.caption))
-        .foregroundStyle(isNext ? ZimamColor.sand : ZimamColor.ink)
+        .foregroundStyle(isNext ? tone.tinted(ZimamColor.sand) : tone.ink)
         .padding(.horizontal, isNext ? ZimamSpacing.space2 : 0)
         .background {
+            // The next prayer keeps its heavier weight in every mode; its sand-soft fill becomes a
+            // faint system fill where a solid one would turn into a block of the tint.
             if isNext {
-                RoundedRectangle(cornerRadius: ZimamRadius.radiusSm).fill(ZimamColor.sandSoft)
+                RoundedRectangle(cornerRadius: ZimamRadius.radiusSm)
+                    .fill(tone.isFullColor ? AnyShapeStyle(ZimamColor.sandSoft) : tone.fill)
             }
         }
+        .widgetAccentable(isNext)
     }
 
     private static func sameDay(_ a: Date, _ b: Date) -> Bool {

@@ -4,15 +4,34 @@ import ZimamKit
 /// «أوقات الصلاة»: the next prayer with its countdown (or the time since the adhan, for half an
 /// hour), today's times with sunrise, the place they are computed for (the device's location or a
 /// place picked on the map), the calculation, and the adhan and iqama alerts of each prayer.
-/// Opened from «اليوم» (`NextPrayerLine`) and from settings.
+/// Opened from «اليوم» (`NextPrayerLine`) and from settings. The clock and today's times are in
+/// PrayerClockViews.swift, the other sections in PrayerTimesSections.swift.
 struct PrayerTimesView: View {
     @Environment(SessionStore.self) private var session
     @Environment(LocationProvider.self) private var location
     @Environment(NotificationScheduler.self) private var notifications
-    @AppStorage(SessionStore.shareLocationKey) private var shareLocation = false
 
     @State private var saveFailed = false
     @State private var pickingPlace = false
+
+    private var settings: User.Settings {
+        session.user?.settings ?? User.Settings()
+    }
+
+    private var alerts: PrayerAlertSettings {
+        settings.prayerAlerts ?? PrayerAlertSettings()
+    }
+
+    private var madhabBinding: Binding<AsrMadhab> {
+        Binding(
+            get: { settings.asrMadhab ?? .shafi },
+            set: { value in
+                var updated = settings
+                updated.asrMadhab = value
+                save(updated)
+            }
+        )
+    }
 
     var body: some View {
         Form {
@@ -28,10 +47,13 @@ struct PrayerTimesView: View {
                     Text("مواقيت اليوم")
                 }
             }
-            placeSection
-            calculationSection
-            alertsSection
-            shareSection
+            PrayerLocationSection { pickingPlace = true }
+            PrayerCalculationSection(method: binding(\.prayerMethod), madhab: madhabBinding, saveFailed: saveFailed)
+            PrayerAlertsStatusSection()
+            ForEach(Prayer.allCases, id: \.self) { prayer in
+                PrayerAlertSection(prayer: prayer, alert: alertBinding(prayer))
+            }
+            PrayerShareSection()
         }
         .scrollContentBackground(.hidden)
         .background(ZimamColor.surface)
@@ -45,120 +67,7 @@ struct PrayerTimesView: View {
         .task { await notifications.refreshStatus() }
     }
 
-    // MARK: Sections
-
-    private var placeSection: some View {
-        Section {
-            if location.coordinate != nil {
-                LabeledContent("المكان") {
-                    Text(location.placeName ?? (location.isManual ? "مكان على الخريطة" : "موقعي الحالي"))
-                        .foregroundStyle(ZimamColor.ink)
-                }
-                .frame(minHeight: ZimamSpacing.space11)
-            }
-            LocationRequestRows()
-            Button("اختيار من الخريطة", systemImage: "map") { pickingPlace = true }
-                .frame(minHeight: ZimamSpacing.space11)
-        } header: {
-            Text("الموقع")
-        } footer: {
-            Text(location.isManual
-                 ? "تُحسب الأوقات للمكان الذي اخترته على الخريطة، ولا يغيّرها تنقّلك. اختر «استعمال موقعي الحالي» لتعود إلى موقعك."
-                 : "تُحسب الأوقات لموقعك على مستوى المدينة. اختر مكاناً من الخريطة إن أردت مدينة أخرى.")
-        }
-    }
-
-    private var calculationSection: some View {
-        Section {
-            Picker("طريقة الحساب", selection: binding(\.prayerMethod)) {
-                ForEach(PrayerMethod.allCases, id: \.self) { method in
-                    Text(method.arabicName).tag(method)
-                }
-            }
-            Picker("وقت العصر", selection: madhabBinding) {
-                ForEach(AsrMadhab.allCases, id: \.self) { madhab in
-                    Text(madhab.arabicName).tag(madhab)
-                }
-            }
-        } header: {
-            Text("الحساب")
-        } footer: {
-            if saveFailed {
-                Text("تعذّر حفظ الإعدادات. تحقّق من الاتصال وحاول مرة أخرى.")
-                    .foregroundStyle(ZimamColor.priorityHigh)
-            } else {
-                Text("الجمهور: العصر حين يصير ظل الشيء مثله. الحنفي: حين يصير مثليه.")
-            }
-        }
-        .disabled(session.user == nil)
-    }
-
-    @ViewBuilder
-    private var alertsSection: some View {
-        if !notifications.isEnabled {
-            Section {
-                if notifications.canAskForAlerts {
-                    Button("تفعيل التنبيهات", systemImage: "bell") {
-                        Task { await notifications.requestFullAuthorization() }
-                    }
-                    .frame(minHeight: ZimamSpacing.space11)
-                } else {
-                    Text("التنبيهات متوقفة. فعّلها لزمام من إعدادات النظام.")
-                        .foregroundStyle(ZimamColor.inkMuted)
-                }
-            } header: {
-                Text("التنبيهات")
-            }
-        }
-        ForEach(Prayer.allCases, id: \.self) { prayer in
-            Section {
-                Toggle("الأذان", isOn: alertBinding(prayer, \.adhan))
-                    .frame(minHeight: ZimamSpacing.space11)
-                Toggle("الإقامة", isOn: alertBinding(prayer, \.iqama))
-                    .frame(minHeight: ZimamSpacing.space11)
-                if alerts[prayer].iqama {
-                    Stepper(value: alertBinding(prayer, \.iqamaMinutes), in: PrayerAlert.iqamaRange, step: 5) {
-                        Text("بعد الأذان بـ\(minutes(alerts[prayer].iqamaMinutes)) دقيقة")
-                    }
-                    .frame(minHeight: ZimamSpacing.space11)
-                }
-            } header: {
-                Text("تنبيه \(prayer.arabicName)")
-            }
-            .disabled(session.user == nil)
-        }
-    }
-
-    private var shareSection: some View {
-        Section {
-            Toggle("أوقات الصلاة في كلود وChatGPT", isOn: $shareLocation)
-                .frame(minHeight: ZimamSpacing.space11)
-                .onChange(of: shareLocation) { _, _ in
-                    Task {
-                        await session.sharePlace(latitude: location.coordinate?.latitude,
-                                                 longitude: location.coordinate?.longitude)
-                    }
-                }
-        } footer: {
-            Text(shareLocation
-                 ? "تُحسب الأوقات على جهازك، ويُحفظ في خادم زمام موقع تقريبي على مستوى المدينة لتظهر الأوقات في جدولك عند كلود وChatGPT."
-                 : "تُحسب الأوقات على جهازك، ولا يُرسل موقعك إلى أي خادم.")
-        }
-    }
-
     // MARK: Settings
-
-    private var settings: User.Settings {
-        session.user?.settings ?? User.Settings()
-    }
-
-    private var alerts: PrayerAlertSettings {
-        settings.prayerAlerts ?? PrayerAlertSettings()
-    }
-
-    private func minutes(_ value: Int) -> String {
-        value.formatted(.number.locale(ZimamLocale.current).grouping(.never))
-    }
 
     private func binding<Value>(_ keyPath: WritableKeyPath<User.Settings, Value>) -> Binding<Value> {
         Binding(
@@ -171,23 +80,12 @@ struct PrayerTimesView: View {
         )
     }
 
-    private var madhabBinding: Binding<AsrMadhab> {
+    private func alertBinding(_ prayer: Prayer) -> Binding<PrayerAlert> {
         Binding(
-            get: { settings.asrMadhab ?? .shafi },
-            set: { value in
-                var updated = settings
-                updated.asrMadhab = value
-                save(updated)
-            }
-        )
-    }
-
-    private func alertBinding<Value>(_ prayer: Prayer, _ keyPath: WritableKeyPath<PrayerAlert, Value>) -> Binding<Value> {
-        Binding(
-            get: { alerts[prayer][keyPath: keyPath] },
+            get: { alerts[prayer] },
             set: { value in
                 var updatedAlerts = alerts
-                updatedAlerts[prayer][keyPath: keyPath] = value
+                updatedAlerts[prayer] = value
                 var updated = settings
                 updated.prayerAlerts = updatedAlerts
                 save(updated)
@@ -207,112 +105,6 @@ struct PrayerTimesView: View {
             notifications.reschedule()
             ZimamShared.reloadWidgets()
         }
-    }
-}
-
-// MARK: The clock
-
-/// The next prayer and the time left, or for half an hour after an adhan the time since it.
-/// The system counts the seconds (`Text(_:style: .timer)`); the state is recomputed every half
-/// minute, so it moves on at the adhan and half an hour after it.
-struct PrayerClockCard: View {
-    let schedule: PrayerSchedule
-
-    @Environment(\.dateFormatterZimam) private var formatter
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            if let state = PrayerClock(schedule: schedule).state(at: context.date) {
-                content(state)
-            }
-        }
-    }
-
-    private func content(_ state: PrayerClock.State) -> some View {
-        VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
-            switch state {
-            case .since(let prayer, _):
-                Text("مضى على أذان \(prayer.arabicName)")
-                    .font(ZimamType.callout)
-            case .until(let prayer, _):
-                Text("المتبقي على \(prayer.arabicName)")
-                    .font(ZimamType.callout)
-            }
-            Text(state.time, style: .timer)
-                .font(ZimamType.display)
-                .monospacedDigit()
-            Text("\(state.prayer.arabicName)، \(formatter.time(state.time))")
-                .font(ZimamType.callout)
-        }
-        .foregroundStyle(ZimamColor.sand)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(ZimamSpacing.space4)
-        .background(ZimamColor.sandSoft, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusLg))
-        .accessibilityElement(children: .combine)
-    }
-}
-
-// MARK: Today's times
-
-/// Today's five prayer times and sunrise, in the sand colour reserved for prayer times, under the
-/// dual date. The next prayer is marked.
-struct PrayerTimesList: View {
-    let schedule: PrayerSchedule
-
-    @Environment(\.dateFormatterZimam) private var formatter
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 60)) { context in
-            let now = context.date
-            let times = schedule.times(on: now)
-            let next = schedule.next(after: now)
-            VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
-                Text(formatter.dual(now))
-                    .font(ZimamType.caption)
-                    .foregroundStyle(ZimamColor.inkMuted)
-                ForEach(Prayer.allCases, id: \.self) { prayer in
-                    if let time = times[prayer] {
-                        PrayerTimeRow(name: prayer.arabicName, systemImage: "moon.stars", time: formatter.time(time),
-                                      isNext: next?.prayer == prayer && next?.time == time)
-                    }
-                    if prayer == .fajr, let sunrise = schedule.sunrise(on: now) {
-                        PrayerTimeRow(name: "الشروق", systemImage: "sunrise", time: formatter.time(sunrise), isNext: false)
-                    }
-                }
-            }
-            .padding(.vertical, ZimamSpacing.space1)
-        }
-    }
-}
-
-struct PrayerTimeRow: View {
-    let name: String
-    let systemImage: String
-    let time: String
-    let isNext: Bool
-
-    var body: some View {
-        HStack(spacing: ZimamSpacing.space2) {
-            Label(name, systemImage: systemImage)
-            Spacer(minLength: ZimamSpacing.space2)
-            if isNext {
-                Text("القادمة")
-                    .font(ZimamType.caption)
-            }
-            Text(time)
-        }
-        .font(isNext ? ZimamType.headline : ZimamType.callout)
-        .foregroundStyle(ZimamColor.sand)
-        .padding(.horizontal, ZimamSpacing.space3)
-        .frame(minHeight: ZimamSpacing.space11)
-        .background(ZimamColor.sandSoft, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
-        .overlay {
-            if isNext {
-                RoundedRectangle(cornerRadius: ZimamRadius.radiusMd)
-                    .stroke(ZimamColor.sand, lineWidth: ZimamLayout.focusRingWidth)
-            }
-        }
-        .accessibilityElement(children: .combine)
     }
 }
 

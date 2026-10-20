@@ -12,48 +12,43 @@ struct PlacesView: View {
     @Environment(\.dateFormatterZimam) private var formatter
     @Query(filter: #Predicate<PlaceItem> { !$0.pendingDelete }, sort: \PlaceItem.name) private var places: [PlaceItem]
 
-    @State private var adding = false
-    @State private var editing: PlaceItem?
+    @State private var route: PlaceSheet?
     @State private var deleting: PlaceItem?
+
+    private var store: Store { Store(context: context, sync: sync) }
+
+    private var deletingBinding: Binding<Bool> {
+        Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
+    }
+
+    private var deleteTitle: String {
+        deleting.map { "حذف «\($0.name)»؟" } ?? ""
+    }
 
     var body: some View {
         Form {
             AlwaysLocationSection()
-            Section {
-                ForEach(places) { place in
-                    Button { editing = place } label: {
-                        PlaceRow(place: place)
-                    }
-                    .buttonStyle(.plain)
-                    .swipeActions(edge: .trailing) {
-                        Button("حذف", systemImage: "trash", role: .destructive) { delete(place) }
-                    }
-                    .contextMenu {
-                        Button("تعديل", systemImage: "pencil") { editing = place }
-                        Button("حذف", systemImage: "trash", role: .destructive) { delete(place) }
-                    }
-                }
-                Button("إضافة مكان", systemImage: "plus") { adding = true }
-                    .frame(minHeight: ZimamSpacing.space11)
-            } footer: {
-                Text("سمِّ أماكنك مرة، ثم اربط بها تذكيرات مهامك: «ذكّرني إذا وصلت البيت». تتزامن مع حسابك، ويعرف أسماءها سيري وكلود وChatGPT.")
-            }
+            PlacesListSection(
+                places: places,
+                onEdit: { place in route = .editing(place) },
+                onDelete: { place in delete(place) },
+                onAdd: { route = .adding }
+            )
         }
         .scrollContentBackground(.hidden)
         .background(ZimamColor.surface)
         .navigationTitle("أماكني")
         // The sheet closes as it saves, so the list confirms a new place.
         .sensoryFeedback(.success, trigger: places.count) { old, new in new > old }
-        .sheet(isPresented: $adding) { PlaceEditorSheet(place: nil) }
-        .sheet(item: $editing) { PlaceEditorSheet(place: $0) }
+        .sheet(item: $route) { route in
+            PlaceEditorSheet(place: route.place)
+        }
         .confirmationDialog(deleteTitle, isPresented: deletingBinding, titleVisibility: .visible, presenting: deleting) { place in
             Button("حذف", role: .destructive) { store.deletePlace(place) }
         } message: { place in
             Text(deleteMessage(place))
         }
     }
-
-    private var store: Store { Store(context: context, sync: sync) }
 
     /// Asks first only when reminders use the place; otherwise it simply goes.
     private func delete(_ place: PlaceItem) {
@@ -64,17 +59,60 @@ struct PlacesView: View {
         }
     }
 
-    private var deletingBinding: Binding<Bool> {
-        Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
-    }
-
-    private var deleteTitle: String {
-        deleting.map { "حذف «\($0.name)»؟" } ?? ""
-    }
-
     private func deleteMessage(_ place: PlaceItem) -> String {
         let count = store.reminders(at: place.id).count.formatted(.number.locale(formatter.locale))
         return "تبقى تذكيراته (\(count)) في مكانه الأخير، ولا يُحذف منها شيء."
+    }
+}
+
+/// The sheet «أماكني» shows: a new place, or a saved one to edit.
+private enum PlaceSheet: Identifiable {
+    case adding
+    case editing(PlaceItem)
+
+    var id: String {
+        switch self {
+        case .adding: "adding"
+        case .editing(let place): place.id.uuidString
+        }
+    }
+
+    /// The place being edited; `nil` adds one.
+    var place: PlaceItem? {
+        switch self {
+        case .adding: nil
+        case .editing(let place): place
+        }
+    }
+}
+
+/// The saved places, each opening its editor, and «إضافة مكان».
+private struct PlacesListSection: View {
+    let places: [PlaceItem]
+    let onEdit: (PlaceItem) -> Void
+    let onDelete: (PlaceItem) -> Void
+    let onAdd: () -> Void
+
+    var body: some View {
+        Section {
+            ForEach(places) { place in
+                Button { onEdit(place) } label: {
+                    PlaceRow(place: place)
+                }
+                .buttonStyle(.plain)
+                .swipeActions(edge: .trailing) {
+                    Button("حذف", systemImage: "trash", role: .destructive) { onDelete(place) }
+                }
+                .contextMenu {
+                    Button("تعديل", systemImage: "pencil") { onEdit(place) }
+                    Button("حذف", systemImage: "trash", role: .destructive) { onDelete(place) }
+                }
+            }
+            Button("إضافة مكان", systemImage: "plus", action: onAdd)
+                .frame(minHeight: ZimamSpacing.space11)
+        } footer: {
+            Text("سمِّ أماكنك مرة، ثم اربط بها تذكيرات مهامك: «ذكّرني إذا وصلت البيت». تتزامن مع حسابك، ويعرف أسماءها سيري وكلود وChatGPT.")
+        }
     }
 }
 
@@ -121,6 +159,17 @@ struct PlaceEditorSheet: View {
     @State private var name: String
     @State private var radius: Double
 
+    private var trimmed: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// Shown as the user types, not after «حفظ».
+    private var nameProblem: String? {
+        if trimmed.isEmpty { return "اكتب اسماً تعرفه به، مثل «البيت»." }
+        if PlaceNames.isTaken(trimmed, among: places.map(\.name), except: place?.name) {
+            return "في أماكنك مكان بهذا الاسم."
+        }
+        return nil
+    }
+
     init(place: PlaceItem?) {
         self.place = place
         _name = State(initialValue: place?.name ?? "")
@@ -134,21 +183,10 @@ struct PlaceEditorSheet: View {
         NavigationStack {
             Form {
                 AlwaysLocationSection()
-                Section {
-                    TextField("اسم المكان، مثل البيت أو العمل", text: $name)
-                } header: {
-                    Text("الاسم")
-                } footer: {
-                    if let problem = nameProblem { Text(problem) }
-                }
+                PlaceNameSection(name: $name, problem: nameProblem)
                 PlaceSearchSection(title: place == nil ? "المكان" : "نقل المكان", selection: option) { choose($0) }
                 if let option {
-                    Section {
-                        PlacePreview(place: option, radius: radius)
-                        RadiusSlider(radius: $radius)
-                    } footer: {
-                        Text("النطاق الأوسع أدق في الأماكن الكبيرة، والأضيق قد يتأخر فيه التذكير.")
-                    }
+                    PlaceAreaSection(option: option, radius: $radius)
                 }
             }
             .scrollContentBackground(.hidden)
@@ -172,17 +210,6 @@ struct PlaceEditorSheet: View {
         #endif
     }
 
-    private var trimmed: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-    /// Shown as the user types, not after «حفظ».
-    private var nameProblem: String? {
-        if trimmed.isEmpty { return "اكتب اسماً تعرفه به، مثل «البيت»." }
-        if PlaceNames.isTaken(trimmed, among: places.map(\.name), except: place?.name) {
-            return "في أماكنك مكان بهذا الاسم."
-        }
-        return nil
-    }
-
     private func choose(_ chosen: PlaceOption) {
         // A searched place lends its name only while the field is empty.
         if trimmed.isEmpty && !chosen.isCurrentLocation { name = chosen.name }
@@ -201,54 +228,33 @@ struct PlaceEditorSheet: View {
     }
 }
 
-/// Why «دائماً», and the way there. Location reminders work with location while using the app,
-/// but only «دائماً» lets a place and a time on one reminder take each other back, and keeps
-/// watching when many places are saved. Asked here, when the user is adding a place or a
-/// reminder, never at launch; turning it down changes nothing else.
-struct AlwaysLocationSection: View {
-    @Environment(LocationProvider.self) private var location
+/// «الاسم», with what is wrong with it while it cannot be saved.
+private struct PlaceNameSection: View {
+    @Binding var name: String
+    let problem: String?
 
     var body: some View {
-        #if os(iOS)
-        if !location.canMonitorPlaces {
-            Section {
-                VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
-                    Label("اسمح بالموقع «دائماً»", systemImage: "location.circle")
-                        .font(ZimamType.headline)
-                        .foregroundStyle(ZimamColor.ink)
-                    Text("ليذكّرك زمام حين تصل إلى أماكنك أو تغادرها والتطبيق مغلق، وليصلك التذكير المرتبط بمكان ووقت مرة واحدة عند أيهما أسبق. يراقب جهازك أماكنك، ولا يُرسل موقعك إلى زمام.")
-                        .font(ZimamType.callout)
-                        .foregroundStyle(ZimamColor.inkMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.vertical, ZimamSpacing.space1)
-                if location.canAskForAlways {
-                    Button("السماح بالموقع دائماً", systemImage: "location") { location.requestAlwaysAuthorization() }
-                        .frame(minHeight: ZimamSpacing.space11)
-                } else if let url = LocationProvider.systemSettingsURL {
-                    Link(destination: url) {
-                        Label(settingsLabel, systemImage: "gear")
-                    }
-                    .frame(minHeight: ZimamSpacing.space11)
-                }
-            } footer: {
-                if location.needsAlways {
-                    Text("تذكيرات الأماكن تعمل الآن أيضاً، لكن قد يصلك التذكيران معاً: عند المكان وفي الوقت.")
-                }
-            }
-        }
-        #else
         Section {
-            Text("تذكيرات الأماكن تصل على الآيفون والآيباد. الأماكن التي تحفظها هنا تظهر فيهما.")
-                .font(ZimamType.callout)
-                .foregroundStyle(ZimamColor.inkMuted)
+            TextField("اسم المكان، مثل البيت أو العمل", text: $name)
+        } header: {
+            Text("الاسم")
+        } footer: {
+            if let problem { Text(problem) }
         }
-        #endif
     }
+}
 
-    private var settingsLabel: String {
-        if location.isDenied { return "السماح بالموقع من الإعدادات" }
-        if !location.isPrecise { return "تفعيل «الموقع الدقيق» من الإعدادات" }
-        return "اختيار «دائماً» من الإعدادات"
+/// The chosen place on a map, and how far around it counts.
+private struct PlaceAreaSection: View {
+    let option: PlaceOption
+    @Binding var radius: Double
+
+    var body: some View {
+        Section {
+            PlacePreview(place: option, radius: radius)
+            RadiusSlider(radius: $radius)
+        } footer: {
+            Text("النطاق الأوسع أدق في الأماكن الكبيرة، والأضيق قد يتأخر فيه التذكير.")
+        }
     }
 }

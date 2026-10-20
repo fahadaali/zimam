@@ -36,6 +36,23 @@ struct ChoiceBar<Value: Hashable>: View {
     @Binding var selection: Value
 
     var body: some View {
+        if #available(iOS 26, macOS 26, *) {
+            // The system's segmented control, in glass on 26; large, for 44pt segments.
+            Picker(label, selection: $selection) {
+                ForEach(options, id: \.0) { option in
+                    Text(option.1).tag(option.0)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.large)
+        } else {
+            legacyBar
+        }
+    }
+
+    /// Before iOS and macOS 26: the bordered bar with brand-soft for the chosen segment.
+    private var legacyBar: some View {
         HStack(spacing: ZimamSpacing.space1) {
             ForEach(options, id: \.0) { option in
                 let isSelected = option.0 == selection
@@ -76,34 +93,37 @@ struct MonthGrid: View {
     let onDrop: ([UUID], String) -> Bool
     /// Apple Calendar's events, shown as outlined rings in their days.
     var events: [ShownEvent] = []
+    /// False when the screen pins the weekday row above the grid itself (the iPhone).
+    var showsWeekdayRow = true
+    /// The iPhone: short quiet cells with dots, so the selected day's list stays in view.
+    var isCompact = false
 
-    @Environment(\.dateFormatterZimam) private var formatter
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     // Not private, so the memberwise initializer stays internal.
     /// Room for the two days' numbers and two task titles.
     @ScaledMetric(relativeTo: .headline) var cellHeight = ZimamSpacing.space11 * 2
     /// With dots instead of titles (the largest text sizes).
     @ScaledMetric(relativeTo: .headline) var compactCellHeight = ZimamSpacing.space11 + ZimamSpacing.space6
+    /// The iPhone: the two days' numbers and a row of dots.
+    @ScaledMetric(relativeTo: .headline) var phoneCellHeight = ZimamSpacing.space11 + ZimamSpacing.space3
     /// A bar in the month: one caption line.
     @ScaledMetric(relativeTo: .caption) var barHeight = ZimamSpacing.space6 - ZimamSpacing.space1
 
     /// Titles fit up to the largest standard size; beyond it a title would be a letter or two.
-    private var showsTitles: Bool { dynamicTypeSize < .accessibility1 }
+    /// The iPhone's cells are too narrow for a title («التوا…»), so they show dots; the titles
+    /// are in the selected day's list under the grid.
+    private var showsTitles: Bool { dynamicTypeSize < .accessibility1 && !isCompact }
+
+    private var rowHeight: CGFloat {
+        if isCompact { return phoneCellHeight }
+        return showsTitles ? cellHeight : compactCellHeight
+    }
 
     var body: some View {
-        let order = grid.weekdayOrder
-        let short = formatter.weekdaySymbols(order, short: true)
-        let full = formatter.weekdaySymbols(order, short: false)
         let weeks = stride(from: 0, to: days.count, by: 7).map { Array(days[$0 ..< min($0 + 7, days.count)]) }
         VStack(spacing: ZimamSpacing.space2) {
-            HStack(spacing: ZimamSpacing.space1) {
-                ForEach(order.indices, id: \.self) { index in
-                    Text(short[index])
-                        .font(ZimamType.caption)
-                        .foregroundStyle(ZimamColor.inkMuted)
-                        .frame(maxWidth: .infinity)
-                        .accessibilityLabel(full[index])
-                }
+            if showsWeekdayRow {
+                WeekdayRow(grid: grid)
             }
             ForEach(weeks.indices, id: \.self) { index in
                 week(weeks[index])
@@ -114,7 +134,7 @@ struct MonthGrid: View {
     private func week(_ week: [CalendarDay]) -> some View {
         let inPeriod = week.filter(\.isInPeriod)
         let offset = week.firstIndex(where: \.isInPeriod) ?? 0
-        let height = showsTitles ? cellHeight : compactCellHeight
+        let height = rowHeight
         return VStack(spacing: ZimamSpacing.space1) {
             HStack(spacing: ZimamSpacing.space1) {
                 ForEach(week) { day in
@@ -125,7 +145,8 @@ struct MonthGrid: View {
                                 showsTitles: showsTitles,
                                 onSelect: { selectedDay = day.day },
                                 onDrop: { onDrop($0, day.day) },
-                                eventCount: events.filter { $0.span.contains(day.day) }.count)
+                                eventCount: events.filter { $0.span.contains(day.day) }.count,
+                                isQuiet: isCompact)
                     } else {
                         Color.clear
                             .frame(maxWidth: .infinity, minHeight: height)
@@ -137,6 +158,29 @@ struct MonthGrid: View {
             // and in the selected day's list.
             SpanLanes(days: inPeriod.map(\.day), columnOffset: offset, columnCount: week.count, spans: spans,
                       maxLanes: 3, laneHeight: barHeight, spacing: ZimamSpacing.space1)
+        }
+    }
+}
+
+/// The weekdays over the month grid, in the grid's order («ح ن ث …»), each read in full by
+/// VoiceOver. The iPhone pins it above the scrolling grid (CalendarView).
+struct WeekdayRow: View {
+    let grid: CalendarGrid
+
+    @Environment(\.dateFormatterZimam) private var formatter
+
+    var body: some View {
+        let order = grid.weekdayOrder
+        let short = formatter.weekdaySymbols(order, short: true)
+        let full = formatter.weekdaySymbols(order, short: false)
+        HStack(spacing: ZimamSpacing.space1) {
+            ForEach(order.indices, id: \.self) { index in
+                Text(short[index])
+                    .font(ZimamType.caption)
+                    .foregroundStyle(ZimamColor.inkMuted)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityLabel(full[index])
+            }
         }
     }
 }
@@ -158,6 +202,8 @@ private struct DayCell: View {
     let onDrop: ([UUID]) -> Bool
     /// Apple Calendar's events that day: outlined rings beside the task dots.
     var eventCount = 0
+    /// The iPhone: no card behind an ordinary day, only the selected one is filled.
+    var isQuiet = false
 
     @Environment(\.dateFormatterZimam) private var formatter
     // Not private: a private @State would make the memberwise initializer private.
@@ -181,7 +227,7 @@ private struct DayCell: View {
             .padding(.vertical, ZimamSpacing.space1)
             .padding(.horizontal, ZimamSpacing.space1 / 2)
             .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .top)
-            .background(highlighted ? ZimamColor.brandSoft : ZimamColor.surfaceRaised,
+            .background(highlighted ? ZimamColor.brandSoft : (isQuiet ? Color.clear : ZimamColor.surfaceRaised),
                         in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
             .overlay {
                 if isTargeted {

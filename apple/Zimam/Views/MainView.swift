@@ -3,8 +3,9 @@ import SwiftUI
 import ZimamKit
 
 /// The signed-in app. On the iPhone (compact width) the four tabs; on the iPad and the Mac
-/// (regular width) three columns: the sidebar, the task list, and the task's details
-/// (design/README.md «المنصات»). Where the user is lives here, above both layouts, so it
+/// (regular width) two columns, the sidebar and the content across the rest of the window, with
+/// the task's details in an inspector that slides in only while a task is open (on the
+/// trailing side, the left in Arabic), so lists, boards and the timeline get the full width. Where the user is lives here, above both layouts, so it
 /// carries across rotation, Split View and Slide Over, and is saved per window.
 struct MainView: View {
     #if os(iOS)
@@ -13,7 +14,6 @@ struct MainView: View {
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
 
-    @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
 
     @SceneStorage("main.sidebar") private var sidebar: SidebarItem = .today
     @SceneStorage("main.tab") private var tab: MainTab = .today
@@ -73,25 +73,42 @@ struct MainView: View {
         NavigationSplitView(columnVisibility: $columns) {
             SidebarView(selection: sidebarSelection, onSearch: openSearch)
                 .navigationSplitViewColumnWidth(min: ZimamLayout.sidebarMinWidth, ideal: ZimamLayout.sidebarIdealWidth)
-        } content: {
-            ContentColumn(item: sidebar)
-                .environment(\.taskSelection, selectedTask)
-                .navigationSplitViewColumnWidth(min: ZimamLayout.listColumnMinWidth,
-                                                ideal: showsBoard ? ZimamLayout.boardColumnIdealWidth : ZimamLayout.listColumnIdealWidth)
         } detail: {
-            NavigationStack {
-                DetailColumn(route: selectedTask.wrappedValue)
-                    .taskDetailDestination()
-                    .toolbar {
-                        ToolbarItem(placement: .primaryAction) {
-                            if let route = selectedTask.wrappedValue {
-                                CompleteToolbarButton(taskId: route.id, action: toggleSelectedDone)
-                            }
-                        }
-                    }
+            // A task link in the content (a list row, a calendar day, a kanban card) opens the
+            // inspector instead of pushing: the stack's path is always empty, and what a link
+            // appends becomes the selection.
+            NavigationStack(path: contentPath) {
+                ContentColumn(item: sidebar)
+                    .environment(\.taskSelection, selectedTask)
             }
-            .navigationSplitViewColumnWidth(min: ZimamLayout.detailColumnMinWidth, ideal: ZimamLayout.listColumnIdealWidth)
+            .inspector(isPresented: inspectorShown) {
+                TaskInspector(route: selectedTask.wrappedValue, onToggleDone: toggleSelectedDone) {
+                    selectedTaskId = ""
+                }
+                .inspectorColumnWidth(min: ZimamLayout.detailColumnMinWidth,
+                                      ideal: ZimamLayout.listColumnIdealWidth,
+                                      max: ZimamLayout.listColumnIdealWidth * 1.5)
+            }
         }
+    }
+
+    /// The content stack's path: never pushed. A `TaskRoute` a link appends selects that task.
+    private var contentPath: Binding<[TaskRoute]> {
+        Binding(
+            get: { [] },
+            set: { routes in
+                if let route = routes.last { selectedTask.wrappedValue = route }
+            }
+        )
+    }
+
+    /// The inspector shows while a task is open; closing it (its button, Esc, or the system's
+    /// own dismissal on a narrow iPad) clears the selection.
+    private var inspectorShown: Binding<Bool> {
+        Binding(
+            get: { selectedTask.wrappedValue != nil },
+            set: { shown in if !shown { selectedTaskId = "" } }
+        )
     }
 
     /// The sidebar's selection as the user changes it: a new place clears the open task.
@@ -111,14 +128,6 @@ struct MainView: View {
             get: { UUID(uuidString: selectedTaskId).map { TaskRoute(id: $0) } },
             set: { selectedTaskId = $0?.id.uuidString ?? "" }
         )
-    }
-
-    /// A project shown as a board or a timeline, the timeline and the matrix get a wider middle column.
-    private var showsBoard: Bool {
-        if sidebar == .timeline || sidebar == .matrix { return true }
-        guard case .project(let id) = sidebar else { return false }
-        let layout = projects.first { $0.id == id }?.layoutRaw
-        return layout == ProjectRecord.Layout.kanban.rawValue || layout == ProjectRecord.Layout.timeline.rawValue
     }
 
     // MARK: iPhone
@@ -142,6 +151,7 @@ struct MainView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        .zimamTabBarMinimizes()
         .environment(\.projectOpened, { id in sidebar = .project(id) })
         .environment(\.overviewOpened, { route in sidebar = route.sidebarItem })
     }
@@ -274,8 +284,34 @@ private struct ContentColumn: View {
     }
 }
 
-/// The details column: the selected task, or one quiet line.
-private struct DetailColumn: View {
+/// The inspector on the iPad and the Mac: the open task's details in their own stack (so a
+/// subtask opens inside it), with «إنجاز» (⌘↩) and «إغلاق» (Esc) in its toolbar.
+private struct TaskInspector: View {
+    let route: TaskRoute?
+    let onToggleDone: () -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            TaskDetailBody(route: route)
+                .taskDetailDestination()
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("إغلاق", systemImage: "xmark", action: onClose)
+                            .keyboardShortcut(.cancelAction)
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        if let route {
+                            CompleteToolbarButton(taskId: route.id, action: onToggleDone)
+                        }
+                    }
+                }
+        }
+    }
+}
+
+/// The selected task's details; nothing while the inspector closes.
+private struct TaskDetailBody: View {
     let route: TaskRoute?
 
     var body: some View {
@@ -283,11 +319,7 @@ private struct DetailColumn: View {
             // A new identity per task, so the form loads the newly selected task's fields.
             TaskDetailView(taskId: route.id).id(route.id)
         } else {
-            Text("اختر مهمة لتظهر تفاصيلها هنا.")
-                .font(ZimamType.callout)
-                .foregroundStyle(ZimamColor.inkMuted)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(ZimamColor.surface)
+            ZimamColor.surface
         }
     }
 }
@@ -305,10 +337,20 @@ private struct CompleteToolbarButton: View {
     var body: some View {
         if let task = matches.first, !task.pendingDelete {
             Button(task.isDone ? "إلغاء الإنجاز" : "إنجاز",
-                   systemImage: task.isDone ? "arrow.uturn.backward.circle" : "checkmark.circle",
+                   systemImage: symbol(done: task.isDone),
                    action: action)
+                .zimamProminentToolbarAction()
                 .keyboardShortcut(.return, modifiers: .command)
         }
+    }
+
+    /// The glass toolbar of iOS and macOS 26 already draws the button's shape, so the symbol
+    /// drops its circle there (the «none» variant); before 26 it keeps it.
+    private func symbol(done: Bool) -> String {
+        if #available(iOS 26, macOS 26, *) {
+            return done ? "arrow.uturn.backward" : "checkmark"
+        }
+        return done ? "arrow.uturn.backward.circle" : "checkmark.circle"
     }
 }
 

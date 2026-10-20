@@ -20,49 +20,6 @@ struct MonthWidget: Widget {
     }
 }
 
-/// The month and week widgets' setting: which calendar lays out the grid.
-struct CalendarWidgetConfiguration: WidgetConfigurationIntent {
-    static let title: LocalizedStringResource = "التقويم"
-    static let description = IntentDescription("اختر التقويم الذي تُرتَّب به الأيام.")
-
-    @Parameter(title: "التقويم", default: .automatic)
-    var calendar: WidgetCalendarChoice
-
-    init() {}
-}
-
-struct CalendarWidgetEntry: TimelineEntry {
-    let date: Date
-    let snapshot: WidgetSnapshot
-    /// The calendar the grid is laid out in.
-    let kind: CalendarKind
-}
-
-/// An entry now and at each of today's task times (a time gone turns late in the week widget),
-/// and a new timeline at midnight, when today moves.
-struct CalendarWidgetProvider: AppIntentTimelineProvider {
-    func placeholder(in context: Context) -> CalendarWidgetEntry {
-        let now = Date()
-        return CalendarWidgetEntry(date: now, snapshot: .placeholder(now: now), kind: .hijri)
-    }
-
-    func snapshot(for configuration: CalendarWidgetConfiguration, in context: Context) async -> CalendarWidgetEntry {
-        let now = Date()
-        let snapshot = context.isPreview ? WidgetSnapshot.placeholder(now: now) : WidgetSnapshot.load(now: now)
-        return CalendarWidgetEntry(date: now, snapshot: snapshot, kind: configuration.calendar.kind(default: snapshot.calendar))
-    }
-
-    func timeline(for configuration: CalendarWidgetConfiguration, in context: Context) async -> Timeline<CalendarWidgetEntry> {
-        let now = Date()
-        let snapshot = WidgetSnapshot.load(now: now)
-        let kind = configuration.calendar.kind(default: snapshot.calendar)
-        let entries = snapshot.entryDates(now: now, atTaskTimes: true).map {
-            CalendarWidgetEntry(date: $0, snapshot: snapshot, kind: kind)
-        }
-        return Timeline(entries: entries, policy: .after(snapshot.nextMidnight))
-    }
-}
-
 struct MonthWidgetView: View {
     let entry: CalendarWidgetEntry
     @Environment(\.widgetRenderingMode) private var mode
@@ -84,6 +41,7 @@ struct MonthWidgetView: View {
                     .font(ZimamType.headline)
                     .foregroundStyle(tone.ink)
                     .lineLimit(1)
+                    .widgetAccentable()
                     .accessibilityAddTraits(.isHeader)
                 Text(title.other)
                     .font(ZimamType.caption)
@@ -138,14 +96,29 @@ private struct MonthGridBody: View {
         let lanes = max(0, Int((rowHeight - numbersRow - WidgetMetrics.gap) / lane))
         let rows = WeekLanes.layout(weeksOf: days.map(\.day), tasks: tasks, lanes: lanes)
         VStack(spacing: 0) {
-            ForEach(rows.indices, id: \.self) { index in
-                weekRow(Array(days[(index * 7)..<min(index * 7 + 7, days.count)]), layout: rows[index], column: column)
+            // Each week is known by its days, so a new day or month redraws only what moved.
+            ForEach(Array(rows.enumerated()), id: \.element.days) { index, layout in
+                MonthWeekRow(cells: Array(days[(index * 7)..<min(index * 7 + 7, days.count)]), layout: layout,
+                             column: column, numbersRow: numbersRow, lane: lane, snapshot: snapshot,
+                             dates: dates, tone: tone)
                     .frame(height: rowHeight)
             }
         }
     }
+}
 
-    private func weekRow(_ cells: [CalendarDay], layout: WeekLanes, column: CGFloat) -> some View {
+/// One week of the month: the day numbers, the lanes of chips under them, and a link over each day.
+private struct MonthWeekRow: View {
+    let cells: [CalendarDay]
+    let layout: WeekLanes
+    let column: CGFloat
+    let numbersRow: CGFloat
+    let lane: CGFloat
+    let snapshot: WidgetSnapshot
+    let dates: DualDateFormatter
+    let tone: WidgetTone
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
                 ForEach(cells) { cell in
@@ -159,13 +132,13 @@ private struct MonthGridBody: View {
         }
         .overlay {
             WidgetDayLinks(days: cells.map(\.day), columnWidth: column) { day in
-                dayLabel(day, cells: cells, layout: layout)
+                dayLabel(day)
             }
         }
     }
 
     /// «الثلاثاء، ٢ جمادى الأولى، ١٣ أكتوبر، اليوم، ٣ مهام».
-    private func dayLabel(_ day: String, cells: [CalendarDay], layout: WeekLanes) -> String {
+    private func dayLabel(_ day: String) -> String {
         guard let index = cells.firstIndex(where: { $0.day == day }) else { return day }
         let date = cells[index].date
         var parts = [dates.weekday(date), dates.dual(date)]
@@ -173,28 +146,6 @@ private struct MonthGridBody: View {
         let count = layout.totalCounts.indices.contains(index) ? layout.totalCounts[index] : 0
         if count > 0 { parts.append(ArabicCount.tasks(count, locale: dates.locale)) }
         return parts.joined(separator: "، ")
-    }
-}
-
-/// Weekday initials over the columns, the week's first day at the leading edge.
-struct WeekdayHeader: View {
-    let grid: CalendarGrid
-    let dates: DualDateFormatter
-    let tone: WidgetTone
-
-    var body: some View {
-        let symbols = dates.weekdaySymbols(grid.weekdayOrder, short: true)
-        HStack(spacing: 0) {
-            ForEach(symbols.indices, id: \.self) { index in
-                Text(symbols[index])
-                    .font(ZimamType.caption)
-                    .foregroundStyle(tone.muted)
-                    .lineLimit(1)
-                    .padding(.leading, ZimamSpacing.space1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .accessibilityHidden(true)
     }
 }
 
@@ -240,79 +191,5 @@ private struct MonthDayNumbers: View {
         }
         .lineLimit(1)
         .fixedSize()
-    }
-}
-
-/// A week row's lanes as `WeekLanes` laid them out: bars, chips and «+n», column 0 at the leading
-/// edge. Each lane is one row of segments, so the right-to-left layout places them.
-struct WidgetLaneRows: View {
-    let layout: WeekLanes
-    let snapshot: WidgetSnapshot
-    let columnWidth: CGFloat
-    let laneHeight: CGFloat
-    /// The week widget shows each chip's time over its title.
-    let showsTime: Bool
-    let tone: WidgetTone
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(0..<layout.laneCount, id: \.self) { lane in
-                HStack(spacing: 0) {
-                    ForEach(layout.segments(inLane: lane)) { segment in
-                        content(segment)
-                            .frame(width: columnWidth * CGFloat(segment.columnCount), height: laneHeight)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func content(_ segment: WeekLanes.Segment) -> some View {
-        if let placement = segment.placement {
-            switch placement.content {
-            case .task(let task):
-                if let item = snapshot.item(task.id) {
-                    WidgetTaskChip(item: item, time: showsTime && !item.isSpan ? chipTime(item) : nil,
-                                   continuesBefore: placement.continuesBefore, continuesAfter: placement.continuesAfter,
-                                   tone: tone)
-                        .padding(.vertical, WidgetMetrics.gap / 2)
-                        .padding(.leading, placement.continuesBefore ? 0 : WidgetMetrics.gap / 2)
-                        .padding(.trailing, placement.continuesAfter ? 0 : WidgetMetrics.gap / 2)
-                } else {
-                    Color.clear
-                }
-            case .more(let count):
-                WidgetMoreLabel(count: count, tone: tone, locale: snapshot.formatter.locale)
-            }
-        } else {
-            Color.clear
-        }
-    }
-
-    /// «١٦:٤٢», or the prayer's name for a task tied to one.
-    private func chipTime(_ item: WidgetItem) -> String? {
-        if let prayer = item.prayer { return prayer.arabicName }
-        return item.time.map { snapshot.formatter.compactTime($0) }
-    }
-}
-
-/// A transparent link over each day column, to open that day in the app's calendar.
-struct WidgetDayLinks: View {
-    let days: [String]
-    let columnWidth: CGFloat
-    let label: (String) -> String
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(days, id: \.self) { day in
-                Link(destination: AppLink.day(day).url) {
-                    Color.clear
-                        .contentShape(Rectangle())
-                }
-                .frame(width: columnWidth)
-                .accessibilityLabel(label(day))
-            }
-        }
     }
 }

@@ -60,6 +60,10 @@ struct CalendarView: View {
                     Button("اليوم") { selectedDay = today }
                         .accessibilityHint("يعود إلى اليوم في التقويم")
                 }
+                // iOS and macOS 26: «اليوم» in its own glass, apart from the calendar switch and events.
+                if #available(iOS 26, macOS 26, *) {
+                    ToolbarSpacer(.fixed, placement: .primaryAction)
+                }
                 if !isRegular {
                     // The iPhone's «هجري / ميلادي», out of the header to give the grid room.
                     ToolbarItem(placement: .primaryAction) {
@@ -118,12 +122,19 @@ struct CalendarView: View {
                 }
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: ZimamSpacing.space6) {
-                        VStack(alignment: .leading, spacing: ZimamSpacing.space4) {
-                            header
-                            monthGrid(byDay, spans: spans, events: events)
+                    // The weekday row stays pinned under the toolbar while the grid scrolls, so the
+                    // days keep their names; its surface hides the grid passing under it.
+                    LazyVStack(alignment: .leading, spacing: ZimamSpacing.space4, pinnedViews: [.sectionHeaders]) {
+                        header
+                        Section {
+                            monthGrid(byDay, spans: spans, events: events, compact: true)
+                        } header: {
+                            WeekdayRow(grid: grid)
+                                .padding(.vertical, ZimamSpacing.space2)
+                                .background(ZimamColor.surface)
                         }
                         selectedDaySection(byDay, spans: spans, names: names, events: events)
+                            .padding(.top, ZimamSpacing.space2)
                     }
                     .padding(.horizontal, margin)
                     // Room for the add button over the last row.
@@ -220,9 +231,12 @@ struct CalendarView: View {
         return (parts[0], parts.dropFirst().joined(separator: "، "))
     }
 
-    private func monthGrid(_ byDay: [String: [TaskItem]], spans: [SpanItem], events: [ShownEvent]) -> some View {
+    /// `compact`: the iPhone's quiet grid, under a weekday row the screen pins itself.
+    private func monthGrid(_ byDay: [String: [TaskItem]], spans: [SpanItem], events: [ShownEvent],
+                           compact: Bool = false) -> some View {
         MonthGrid(grid: grid, days: grid.monthDays(containing: selectedNoon), today: today,
-                  selectedDay: $selectedDay, tasksByDay: byDay, spans: spans, onDrop: reschedule, events: events)
+                  selectedDay: $selectedDay, tasksByDay: byDay, spans: spans, onDrop: reschedule, events: events,
+                  showsWeekdayRow: !compact, isCompact: compact)
     }
 
     private func selectedDaySection(_ byDay: [String: [TaskItem]], spans: [SpanItem], names: [UUID: String],

@@ -8,29 +8,29 @@ import AppKit
 
 nonisolated public enum ZimamColor {
     /// خلفية الصفحة والقوائم الرئيسية.
-    public static let surface = Color.zimamDynamic(light: (0.9647, 0.9686, 0.9843), dark: (0.0549, 0.0667, 0.1255))
+    public static let surface = Color.zimamDynamic(light: (0.9608, 0.9608, 0.9686), dark: (0.0706, 0.0706, 0.0784))
     /// البطاقات وأسطر المهام والنوافذ المنبثقة فوق surface.
-    public static let surfaceRaised = Color.zimamDynamic(light: (1.0000, 1.0000, 1.0000), dark: (0.0902, 0.1059, 0.1804))
+    public static let surfaceRaised = Color.zimamDynamic(light: (1.0000, 1.0000, 1.0000), dark: (0.1098, 0.1098, 0.1216))
     /// أعمدة الكانبان والشريط الجانبي وحقول الإدخال.
-    public static let surfaceSunken = Color.zimamDynamic(light: (0.9255, 0.9333, 0.9647), dark: (0.0392, 0.0471, 0.0902))
+    public static let surfaceSunken = Color.zimamDynamic(light: (0.9216, 0.9216, 0.9333), dark: (0.0431, 0.0431, 0.0471))
     /// فواصل زخرفية رفيعة بين الأسطر فقط؛ لا تُستعمل حدّاً لعنصر تفاعلي.
-    public static let line = Color.zimamDynamic(light: (0.8667, 0.8824, 0.9255), dark: (0.1686, 0.1882, 0.2824))
+    public static let line = Color.zimamDynamic(light: (0.8706, 0.8706, 0.8902), dark: (0.1804, 0.1804, 0.1961))
     /// حدود العناصر التفاعلية: دائرة الإنجاز وحقول الإدخال والأزرار الثانوية. لا يقل عن 3:1 على كل الأسطح.
-    public static let lineStrong = Color.zimamDynamic(light: (0.4980, 0.5216, 0.6196), dark: (0.4078, 0.4314, 0.5412))
+    public static let lineStrong = Color.zimamDynamic(light: (0.5098, 0.5098, 0.5412), dark: (0.4235, 0.4235, 0.4510))
     /// النص الأساسي وعناوين المهام على surface وsurface-raised وsurface-sunken وbrand-soft.
-    public static let ink = Color.zimamDynamic(light: (0.0902, 0.1059, 0.1843), dark: (0.9255, 0.9333, 0.9686))
+    public static let ink = Color.zimamDynamic(light: (0.1098, 0.1098, 0.1216), dark: (0.9490, 0.9490, 0.9569))
     /// النص الثانوي والتواريخ والنص التوضيحي داخل الحقول، على كل الأسطح وbrand-soft.
-    public static let inkMuted = Color.zimamDynamic(light: (0.3373, 0.3647, 0.4706), dark: (0.6353, 0.6588, 0.7608))
+    public static let inkMuted = Color.zimamDynamic(light: (0.3608, 0.3608, 0.3882), dark: (0.6510, 0.6510, 0.6784))
     /// نص العناصر المعطّلة والمهام المنجزة فقط؛ لا يُستعمل لنص يحتاج المستخدم قراءته.
-    public static let inkFaint = Color.zimamDynamic(light: (0.5020, 0.5255, 0.6235), dark: (0.4627, 0.4863, 0.5922))
+    public static let inkFaint = Color.zimamDynamic(light: (0.5294, 0.5294, 0.5569), dark: (0.4667, 0.4667, 0.4941))
     /// لون زمام النيلي: الزر الأساسي، ودائرة الإنجاز عند التحديد، والروابط، وحلقة التركيز. يُستعمل باقتصاد.
-    public static let brand = Color.zimamDynamic(light: (0.2275, 0.2745, 0.6902), dark: (0.5608, 0.6000, 0.9490))
+    public static let brand = Color.zimamDynamic(light: (0.1882, 0.2510, 0.7490), dark: (0.5451, 0.5961, 1.0000))
     /// النص والأيقونات فوق brand.
-    public static let onBrand = Color.zimamDynamic(light: (1.0000, 1.0000, 1.0000), dark: (0.0549, 0.0667, 0.1255))
+    public static let onBrand = Color.zimamDynamic(light: (1.0000, 1.0000, 1.0000), dark: (0.0706, 0.0706, 0.0784))
     /// خلفية السطر المحدد، وبطاقة اقتراح المساعد، وشريحة المشروع النشط.
-    public static let brandSoft = Color.zimamDynamic(light: (0.9059, 0.9137, 0.9843), dark: (0.1373, 0.1647, 0.3686))
+    public static let brandSoft = Color.zimamDynamic(light: (0.9176, 0.9255, 0.9922), dark: (0.1412, 0.1569, 0.2902))
     /// النص النيلي فوق brand-soft.
-    public static let brandInk = Color.zimamDynamic(light: (0.1804, 0.2196, 0.5608), dark: (0.7255, 0.7529, 0.9725))
+    public static let brandInk = Color.zimamDynamic(light: (0.1725, 0.2353, 0.6902), dark: (0.7647, 0.7922, 1.0000))
     /// لون أوقات الصلاة: نص وأيقونة شريحة الصلاة على sand-soft وsurface-raised.
     public static let sand = Color.zimamDynamic(light: (0.5294, 0.3529, 0.0549), dark: (0.9020, 0.7373, 0.4235))
     /// خلفية شريحة وقت الصلاة وتمييز فترة الصلاة في التقويم.
@@ -40,11 +40,11 @@ nonisolated public enum ZimamColor {
     /// الأولوية المتوسطة؛ يرافقه رمز العلم. نص على surface وsurface-raised.
     public static let priorityMedium = Color.zimamDynamic(light: (0.5412, 0.3804, 0.0000), dark: (0.8902, 0.7098, 0.3059))
     /// الأولوية المنخفضة.
-    public static let priorityLow = Color.zimamDynamic(light: (0.2275, 0.2745, 0.6902), dark: (0.5608, 0.6000, 0.9490))
+    public static let priorityLow = Color.zimamDynamic(light: (0.1882, 0.2510, 0.7490), dark: (0.5451, 0.5961, 1.0000))
     /// تأكيد الحفظ والمزامنة الناجحة؛ يرافقه رمز صح، لأن تمييزه عن priority-high بالدرجة لا يكفي لمن لديه عمى ألوان.
     public static let success = Color.zimamDynamic(light: (0.1216, 0.4353, 0.2627), dark: (0.3843, 0.7882, 0.5608))
     /// حلقة التركيز للوحة المفاتيح: خط صلب بسماكة 2px وإزاحة 2px. 6.5:1 أو أكثر على كل الأسطح في الثيمين.
-    public static let focusRing = Color.zimamDynamic(light: (0.2275, 0.2745, 0.6902), dark: (0.5608, 0.6000, 0.9490))
+    public static let focusRing = Color.zimamDynamic(light: (0.1882, 0.2510, 0.7490), dark: (0.5451, 0.5961, 1.0000))
     /// ربع «مهم وعاجل» في المصفوفة: أيقونته وعنوانه وخلفية عدّاده. يرافقه دائماً اسم الربع. نص على surface وsurface-raised.
     public static let quadrantUrgentImportant = Color.zimamDynamic(light: (0.7255, 0.2431, 0.0471), dark: (0.9490, 0.5725, 0.3725))
     /// ربع «مهم» في المصفوفة: أيقونته وعنوانه وخلفية عدّاده. أزرق يختلف عن brand لأنه ليس إجراءً. نص على surface وsurface-raised.
@@ -52,13 +52,13 @@ nonisolated public enum ZimamColor {
     /// ربع «عاجل» في المصفوفة: أيقونته وعنوانه وخلفية عدّاده. نص على surface وsurface-raised.
     public static let quadrantUrgent = Color.zimamDynamic(light: (0.5412, 0.3804, 0.0000), dark: (0.8902, 0.7098, 0.3059))
     /// ربع «يوماً ما» في المصفوفة: أيقونته وعنوانه وخلفية عدّاده.
-    public static let quadrantSomeday = Color.zimamDynamic(light: (0.3373, 0.3647, 0.4706), dark: (0.6353, 0.6588, 0.7608))
+    public static let quadrantSomeday = Color.zimamDynamic(light: (0.3608, 0.3608, 0.3882), dark: (0.6510, 0.6510, 0.6784))
     /// العدد فوق خلفية لون الربع في المصفوفة. 4.5:1 أو أكثر على ألوان الأرباع الأربعة في الثيمين.
-    public static let onQuadrant = Color.zimamDynamic(light: (1.0000, 1.0000, 1.0000), dark: (0.0549, 0.0667, 0.1255))
+    public static let onQuadrant = Color.zimamDynamic(light: (1.0000, 1.0000, 1.0000), dark: (0.0706, 0.0706, 0.0784))
     /// شريط المهمة الممتدة أياماً في التقويم والمخطط الزمني. حدّه 3:1 أو أكثر على كل الأسطح فلا يحتاج إطاراً، ونصه on-timeline-bar.
     public static let timelineBar = Color.zimamDynamic(light: (0.1059, 0.4314, 0.4157), dark: (0.3725, 0.7686, 0.7333))
     /// عنوان المهمة فوق timeline-bar. 4.5:1 أو أكثر في الثيمين.
-    public static let onTimelineBar = Color.zimamDynamic(light: (1.0000, 1.0000, 1.0000), dark: (0.0549, 0.0667, 0.1255))
+    public static let onTimelineBar = Color.zimamDynamic(light: (1.0000, 1.0000, 1.0000), dark: (0.0706, 0.0706, 0.0784))
     /// خط اليوم في المخطط الزمني: خط صلب بسماكة 2px يرافقه اسم «اليوم» في رأس العمود.
     public static let timelineToday = Color.zimamDynamic(light: (0.7255, 0.2431, 0.0471), dark: (0.9490, 0.5725, 0.3725))
 }
@@ -82,7 +82,7 @@ nonisolated public enum ZimamRadius {
 
 nonisolated public enum ZimamShadow {
     /// المهمة أثناء السحب والإفلات، والقوائم المنبثقة. لا يُستعمل للبطاقات الثابتة.
-    public static let liftColor = Color.zimamDynamic(light: (0.0902, 0.1059, 0.1843), dark: (0.0000, 0.0000, 0.0000), lightAlpha: 0.14, darkAlpha: 0.5)
+    public static let liftColor = Color.zimamDynamic(light: (0.0000, 0.0000, 0.0000), dark: (0.0000, 0.0000, 0.0000), lightAlpha: 0.12, darkAlpha: 0.5)
     /// SwiftUI's shadow radius is about half the CSS blur (24px).
     public static let liftRadius: CGFloat = 12
     public static let liftX: CGFloat = 0

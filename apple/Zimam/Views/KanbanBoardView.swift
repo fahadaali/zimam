@@ -17,6 +17,13 @@ struct BoardColumn: Identifiable {
 /// Tasks move by drag and drop between and within columns, from the card's menu, and with
 /// VoiceOver actions, since dragging is not accessible. Every move goes through `Store`.
 struct KanbanBoardView: View {
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+    @Environment(\.modelContext) private var context
+    @Environment(SyncEngine.self) private var sync
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let projectId: UUID
     let title: String
     /// The project's sections in board order.
@@ -25,25 +32,10 @@ struct KanbanBoardView: View {
     let tasks: [TaskItem]
     let openTask: (UUID) -> Void
 
-    #if os(iOS)
-    @Environment(\.horizontalSizeClass) private var sizeClass
-    #endif
-    @Environment(\.modelContext) private var context
-    @Environment(SyncEngine.self) private var sync
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     @State private var lingering = Lingering()
     @State private var addingSection = false
     @State private var sectionName = ""
     @State private var renaming: SectionItem?
-
-    init(projectId: UUID, title: String, sections: [SectionItem], tasks: [TaskItem], openTask: @escaping (UUID) -> Void) {
-        self.projectId = projectId
-        self.title = title
-        self.sections = sections
-        self.tasks = tasks
-        self.openTask = openTask
-    }
 
     private var store: Store { Store(context: context, sync: sync) }
 
@@ -75,6 +67,18 @@ struct KanbanBoardView: View {
         #endif
     }
 
+    private var isRenaming: Binding<Bool> {
+        Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
+    }
+
+    init(projectId: UUID, title: String, sections: [SectionItem], tasks: [TaskItem], openTask: @escaping (UUID) -> Void) {
+        self.projectId = projectId
+        self.title = title
+        self.sections = sections
+        self.tasks = tasks
+        self.openTask = openTask
+    }
+
     var body: some View {
         let all = columns
         // «بلا قسم» stays out of the way once sections exist and it is empty; moves can still reach it.
@@ -94,43 +98,72 @@ struct KanbanBoardView: View {
                             destinations: all.filter { $0.id != column.id },
                             canMoveEarlier: column.section != nil && index > 1,
                             canMoveLater: column.section != nil && index + 1 < all.count,
-                            lookup: { id in tasks.first(where: { $0.id == id }) },
+                            lookup: boardTask(withId:),
                             openTask: openTask,
                             onCompleted: linger,
-                            onRename: { section in
-                                sectionName = section.name
-                                renaming = section
-                            }
+                            onRename: beginRename
                         )
                     }
-                    addSectionButton
+                    KanbanAddSectionButton { addingSection = true }
                 }
+                // Each column snaps into place; the next one peeks in at the edge as the cue to scroll.
+                .scrollTargetLayout()
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(.horizontal, gutter)
                 .padding(.bottom, gutter)
             }
+            .scrollTargetBehavior(.viewAligned)
         }
         .background(ZimamColor.surface)
         .alert("إضافة قسم", isPresented: $addingSection) {
             TextField("اسم القسم", text: $sectionName)
-            Button("إلغاء", role: .cancel) { sectionName = "" }
-            Button("إضافة") {
-                store.addSection(named: sectionName, to: projectId)
-                sectionName = ""
-            }
+            Button("إلغاء", role: .cancel, action: clearName)
+            Button("إضافة", action: addSection)
         }
         .alert("تسمية القسم", isPresented: isRenaming, presenting: renaming) { section in
             TextField("اسم القسم", text: $sectionName)
-            Button("إلغاء", role: .cancel) { sectionName = "" }
-            Button("حفظ") {
-                store.rename(section, to: sectionName)
-                sectionName = ""
-            }
+            Button("إلغاء", role: .cancel, action: clearName)
+            Button("حفظ") { rename(section) }
         }
     }
 
-    private var addSectionButton: some View {
-        Button { addingSection = true } label: {
+    // MARK: Actions
+
+    private func boardTask(withId id: UUID) -> TaskItem? {
+        tasks.first(where: { $0.id == id })
+    }
+
+    private func beginRename(_ section: SectionItem) {
+        sectionName = section.name
+        renaming = section
+    }
+
+    private func addSection() {
+        store.addSection(named: sectionName, to: projectId)
+        sectionName = ""
+    }
+
+    private func rename(_ section: SectionItem) {
+        store.rename(section, to: sectionName)
+        sectionName = ""
+    }
+
+    private func clearName() {
+        sectionName = ""
+    }
+
+    /// A completed card stays for a second so it can be undone, then leaves the board.
+    private func linger(_ id: UUID) {
+        lingering.hold(id, animation: .zimam(reduceMotion: reduceMotion))
+    }
+}
+
+/// «إضافة قسم» after the last column, as wide as a column.
+private struct KanbanAddSectionButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
             Label("إضافة قسم", systemImage: "plus")
                 .font(ZimamType.callout)
                 .foregroundStyle(ZimamColor.inkMuted)
@@ -145,315 +178,5 @@ struct KanbanBoardView: View {
                 .contentShape(RoundedRectangle(cornerRadius: ZimamRadius.radiusLg))
         }
         .buttonStyle(.plain)
-    }
-
-    private var isRenaming: Binding<Bool> {
-        Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
-    }
-
-
-    /// A completed card stays for a second so it can be undone, then leaves the board.
-    private func linger(_ id: UUID) {
-        lingering.hold(id, animation: .zimam(reduceMotion: reduceMotion))
-    }
-}
-
-/// The opened place where a dragged card will land, outlined in the focus ring colour
-/// (design/README.md «الحالات والحركة»). SwiftUI does not say which card is being dragged until
-/// it is dropped, so the gap takes the height of the card it opens above; cards in a column share
-/// one layout, so that is the dragged card's height in all but unusual cases.
-private struct DropGap: View {
-    var height: CGFloat
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: ZimamRadius.radiusMd)
-            .strokeBorder(ZimamColor.focusRing, lineWidth: ZimamLayout.focusRingWidth)
-            .frame(height: height)
-            .transition(.opacity)
-            .accessibilityHidden(true)
-    }
-}
-
-/// One kanban column: the name and count, the cards, and «إضافة مهمة» at the bottom.
-private struct KanbanColumnView: View {
-    let column: BoardColumn
-    let projectId: UUID
-    let previous: BoardColumn?
-    let next: BoardColumn?
-    /// Every other column, for the card's «نقل إلى» menu.
-    let destinations: [BoardColumn]
-    let canMoveEarlier: Bool
-    let canMoveLater: Bool
-    /// Finds a dragged task among the project's tasks; tasks from elsewhere are refused.
-    let lookup: (UUID) -> TaskItem?
-    let openTask: (UUID) -> Void
-    let onCompleted: (UUID) -> Void
-    let onRename: (SectionItem) -> Void
-
-    @Environment(\.modelContext) private var context
-    @Environment(SyncEngine.self) private var sync
-    @Environment(\.locale) private var locale
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    @State private var isTargeted = false
-    @State private var targetedCard: UUID?
-    /// Each card's height, for the gap that opens above it.
-    @State private var cardHeights: [UUID: CGFloat] = [:]
-    /// The card whose «نقل إلى مشروع…» sheet is open.
-    @State private var movingToProject: ProjectMoveRequest?
-    @State private var adding = false
-    @State private var confirmingDelete = false
-    @State private var newTitle = ""
-    @FocusState private var fieldFocused: Bool
-
-    private var store: Store { Store(context: context, sync: sync) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
-            header
-            ScrollView(.vertical) {
-                VStack(spacing: ZimamSpacing.space2) {
-                    ForEach(Array(column.tasks.enumerated()), id: \.element.id) { index, task in
-                        card(task, at: index)
-                    }
-                    // Dropped below the last card: the gap opens at the bottom.
-                    if isTargeted && targetedCard == nil {
-                        DropGap(height: column.tasks.last.flatMap { cardHeights[$0.id] } ?? ZimamSpacing.space11)
-                    }
-                    addControl
-                }
-                .animation(.zimam(reduceMotion: reduceMotion), value: targetedCard)
-                .animation(.zimam(reduceMotion: reduceMotion), value: isTargeted)
-            }
-        }
-        .padding(ZimamSpacing.space3)
-        .frame(width: ZimamLayout.kanbanColumnWidth)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(ZimamColor.surfaceSunken, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusLg))
-        .overlay {
-            if isTargeted {
-                RoundedRectangle(cornerRadius: ZimamRadius.radiusLg)
-                    .strokeBorder(ZimamColor.focusRing, lineWidth: ZimamLayout.focusRingWidth)
-            }
-        }
-        // Dropped on the column outside the cards: to the bottom.
-        .taskDropDestination { items in
-            drop(items, before: nil)
-        } isTargeted: { targeted in
-            isTargeted = targeted
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(column.name)
-        .sheet(item: $movingToProject) { request in
-            MoveToProjectSheet(taskId: request.id)
-        }
-    }
-
-    // MARK: Header
-
-    private var header: some View {
-        HStack(spacing: ZimamSpacing.space2) {
-            HStack(spacing: ZimamSpacing.space2) {
-                Text(column.name)
-                    .font(ZimamType.headline)
-                    .foregroundStyle(ZimamColor.ink)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                Text(column.tasks.count, format: .number)
-                    .font(ZimamType.caption)
-                    .foregroundStyle(ZimamColor.inkMuted)
-                    .padding(.horizontal, ZimamSpacing.space2)
-                    .background(ZimamColor.surfaceRaised, in: Capsule())
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(column.name)
-            .accessibilityValue(ArabicCount.tasks(column.tasks.count, locale: locale))
-            .accessibilityAddTraits(.isHeader)
-
-            if let section = column.section {
-                sectionMenu(section)
-            }
-        }
-        .frame(minHeight: ZimamSpacing.space11)
-        .padding(.leading, ZimamSpacing.space1)
-    }
-
-    private func sectionMenu(_ section: SectionItem) -> some View {
-        Menu {
-            Button("إعادة التسمية", systemImage: "pencil") { onRename(section) }
-            if canMoveEarlier {
-                Button("تقديم القسم") { store.moveSection(section, by: -1) }
-            }
-            if canMoveLater {
-                Button("تأخير القسم") { store.moveSection(section, by: 1) }
-            }
-            Divider()
-            Button("حذف القسم", systemImage: "trash", role: .destructive) { confirmingDelete = true }
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(ZimamType.body)
-                .foregroundStyle(ZimamColor.inkMuted)
-                .frame(minWidth: ZimamSpacing.space11, minHeight: ZimamSpacing.space11)
-                .contentShape(Rectangle())
-        }
-        .menuIndicator(.hidden)
-        .buttonStyle(.plain)
-        .fixedSize()
-        .accessibilityLabel("خيارات القسم \(section.name)")
-        // On the menu that asked, so on the iPad the dialog points at the column.
-        .confirmationDialog("حذف القسم؟", isPresented: $confirmingDelete, titleVisibility: .visible) {
-            Button("حذف القسم", role: .destructive) { store.delete(section) }
-            Button("إلغاء", role: .cancel) {}
-        } message: {
-            Text("تبقى مهامه في المشروع بلا قسم.")
-        }
-    }
-
-    // MARK: Cards
-
-    private func card(_ task: TaskItem, at index: Int) -> some View {
-        // Where the dragged card will land: a gap opens above this one. The gap is part of the
-        // drop target, so the card moving down under the finger does not close it again.
-        VStack(spacing: ZimamSpacing.space2) {
-            if targetedCard == task.id { DropGap(height: cardHeights[task.id] ?? ZimamSpacing.space11) }
-            KanbanCard(task: task, onToggle: { toggle(task) }, onOpen: { openTask(task.id) })
-                .onGeometryChange(for: CGFloat.self) { proxy in proxy.size.height } action: { height in
-                    cardHeights[task.id] = height
-                }
-                .contextMenu {
-                    Button(task.isDone ? "إلغاء الإنجاز" : "إنجاز", systemImage: "checkmark.circle") { toggle(task) }
-                    Menu("نقل إلى") {
-                        ForEach(destinations) { destination in
-                            Button(destination.name) { move(task, to: destination, at: destination.tasks.count) }
-                        }
-                    }
-                    Button("نقل إلى مشروع…", systemImage: "folder") { movingToProject = ProjectMoveRequest(id: task.id) }
-                    Button("حذف", systemImage: "trash", role: .destructive) { store.delete(task) }
-                }
-                // Dragging is not accessible: the same moves as VoiceOver actions.
-                .accessibilityActions {
-                    if let next {
-                        Button("نقل إلى القسم التالي") { move(task, to: next, at: next.tasks.count) }
-                    }
-                    if let previous {
-                        Button("نقل إلى القسم السابق") { move(task, to: previous, at: previous.tasks.count) }
-                    }
-                    if index > 0 {
-                        Button("نقل لأعلى") { move(task, to: column, at: index - 1) }
-                    }
-                    if index + 1 < column.tasks.count {
-                        Button("نقل لأسفل") { move(task, to: column, at: index + 1) }
-                    }
-                    Button("نقل إلى مشروع…") { movingToProject = ProjectMoveRequest(id: task.id) }
-                }
-        }
-        .taskDropDestination { items in
-            drop(items, before: task)
-        } isTargeted: { targeted in
-            if targeted {
-                targetedCard = task.id
-            } else if targetedCard == task.id {
-                targetedCard = nil
-            }
-        }
-    }
-
-    /// `index` counts places in the destination without the task.
-    private func move(_ task: TaskItem, to destination: BoardColumn, at index: Int) {
-        let changesColumn = destination.id != column.id
-        withAnimation(.zimam(reduceMotion: reduceMotion)) {
-            store.place(task, inSection: destination.section?.id, at: index, column: destination.tasks)
-        }
-        if changesColumn {
-            let message: String = "نُقلت إلى \(destination.name)"
-            AccessibilityNotification.Announcement(message).post()
-        }
-    }
-
-    private func drop(_ items: [TaskDragItem], before target: TaskItem?) -> Bool {
-        targetedCard = nil
-        guard let id = items.first?.id, id != target?.id, let task = lookup(id) else { return false }
-        let others = column.tasks.filter { $0.id != id }
-        let index = target.flatMap { target in others.firstIndex { $0.id == target.id } } ?? others.count
-        move(task, to: column, at: index)
-        return true
-    }
-
-    private func toggle(_ task: TaskItem) {
-        withAnimation(.zimamComplete) {
-            store.toggleDone(task)
-        }
-        if task.isDone { onCompleted(task.id) }
-    }
-
-    // MARK: Adding
-
-    @ViewBuilder
-    private var addControl: some View {
-        if adding {
-            TextField("عنوان المهمة", text: $newTitle)
-                .textFieldStyle(.plain)
-                .font(ZimamType.callout)
-                .focused($fieldFocused)
-                .onSubmit(addTask)
-                .padding(.horizontal, ZimamSpacing.space3)
-                .frame(minHeight: ZimamSpacing.space11)
-                .background(ZimamColor.surfaceRaised, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
-                .overlay {
-                    RoundedRectangle(cornerRadius: ZimamRadius.radiusMd)
-                        .strokeBorder(ZimamColor.lineStrong)
-                }
-                .onAppear { fieldFocused = true }
-                .onChange(of: fieldFocused) { _, focused in
-                    // Leaving an empty field closes it; a typed title is kept.
-                    if !focused && newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { adding = false }
-                }
-        } else {
-            Button { adding = true } label: {
-                Label("إضافة مهمة", systemImage: "plus")
-                    .font(ZimamType.callout)
-                    .foregroundStyle(ZimamColor.inkMuted)
-                    .frame(maxWidth: .infinity, minHeight: ZimamSpacing.space11)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: ZimamRadius.radiusMd)
-                            .strokeBorder(ZimamColor.lineStrong, style: StrokeStyle(dash: [ZimamSpacing.space1, ZimamSpacing.space1]))
-                    }
-                    .contentShape(RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("إضافة مهمة إلى \(column.name)")
-        }
-    }
-
-    private func addTask() {
-        let title = newTitle
-        newTitle = ""
-        withAnimation(.zimam(reduceMotion: reduceMotion)) {
-            _ = store.addTask(title: title, projectId: projectId, sectionId: column.section?.id, below: column.tasks)
-        }
-    }
-}
-
-/// A task on the board: the task row in its compact form on a raised card.
-/// Tapping opens the task; the completion circle completes it.
-private struct KanbanCard: View {
-    let task: TaskItem
-    let onToggle: () -> Void
-    let onOpen: () -> Void
-
-    var body: some View {
-        TaskRow(task: task, compact: true, onToggle: onToggle)
-            .padding(.horizontal, ZimamSpacing.space3)
-            .padding(.vertical, ZimamSpacing.space1)
-            .background(ZimamColor.surfaceRaised, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
-            .contentShape(RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
-            .onTapGesture(perform: onOpen)
-            .draggable(TaskDragItem(id: task.id)) { TaskDragPreview(title: task.title) }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(task.title)
-            .accessibilityValue(task.isDone ? "منجزة" : "")
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction(.default, onOpen)
-            .accessibilityAction(named: task.isDone ? "إلغاء الإنجاز" : "إنجاز", onToggle)
     }
 }
