@@ -64,7 +64,8 @@ struct ChoiceBar<Value: Hashable>: View {
 
 /// Seven columns from the week's first day at the leading edge (the right in Arabic), week by week.
 /// Padding days of the months around are left empty. Under each week, a task that spans days is a
-/// bar from its start day to its due day (`SpanLanes`); one-day tasks are dots in their day.
+/// bar from its start day to its due day (`SpanLanes`). One-day tasks show their titles in their
+/// day (the first few, then «+٣»); at the largest text sizes, where a title would not fit, dots.
 struct MonthGrid: View {
     let grid: CalendarGrid
     let days: [CalendarDay]
@@ -77,17 +78,24 @@ struct MonthGrid: View {
     var events: [ShownEvent] = []
 
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     // Not private, so the memberwise initializer stays internal.
-    @ScaledMetric(relativeTo: .headline) var cellHeight = ZimamSpacing.space11 + ZimamSpacing.space6
+    /// Room for the two days' numbers and two task titles.
+    @ScaledMetric(relativeTo: .headline) var cellHeight = ZimamSpacing.space11 * 2
+    /// With dots instead of titles (the largest text sizes).
+    @ScaledMetric(relativeTo: .headline) var compactCellHeight = ZimamSpacing.space11 + ZimamSpacing.space6
     /// A bar in the month: one caption line.
     @ScaledMetric(relativeTo: .caption) var barHeight = ZimamSpacing.space6 - ZimamSpacing.space1
+
+    /// Titles fit up to the largest standard size; beyond it a title would be a letter or two.
+    private var showsTitles: Bool { dynamicTypeSize < .accessibility1 }
 
     var body: some View {
         let order = grid.weekdayOrder
         let short = formatter.weekdaySymbols(order, short: true)
         let full = formatter.weekdaySymbols(order, short: false)
         let weeks = stride(from: 0, to: days.count, by: 7).map { Array(days[$0 ..< min($0 + 7, days.count)]) }
-        VStack(spacing: ZimamSpacing.space1) {
+        VStack(spacing: ZimamSpacing.space2) {
             HStack(spacing: ZimamSpacing.space1) {
                 ForEach(order.indices, id: \.self) { index in
                     Text(short[index])
@@ -106,19 +114,21 @@ struct MonthGrid: View {
     private func week(_ week: [CalendarDay]) -> some View {
         let inPeriod = week.filter(\.isInPeriod)
         let offset = week.firstIndex(where: \.isInPeriod) ?? 0
+        let height = showsTitles ? cellHeight : compactCellHeight
         return VStack(spacing: ZimamSpacing.space1) {
             HStack(spacing: ZimamSpacing.space1) {
                 ForEach(week) { day in
                     if day.isInPeriod {
                         DayCell(day: day, kind: grid.kind, tasks: tasksByDay[day.day] ?? [],
                                 spanCount: spans.filter { $0.span.contains(day.day) }.count,
-                                isToday: day.day == today, isSelected: day.day == selectedDay, minHeight: cellHeight,
+                                isToday: day.day == today, isSelected: day.day == selectedDay, minHeight: height,
+                                showsTitles: showsTitles,
                                 onSelect: { selectedDay = day.day },
                                 onDrop: { onDrop($0, day.day) },
                                 eventCount: events.filter { $0.span.contains(day.day) }.count)
                     } else {
                         Color.clear
-                            .frame(maxWidth: .infinity, minHeight: cellHeight)
+                            .frame(maxWidth: .infinity, minHeight: height)
                             .accessibilityHidden(true)
                     }
                 }
@@ -131,8 +141,9 @@ struct MonthGrid: View {
     }
 }
 
-/// One day: the grid calendar's day large, the other calendar's small, and the day's tasks as dots.
-/// Today has a ring; the selected day and a day under a dragged task are filled.
+/// One day: the grid calendar's day (in a brand circle today), the other calendar's beside it, and
+/// the day's tasks: the first titles, sand for a prayer-anchored task, then «+٣»; or dots.
+/// The selected day and a day under a dragged task are filled.
 private struct DayCell: View {
     let day: CalendarDay
     let kind: CalendarKind
@@ -142,6 +153,7 @@ private struct DayCell: View {
     let isToday: Bool
     let isSelected: Bool
     let minHeight: CGFloat
+    let showsTitles: Bool
     let onSelect: () -> Void
     let onDrop: ([UUID]) -> Bool
     /// Apple Calendar's events that day: outlined rings beside the task dots.
@@ -154,25 +166,25 @@ private struct DayCell: View {
     var body: some View {
         let highlighted = isSelected || isTargeted
         Button(action: onSelect) {
-            VStack(spacing: 0) {
-                Text(formatter.number(day.primaryDay))
-                    .font(ZimamType.headline)
-                    .foregroundStyle(highlighted ? ZimamColor.brandInk : ZimamColor.ink)
-                Text(formatter.number(day.secondaryDay))
-                    .font(ZimamType.caption)
-                    .foregroundStyle(highlighted ? ZimamColor.brandInk : ZimamColor.inkMuted)
-                HStack(spacing: ZimamSpacing.space1) {
-                    TaskDots(tasks: tasks)
-                    if eventCount > 0 { EventMarks(count: eventCount) }
+            VStack(spacing: ZimamSpacing.space1 / 2) {
+                dayNumbers(highlighted: highlighted)
+                if showsTitles {
+                    DayTitles(tasks: tasks, eventCount: eventCount)
+                } else {
+                    HStack(spacing: ZimamSpacing.space1) {
+                        TaskDots(tasks: tasks)
+                        if eventCount > 0 { EventMarks(count: eventCount) }
+                    }
+                    .padding(.top, ZimamSpacing.space1)
                 }
-                .padding(.top, ZimamSpacing.space1)
             }
             .padding(.vertical, ZimamSpacing.space1)
+            .padding(.horizontal, ZimamSpacing.space1 / 2)
             .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .top)
             .background(highlighted ? ZimamColor.brandSoft : ZimamColor.surfaceRaised,
                         in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
             .overlay {
-                if isToday || isTargeted {
+                if isTargeted {
                     RoundedRectangle(cornerRadius: ZimamRadius.radiusMd)
                         .strokeBorder(ZimamColor.lineStrong, lineWidth: ZimamSpacing.space1 / 2)
                 }
@@ -190,6 +202,22 @@ private struct DayCell: View {
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
+    /// The grid calendar's day, in a brand circle today, with the other calendar's day small beside it.
+    private func dayNumbers(highlighted: Bool) -> some View {
+        VStack(spacing: 0) {
+            Text(formatter.number(day.primaryDay))
+                .font(ZimamType.callout.weight(.semibold))
+                .foregroundStyle(isToday ? ZimamColor.onBrand : (highlighted ? ZimamColor.brandInk : ZimamColor.ink))
+                .frame(minWidth: ZimamSpacing.space6, minHeight: ZimamSpacing.space6)
+                .background {
+                    if isToday { Circle().fill(ZimamColor.brand) }
+                }
+            Text(formatter.number(day.secondaryDay))
+                .font(ZimamType.caption)
+                .foregroundStyle(highlighted ? ZimamColor.brandInk : ZimamColor.inkMuted)
+        }
+    }
+
     /// «الثلاثاء، ٢ جمادى الأولى، ١٣ أكتوبر، اليوم، ٣ مهام».
     private var accessibilityText: String {
         var dates = formatter
@@ -200,6 +228,46 @@ private struct DayCell: View {
         if count > 0 { parts.append(ArabicCount.tasks(count, locale: formatter.locale)) }
         if eventCount > 0 { parts.append(ArabicCount.events(eventCount, locale: formatter.locale)) }
         return parts.joined(separator: "، ")
+    }
+}
+
+/// The day's first task titles in small chips (sand for a prayer-anchored task), and «+٣» for the
+/// rest with the day's Apple Calendar events as rings. The cell's own label reads the counts.
+private struct DayTitles: View {
+    let tasks: [TaskItem]
+    let eventCount: Int
+
+    /// Two fit the cell's height on every iPhone; the rest are counted.
+    private static let shown = 2
+
+    @Environment(\.dateFormatterZimam) private var formatter
+
+    var body: some View {
+        VStack(spacing: ZimamSpacing.space1 / 2) {
+            ForEach(tasks.prefix(Self.shown)) { task in
+                let isPrayer = task.duePrayer != nil
+                Text(task.title)
+                    .font(ZimamType.caption)
+                    .foregroundStyle(isPrayer ? ZimamColor.sand : ZimamColor.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, ZimamSpacing.space1 / 2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(isPrayer ? ZimamColor.sandSoft : ZimamColor.surfaceSunken,
+                                in: RoundedRectangle(cornerRadius: ZimamRadius.radiusSm))
+            }
+            if tasks.count > Self.shown || eventCount > 0 {
+                HStack(spacing: ZimamSpacing.space1) {
+                    if tasks.count > Self.shown {
+                        Text("+\(formatter.number(tasks.count - Self.shown))")
+                            .font(ZimamType.caption)
+                            .foregroundStyle(ZimamColor.inkMuted)
+                    }
+                    if eventCount > 0 { EventMarks(count: eventCount) }
+                }
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
