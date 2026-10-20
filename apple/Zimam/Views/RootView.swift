@@ -22,12 +22,17 @@ struct RootView: View {
                         await session.sharePlace(latitude: location.coordinate?.latitude,
                                                  longitude: location.coordinate?.longitude)
                         await sync.sync()
+                        await ReminderBridge.shared.run()
                     }
                     .onChange(of: scenePhase) { _, phase in
                         // Each return also moves the rolling notification window forward.
                         if phase == .active {
                             notifications.reschedule()
-                            Task { await sync.sync() }
+                            Task {
+                                await sync.sync()
+                                // What was said to Siri («ذكرني …») while away.
+                                await ReminderBridge.shared.run()
+                            }
                         }
                         // Leaving: ask the system to wake the app to renew the window while it is closed.
                         if phase == .background { BackgroundRefresh.schedule() }

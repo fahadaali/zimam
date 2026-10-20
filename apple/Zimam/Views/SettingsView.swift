@@ -2,7 +2,7 @@ import SwiftUI
 import ZimamKit
 
 /// Settings: the account's photo and name on top (`AccountCard`), then one page per subject:
-/// general (the calendar), prayer times, places, notifications, the subscription, import, and
+/// general (the calendar), prayer times, places, Siri, notifications, the subscription, import, and
 /// the account (sync, sign-out, deletion). Settings are saved to the API (`PATCH /v1/me`) and
 /// applied at once, so dates switch calendars as soon as the choice changes.
 /// The sections of the pages are in SettingsSections.swift.
@@ -62,6 +62,9 @@ struct SettingsView: View {
                     }
                     SettingsPageRow("أماكني", systemImage: "mappin.and.ellipse") {
                         PlacesView()
+                    }
+                    SettingsPageRow("سيري", systemImage: "mic", value: ReminderBridge.shared.isOn ? "يستقبل التذكيرات" : nil) {
+                        SiriSettingsView()
                     }
                     SettingsPageRow("الإشعارات", systemImage: "bell", value: notifications.isEnabled ? "مفعّلة" : "متوقفة") {
                         Form { SettingsNotificationsSection() }.settingsPage("الإشعارات")

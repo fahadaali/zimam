@@ -98,10 +98,7 @@ struct PrayerPlacePicker: View {
         isSaving = true
         var name = chosenName
         if name == nil {
-            let reading = CLLocation(latitude: center.latitude, longitude: center.longitude)
-            let placemark = try? await CLGeocoder()
-                .reverseGeocodeLocation(reading, preferredLocale: Locale(identifier: "ar")).first
-            name = placemark?.locality ?? placemark?.administrativeArea
+            name = await CityName.find(latitude: center.latitude, longitude: center.longitude)
         }
         location.choose(latitude: center.latitude, longitude: center.longitude, name: name)
         isSaving = false

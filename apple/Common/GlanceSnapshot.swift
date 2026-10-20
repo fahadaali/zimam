@@ -91,7 +91,8 @@ struct GlanceSnapshot: Codable, Equatable {
 /// group does not reach the watch (another device), so this is a separate one.
 /// Register it in the developer account (see docs/setup.md).
 enum GlanceStore {
-    // A constant the nonisolated stores read too (WatchPrayerStore in PrayerGlance.swift).
+    /// Not tied to the main actor: the prayer place (`WatchPrayerStore`) and WatchConnectivity's
+    /// queue read it too.
     nonisolated static let watchAppGroup = "group.app.zimam.ios.watch"
     private static let key = "glance.snapshot"
 

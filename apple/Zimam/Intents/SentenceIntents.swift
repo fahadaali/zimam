@@ -9,8 +9,8 @@ import ZimamKit
 
 /// «ذكّرني في زمام» then «أراجع العقد بعد العصر بكرة»: the assistant reads the sentence on the
 /// server (title, day, time or prayer, priority, project, and a saved place: «إذا وصلت البيت»)
-/// and the task is added at once, with its place reminder. Signed
-/// out, offline, without the assistant, or when it is slow, the sentence becomes the title.
+/// and the task is added at once, with its place reminder. Signed out, offline, without the
+/// assistant, or when it is slow, the device reads the day, time and prayer itself (`SpokenTime`).
 struct AddTaskFromSentenceIntent: AppIntent {
     static let title: LocalizedStringResource = "إضافة مهمة بجملة"
     static let description = IntentDescription(
@@ -32,24 +32,45 @@ struct AddTaskFromSentenceIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
+        let message = await Self.add(sentence: sentence)
+        return .result(dialog: "\(message)")
+    }
+
+    /// Reads the sentence (the assistant, or the device when it cannot), adds the task with its
+    /// place reminder, and returns what Siri says. `moment` («بعد العصر» said in the phrase,
+    /// `AddPrayerTaskIntent`) is the prayer when the sentence names none.
+    @MainActor
+    static func add(sentence: String, moment: PrayerMoment? = nil) async -> String {
         let text = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty {
-            return .result(dialog: "لم تُضف المهمة لأن الجملة فارغة.")
+            return "لم تُضف المهمة لأن الجملة فارغة."
         }
         let formatter = DualDateFormatter(primary: SharedSettings.user()?.settings.calendar ?? .hijri, locale: ZimamLocale.current)
+        let schedule = SharedSettings.prayerSchedule()
         let reading: SpokenTask
         if let api = SessionStore.storedSessionAPI() {
             if NetworkMonitor.shared.isOnline {
-                reading = await api.readSpokenTask(text, timeZone: formatter.timeZone)
+                reading = await api.readSpokenTask(text, timeZone: formatter.timeZone, schedule: schedule)
             } else {
-                reading = SpokenTask(text: text, problem: .offline)
+                reading = SpokenTask.local(text, problem: .offline, timeZone: formatter.timeZone, schedule: schedule)
             }
         } else {
-            reading = SpokenTask(text: text, problem: .signedOut)
+            reading = SpokenTask.local(text, problem: .signedOut, timeZone: formatter.timeZone, schedule: schedule)
         }
 
         let context = ZimamStore.shared.mainContext
-        let record = reading.record(today: formatter.dayString(from: Date()))
+        var record = reading.record(today: formatter.dayString(from: Date()))
+        if let moment, record.duePrayer == nil {
+            // The prayer said in the phrase; its day is the sentence's, else the next one to come.
+            let now = Date()
+            let passed = schedule?.time(of: moment.prayer, on: now, offsetMinutes: moment.offset).map { $0 <= now } ?? false
+            record.duePrayer = moment.prayer
+            record.duePrayerOffset = moment.offset
+            record.dueTime = nil
+            if record.dueDate == nil {
+                record.dueDate = formatter.dayString(from: passed ? now.addingTimeInterval(86_400) : now)
+            }
+        }
         // A project not on this device yet is left out, as in the add screen.
         var projectId: UUID?
         if let id = record.projectId {
@@ -72,7 +93,7 @@ struct AddTaskFromSentenceIntent: AppIntent {
         if let spoken = reading.suggestion.place {
             message += " " + (await Self.addPlaceReminder(spoken, to: task, reading: reading, formatter: formatter))
         }
-        return .result(dialog: "\(message)")
+        return message
     }
 
     /// «إذا وصلت البيت»: a reminder at one of the user's saved places, with the sentence's time
@@ -125,11 +146,11 @@ struct AddTaskFromSentenceIntent: AppIntent {
         case nil:
             break
         case .offline?:
-            text += " لا اتصال الآن، فأُضيفت الجملة كما قلتها."
+            text += reading.readLocally ? " لا اتصال الآن، فقرأ زمام الموعد بنفسه." : " لا اتصال الآن، فأُضيفت الجملة كما قلتها."
         case .signedOut?:
             text += " سجّل الدخول في زمام ليقرأ المساعد مواعيد ما تقوله."
         default:
-            text += " لم يقرأها المساعد هذه المرة، فأُضيفت الجملة كما قلتها."
+            if !reading.readLocally { text += " لم يقرأها المساعد هذه المرة، فأُضيفت الجملة كما قلتها." }
         }
         return text
     }

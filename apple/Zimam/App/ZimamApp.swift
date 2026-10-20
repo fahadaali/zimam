@@ -60,6 +60,8 @@ struct ZimamApp: App {
         LiveSync.engine = sync
         // The system's background wakes renew the notification window (adhan and iqama alerts).
         BackgroundRefresh.scheduler = notifications
+        // «ذكرني …» said to Siri lands in Apple Reminders; brought over to the inbox when turned on.
+        ReminderBridge.shared.start(context: container.mainContext, sync: sync, session: session)
         #if os(iOS)
         // Hands the session to the Apple Watch app.
         WatchLink.shared.start()

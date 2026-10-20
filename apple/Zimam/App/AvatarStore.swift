@@ -112,7 +112,7 @@ nonisolated enum AvatarImage {
         context.draw(square, in: CGRect(x: 0, y: 0, width: target, height: target))
         guard let scaled = context.makeImage() else { return nil }
         let output = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(output, UTType.jpeg.identifier as CFString, 1, nil) else {
+        guard let destination = CGImageDestinationCreateWithData(output as CFMutableData, UTType.jpeg.identifier as CFString, 1, nil) else {
             return nil
         }
         CGImageDestinationAddImage(destination, scaled, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)

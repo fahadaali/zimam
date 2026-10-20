@@ -91,7 +91,7 @@ public enum PrayerAlertPlanner {
         schedule: PrayerSchedule?,
         now: Date,
         locale: Locale = Locale(identifier: "ar-SA"),
-        limit: Int = limit
+        limit: Int = Self.limit
     ) -> [PlannedPrayerAlert] {
         guard let schedule, settings.isAnyOn else { return [] }
         var calendar = Calendar(identifier: .gregorian)
