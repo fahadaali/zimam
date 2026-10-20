@@ -6,7 +6,8 @@ import FoundationNetworking
 /// A task said or dictated as one sentence («ذكرني أراجع العقد بعد العصر بكرة»): from the add
 /// screen's «إملاء», from Siri, and from the watch. The assistant reads it when it can; when it
 /// cannot (no connection, signed out, no plan, the month's quota used, the provider down, or it
-/// takes too long) the sentence itself becomes the title, so a spoken task is never lost.
+/// takes too long) the device reads its time itself (`SpokenTime`) and the rest becomes the title,
+/// so a spoken task is never lost.
 public struct SpokenTask: Equatable, Sendable {
     /// The assistant's reading, or only the sentence as the title.
     public var suggestion: TaskSuggestion
@@ -25,8 +26,24 @@ public struct SpokenTask: Equatable, Sendable {
         self.problem = problem
     }
 
+    /// The sentence read on the device (`SpokenTime`) when the assistant could not: its time,
+    /// prayer and day, and the rest as the title. `problem` still says why the assistant did not.
+    public static func local(_ text: String, problem: AssistantProblem, now: Date = Date(), timeZone: TimeZone = .current,
+                             schedule: PrayerSchedule? = nil) -> SpokenTask {
+        let reading = SpokenTime.read(text, now: now, timeZone: timeZone, schedule: schedule)
+        var spoken = SpokenTask(text: text, problem: problem)
+        spoken.suggestion = TaskSuggestion(title: reading.title, dueDate: reading.dueDate, dueTime: reading.dueTime,
+                                           duePrayer: reading.duePrayer, duePrayerOffset: reading.duePrayerOffset)
+        return spoken
+    }
+
     /// Whether the assistant read the sentence.
     public var isRead: Bool { problem == nil }
+
+    /// Read on the device instead: the assistant could not, and a day, time or prayer was found.
+    public var readLocally: Bool {
+        problem != nil && (suggestion.dueDate != nil || suggestion.dueTime != nil || suggestion.duePrayer != nil)
+    }
 
     /// The task to add, shaped as the app's `Store.addTask` and the server shape it: a time
     /// only for a dated task that is not tied to a prayer, an offset only with a prayer, and a
@@ -69,10 +86,11 @@ public struct SpokenTask: Equatable, Sendable {
 
 public extension APIClient {
     /// Reads a spoken sentence with the assistant (`POST /v1/assistant/parse`), falling back to
-    /// the sentence as the title on any failure or after `timeout` (Siri does not wait long).
-    /// Never throws. Nothing is saved: the caller adds the task.
+    /// reading it on the device (`SpokenTask.local`) on any failure or after `timeout` (Siri does
+    /// not wait long). Never throws. Nothing is saved: the caller adds the task. `schedule` (the
+    /// user's place) lets the device's reading move a prayer that has passed to tomorrow.
     func readSpokenTask(_ text: String, now: Date = Date(), timeZone: TimeZone = .current,
-                        timeout: Duration = .seconds(8)) async -> SpokenTask {
+                        schedule: PrayerSchedule? = nil, timeout: Duration = .seconds(8)) async -> SpokenTask {
         let sentence = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sentence.isEmpty else { return SpokenTask(text: sentence, problem: .invalidInput) }
         let first: SpokenTask? = await withTaskGroup(of: SpokenTask?.self) { group in
@@ -81,11 +99,12 @@ public extension APIClient {
                     let suggestion = try await self.suggestTask(from: sentence, now: now, timeZone: timeZone)
                     // A reading without a title keeps the words as they were said.
                     if suggestion.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        return SpokenTask(text: sentence, problem: .unavailable)
+                        return SpokenTask.local(sentence, problem: .unavailable, now: now, timeZone: timeZone, schedule: schedule)
                     }
                     return SpokenTask(suggestion: suggestion)
                 } catch {
-                    return SpokenTask(text: sentence, problem: AssistantProblem(error))
+                    return SpokenTask.local(sentence, problem: AssistantProblem(error), now: now, timeZone: timeZone,
+                                            schedule: schedule)
                 }
             }
             group.addTask {
@@ -96,6 +115,6 @@ public extension APIClient {
             group.cancelAll()
             return winner
         }
-        return first ?? SpokenTask(text: sentence, problem: .unavailable)
+        return first ?? SpokenTask.local(sentence, problem: .unavailable, now: now, timeZone: timeZone, schedule: schedule)
     }
 }
