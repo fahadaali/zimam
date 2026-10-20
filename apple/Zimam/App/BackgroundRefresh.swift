@@ -37,6 +37,8 @@ enum BackgroundRefresh {
     /// One wake: the next one first, so a wake cut short still leaves one asked for.
     static func run() async {
         schedule()
+        // Reminders said to Siri while the app was closed (`ReminderBridge`), then the window.
+        await ReminderBridge.shared.run()
         await scheduler?.rescheduleNow()
         ZimamShared.reloadWidgets()
     }

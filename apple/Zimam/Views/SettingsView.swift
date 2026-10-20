@@ -40,6 +40,9 @@ struct SettingsView: View {
                     page("أماكني", systemImage: "mappin.and.ellipse") {
                         PlacesView()
                     }
+                    page("سيري", systemImage: "mic", value: ReminderBridge.shared.isOn ? "يستقبل التذكيرات" : nil) {
+                        SiriSettingsView()
+                    }
                     page("الإشعارات", systemImage: "bell", value: notifications.isEnabled ? "مفعّلة" : "متوقفة") {
                         Form { notificationsSection }.settingsPage("الإشعارات")
                     }
