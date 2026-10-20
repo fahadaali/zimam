@@ -58,8 +58,9 @@ export function DateChip({ text, tone = "default", full }) {
 }
 
 /** PrayerChip: sand on sand-soft with the moon and star (moon.stars), as Chips.swift draws it. */
-export function PrayerChip(text) {
-  return h("span", { className: "zm-chip zm-chip-prayer" }, icons.prayer(), h("span", null, text));
+export function PrayerChip(text, spoken) {
+  // In a row it shows the clock time on the task's day («٢:٥٠ م»); screen readers hear the phrase after it.
+  return h("span", { className: "zm-chip zm-chip-prayer" }, icons.prayer(), h("span", null, text), spoken ? h("span", { className: "zm-sr" }, `، ${spoken}`) : null);
 }
 
 /** TimeChip: a task's clock time «٣:٠٠ م», quiet like the date chip (Chips.swift). */
@@ -93,7 +94,7 @@ export function TaskRow({ title, note, done = false, priority, date, time, praye
   );
   const meta = [];
   if (date) meta.push(DateChip(date));
-  if (prayer) meta.push(PrayerChip(prayer));
+  if (prayer) meta.push(typeof prayer === "string" ? PrayerChip(prayer) : PrayerChip(prayer.text, prayer.spoken));
   else if (time) meta.push(TimeChip(time));
   if (project) meta.push(h("span", { className: "zm-meta-text" }, project));
   return h(

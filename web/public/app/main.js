@@ -45,6 +45,8 @@ import { projectTimeline, viewTimeline } from "./timeline-view.js";
 import { createShell } from "./shell.js";
 import { createTaskPane } from "./task-pane.js";
 import { swipeToDelete } from "./swipe.js";
+import { createPrayers } from "./prayer-view.js";
+import { openSettings } from "./settings-view.js";
 
 const APPLE_CLIENT_ID = "app.zimam.ios.web";
 // Google OAuth web client ID (public). Empty hides the Google button. Keep it in the API's GOOGLE_CLIENT_IDS.
@@ -357,6 +359,7 @@ async function start() {
   // The same for an import provider's return, kept in this tab by rememberPendingImport().
   else if (hasPendingImport() && parseRoute().name !== "import") history.replaceState(null, "", `${location.pathname}${location.search}#/import`);
   frame.refreshSidebar();
+  prayers.load();
   render({ focus: false });
   live.start();
 }
@@ -507,6 +510,51 @@ async function render({ focus = false } = {}) {
   markSelected(pane.currentId());
   syncTask(route.task ?? null, { focus });
 }
+
+// ——— Prayer times and settings ———
+
+const prayers = createPrayers({
+  me: () => state.me,
+  today: () => state.today,
+  primary,
+  saveSettings: (settings) => saveMe({ settings }),
+  announce,
+  errorText,
+  onChange: () => {
+    // The times arrived or changed: the chips and the line show clock times now.
+    if (!busy()) render({ focus: false });
+  },
+});
+
+/** Saves the name or settings (PATCH /v1/me) and redraws what depends on them. */
+async function saveMe(fields) {
+  state.me = await api.updateMe(fields);
+  prayers.load();
+  if (fields.settings && ("calendar" in fields.settings || "weekStart" in fields.settings)) render({ focus: false });
+  return state.me;
+}
+
+$("settings-button").addEventListener("click", () =>
+  openSettings({
+    me: () => state.me,
+    today: () => state.today,
+    saveMe,
+    openPrayers: () => prayers.openSheet(),
+    sync: syncNow,
+    signOut: () => els.signout.click(),
+    deleteAccount: async () => {
+      await api.deleteMe();
+      live.stop();
+      session.clear();
+      state.me = null;
+      state.projects = [];
+      pane.hide();
+      showSignIn("حُذف حسابك.");
+    },
+    announce,
+    errorText,
+  }),
+);
 
 // ——— The open task ———
 
@@ -709,7 +757,7 @@ function taskItem(task, options) {
     priority: priorityKey(task.priority),
     date: options.showDate && task.dueDate ? dueChip(task.dueDate, { today: state.today, primary: primary() }) : null,
     time: task.dueDate && !task.duePrayer ? timeLabel(task.dueTime) : null,
-    prayer: prayerPhrase(task.duePrayer, task.duePrayerOffset),
+    prayer: prayers.chipFor(task),
     project: options.showProject && task.projectId ? projectName(task.projectId) : null,
     selected: pane.currentId() === task.id,
     onToggle: () => toggleTask(task, li),
@@ -876,7 +924,7 @@ async function viewToday() {
   const out = [
     ViewToolbar(frame.accountButton()),
     ScreenHeader("اليوم", dualDate(today, { primary: primary(), today })),
-    // NextPrayerLine (the next prayer's countdown) goes here once the API gives the times.
+    prayers.nextLine(),
     todaySummary(featureContext()),
   ];
   out.push(list.length ? taskList(list, { label: "مهام اليوم" }) : emptyState("لا مهام اليوم. يومك لك."));

@@ -17,6 +17,13 @@ export type PrayerTimesOfDay = Record<"fajr" | "dhuhr" | "asr" | "maghrib" | "is
 
 /** The instants of a day's prayers at the saved location, or null without one. */
 export function prayerInstants(day: string, settings: Settings): Record<keyof PrayerTimesOfDay, Date> | null {
+  const times = dayInstants(day, settings);
+  if (!times) return null;
+  return { fajr: times.fajr, dhuhr: times.dhuhr, asr: times.asr, maghrib: times.maghrib, isha: times.isha };
+}
+
+/** The day's five prayers and the sunrise between Fajr and Dhuhr, or null without a location. */
+export function dayInstants(day: string, settings: Settings): Record<keyof PrayerTimesOfDay | "sunrise", Date> | null {
   if (!settings.location) return null;
   const params = METHODS[settings.prayerMethod]();
   params.madhab = settings.asrMadhab === "hanafi" ? Madhab.Hanafi : Madhab.Shafi;
@@ -25,7 +32,7 @@ export function prayerInstants(day: string, settings: Settings): Record<keyof Pr
   const [y, m, d] = day.split("-").map(Number) as [number, number, number];
   // adhan reads the calendar day from the Date's local fields; Workers run in UTC.
   const times = new PrayerTimes(new Coordinates(settings.location.latitude, settings.location.longitude), new Date(y, m - 1, d), params);
-  return { fajr: times.fajr, dhuhr: times.dhuhr, asr: times.asr, maghrib: times.maghrib, isha: times.isha };
+  return { fajr: times.fajr, sunrise: times.sunrise, dhuhr: times.dhuhr, asr: times.asr, maghrib: times.maghrib, isha: times.isha };
 }
 
 /** Local "HH:mm" prayer times for a day, or null without a saved location. */

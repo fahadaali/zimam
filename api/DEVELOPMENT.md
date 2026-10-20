@@ -79,6 +79,7 @@ npm run db:migrate:local
 | `GET /v1/tasks` | تصفية بـ `projectId` (أو `inbox`) و`status` (أو `open`) و`dueFrom` و`dueTo` و`q` و`assignee=me` |
 | `POST /v1/tasks`، `GET`, `PATCH`, `DELETE /v1/tasks/:id` | المهمة |
 | `POST /v1/tasks/:id/complete` | إنجاز مهمة |
+| `GET /v1/prayers?from&to` | أوقات الصلاة في موقع المستخدم المحفوظ بطريقته ومذهب العصر: `{ timeZone, method, asrMadhab, location, days: [{ date, times: { fajr, sunrise, dhuhr, asr, maghrib, isha: { time: "HH:mm", at } } }] }`، و`at` بالميلي ثانية. الافتراضي اليوم بتوقيت المستخدم، وأقصاه ٣١ يوماً. بلا موقع محفوظ تكون `days` فارغة. لواجهة الويب؛ التطبيقات تحسبها على الجهاز |
 | `GET /v1/tasks/:id/reminders` | تذكيرات المستخدم نفسه على مهمة يراها، من الأقدم `{ reminders }` (التذكيرات شخصية، فلا يرى تذكيرات غيره في المشروع المشترك). تُكتب عبر `POST /v1/sync` كباقي الكيانات |
 | `GET /v1/projects/:id/members` | الأعضاء `{ members: [{ userId, name, role, addedAt }] }`، لكل عضو |
 | `PATCH /v1/projects/:id/members/:userId` | `{ role: "editor" \| "viewer" }`، للمالك، ولا يتغيّر دور المالك |

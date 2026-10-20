@@ -4,6 +4,7 @@ import { fail } from "./http";
 import { requireUser } from "./middleware";
 import { devices } from "./push/devices";
 import { assistant } from "./routes/assistant";
+import { prayers } from "./routes/prayers";
 import { attachments } from "./routes/attachments";
 import { auth } from "./routes/auth";
 import { comments } from "./routes/comments";
@@ -42,7 +43,7 @@ export function createApp(deps: Deps) {
     "/v1/me", "/v1/me/*", "/v1/sync", "/v1/projects", "/v1/projects/*",
     "/v1/tasks", "/v1/tasks/*", "/v1/invites/*", "/v1/comments/*", "/v1/assistant/*",
     "/v1/devices/*", "/v1/realtime/ticket", "/v1/imports",
-    "/v1/attachments/*",
+    "/v1/attachments/*", "/v1/prayers",
   ];
   for (const path of signedIn) {
     app.use(path, requireUser);
@@ -58,6 +59,7 @@ export function createApp(deps: Deps) {
   app.route("/v1", comments);
   app.route("/v1", attachments);
   app.route("/v1/assistant", assistant);
+  app.route("/v1/prayers", prayers);
   app.route("/v1/devices", devices);
   app.route("/v1/realtime", realtime);
   app.route("/v1/imports/oauth", importOAuth);
