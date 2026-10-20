@@ -6,18 +6,25 @@ public struct PlannerTask: Sendable {
     public var title: String
     /// Local day, "2026-10-15".
     public var dueDay: String?
+    /// "HH:mm", local; ignored when the task is anchored to a prayer.
+    public var dueTime: String?
     public var duePrayer: Prayer?
     public var duePrayerOffset: Int?
     public var isDone: Bool
 
-    public init(id: UUID, title: String, dueDay: String? = nil, duePrayer: Prayer? = nil, duePrayerOffset: Int? = nil,
-                isDone: Bool = false) {
+    public init(id: UUID, title: String, dueDay: String? = nil, dueTime: String? = nil, duePrayer: Prayer? = nil,
+                duePrayerOffset: Int? = nil, isDone: Bool = false) {
         self.id = id
         self.title = title
         self.dueDay = dueDay
+        self.dueTime = dueTime
         self.duePrayer = duePrayer
         self.duePrayerOffset = duePrayerOffset
         self.isDone = isDone
+    }
+
+    public var timeMode: TaskTimeMode {
+        TaskTimeMode(dueTime: dueTime, prayer: duePrayer, offsetMinutes: duePrayerOffset)
     }
 }
 
@@ -77,8 +84,14 @@ public struct PlannedNotification: Equatable, Sendable {
 /// window after every change and on launch.
 ///
 /// - A time reminder fires at its time.
-/// - A prayer reminder, and a task anchored to a prayer, fire at that prayer
-///   (plus the offset) on the task's due day, or every day when it has none.
+/// - A relative reminder fires its offset away from the task's own time (`TaskTiming`): its
+///   clock time, its prayer, or 9 a.m. for an all-day task, on its due day. A task anchored to a
+///   prayer without a day repeats every day, and so do its relative reminders. A task with
+///   neither a day nor a prayer has no time to count from.
+/// - A prayer reminder fires at that prayer (plus the offset) on the task's due day, or every
+///   day when it has none.
+/// - A task's own time does not notify by itself: «عند الموعد» is a relative reminder at 0,
+///   which the app adds when a time is set, so each person can remove theirs.
 /// - A location reminder's place is not planned here but by `PlaceWatchPlanner` (or, without
 ///   «دائماً», `LocationReminderPlanner`, which takes some of the same budget). Its time, when it
 ///   has one and the place has not come first, is planned here under the same id, so the device
@@ -134,9 +147,32 @@ public enum ReminderPlanner {
             }
         }
 
-        for task in openTasks.values {
-            if let prayer = task.duePrayer {
-                anchored(task, prayer: prayer, offset: task.duePrayerOffset ?? 0, idPrefix: "task-\(task.id.uuidString)")
+        func relativeBody(_ task: PlannerTask, offset: Int, firing date: Date) -> String {
+            if offset == 0, case .prayer(let prayer, let prayerOffset) = task.timeMode {
+                return PrayerPhrase.text(prayer, offsetMinutes: prayerOffset, locale: formatter.locale)
+            }
+            if offset == 0, case .clock = task.timeMode { return "حان موعدها" }
+            if offset < 0, offset > -1440 {
+                return "موعدها بعد \(RelativeReminderPhrase.duration(-offset, locale: formatter.locale))"
+            }
+            return ReminderPlanner.timeBody(task, firing: date, formatter: formatter)
+        }
+
+        func relative(_ task: PlannerTask, offset: Int, id: String) {
+            let mode = task.timeMode
+            let shift = TimeInterval(offset * 60)
+            if let dueDay = task.dueDay {
+                guard let time = TaskTiming.time(of: mode, on: dueDay, schedule: schedule, formatter: formatter) else { return }
+                let body = relativeBody(task, offset: offset, firing: time.addingTimeInterval(shift))
+                consider(PlannedNotification(id: id, taskId: task.id, date: time.addingTimeInterval(shift), title: task.title, body: body))
+            } else if mode.prayer != nil {
+                for noon in noons {
+                    let day = formatter.dayString(from: noon)
+                    guard let time = TaskTiming.time(of: mode, on: day, schedule: schedule, formatter: formatter) else { continue }
+                    let body = relativeBody(task, offset: offset, firing: time.addingTimeInterval(shift))
+                    consider(PlannedNotification(id: "\(id)@\(day)", taskId: task.id, date: time.addingTimeInterval(shift),
+                                                 title: task.title, body: body))
+                }
             }
         }
 
@@ -151,6 +187,8 @@ public enum ReminderPlanner {
             case .prayer:
                 guard let prayer = reminder.prayer else { continue }
                 anchored(task, prayer: prayer, offset: reminder.offsetMinutes ?? 0, idPrefix: "reminder-\(reminder.id.uuidString)")
+            case .relative:
+                relative(task, offset: reminder.offsetMinutes ?? 0, id: "reminder-\(reminder.id.uuidString)")
             case .location:
                 guard case .waiting(let fireDate) = reminder.firing(now: now), let place = reminder.location else { continue }
                 consider(PlannedNotification(id: "reminder-\(reminder.id.uuidString)", taskId: task.id, date: fireDate,
@@ -161,7 +199,7 @@ public enum ReminderPlanner {
 
         planned.sort { $0.date == $1.date ? $0.id < $1.id : $0.date < $1.date }
 
-        // One notification per task per minute, even if a reminder repeats the task's own anchor.
+        // One notification per task per minute, even if two reminders fall together.
         var seen = Set<String>()
         var result: [PlannedNotification] = []
         for notification in planned {

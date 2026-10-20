@@ -17,9 +17,26 @@ struct DateChip: View {
     }
 }
 
+/// A task's clock time on its day: «٣:٠٠ م». Quiet like the date beside it. See design/components/TaskRow.
+struct TimeChip: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(ZimamType.caption)
+            .foregroundStyle(ZimamColor.inkMuted)
+            .padding(.horizontal, ZimamSpacing.space2)
+            .padding(.vertical, ZimamSpacing.space1 / 2)
+            .background(ZimamColor.surfaceSunken, in: Capsule())
+    }
+}
+
 /// A prayer-anchored time. Sand is reserved for prayer times. See design/components/PrayerChip.
+/// In a task row `text` is the time the prayer gives on the task's day («٢:٥٠ م») and `phrase`
+/// the anchor («قبل العصر بـ١٠ د»), which VoiceOver reads after it.
 struct PrayerChip: View {
     let text: String
+    var phrase: String?
 
     var body: some View {
         Label(text, systemImage: "moon.stars")
@@ -29,6 +46,8 @@ struct PrayerChip: View {
             .padding(.horizontal, ZimamSpacing.space2)
             .padding(.vertical, ZimamSpacing.space1 / 2)
             .background(ZimamColor.sandSoft, in: Capsule())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(phrase.map { "\(text)، \($0)" } ?? text)
     }
 }
 

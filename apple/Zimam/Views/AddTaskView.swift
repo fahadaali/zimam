@@ -2,7 +2,8 @@ import SwiftData
 import SwiftUI
 import ZimamKit
 
-/// Adds a task: title, when it is due, an optional prayer anchor, priority and project.
+/// Adds a task: title, when it is due, its time (all day, a clock time or a prayer), priority
+/// and project. A task with a time gets «عند الموعد», as in its details.
 /// «اقتراح بالمساعد» reads the typed sentence on the server and shows the result for review;
 /// nothing is added until the user accepts it or edits it into the form. «إملاء» fills the title
 /// from speech (SpeechDictation), then asks the assistant the same way; offline, or when the
@@ -33,9 +34,8 @@ struct AddTaskView: View {
     /// «تاريخ البداية»: the task spans days, from this day to its due day.
     @State private var hasStart = false
     @State private var startDate = Date()
-    @State private var linkPrayer = false
-    @State private var prayer: Prayer = .asr
-    @State private var offset = 0
+    /// All day, a clock time, or a prayer (`TaskTimeRows`).
+    @State private var timeMode: TaskTimeMode = .allDay
     @State private var priority: TaskPriority = .none
     @State private var projectId: UUID?
     @State private var assistant: AssistantPhase = .idle
@@ -45,7 +45,6 @@ struct AddTaskView: View {
     @State private var fromAssistant = false
     @State private var notes = ""
     @State private var tagsText = ""
-    @State private var dueTime: String?
     /// The assistant's place («إذا وصلت البيت»), added as a reminder with the task.
     @State private var suggestedPlace: TaskSuggestion.PlaceSuggestion?
     @State private var dictation = SpeechDictation()
@@ -121,12 +120,16 @@ struct AddTaskView: View {
                     pickedDate: $pickedDate,
                     hasStart: $hasStart,
                     startDate: $startDate,
-                    dueTime: $dueTime,
-                    latestStart: latestStart,
-                    linkPrayer: linkPrayer
+                    latestStart: latestStart
                 )
 
-                AddTaskPrayerSection(linkPrayer: $linkPrayer, prayer: $prayer, offset: $offset)
+                Section {
+                    TaskTimeRows(mode: timeMode, day: dueDay.map { formatter.dayString(from: $0) }) { mode in
+                        // A clock time needs a day: today, unless one is chosen.
+                        if case .clock = mode, due == .unscheduled { due = .today }
+                        timeMode = mode
+                    }
+                }
 
                 AddTaskPrioritySection(priority: $priority, projectId: $projectId, projects: projects)
             }
@@ -229,6 +232,7 @@ struct AddTaskView: View {
             dueTime: suggestion.dueTime,
             tags: suggestion.tags
         )
+        Store(context: context, sync: sync).ensureAtTimeReminder(task)
         if let place = suggestion.place {
             let at = SpokenTask(suggestion: suggestion)
                 .placeReminderAt(today: formatter.dayString(from: Date()), timeZone: formatter.timeZone)
@@ -257,7 +261,6 @@ struct AddTaskView: View {
         title = suggestion.title
         notes = suggestion.notes ?? ""
         tagsText = suggestion.tags.joined(separator: "، ")
-        dueTime = suggestion.dueTime
         fromAssistant = true
         if let day = suggestion.dueDate, let date = formatter.date(fromDay: day) {
             let today = formatter.dayString(from: Date())
@@ -274,13 +277,13 @@ struct AddTaskView: View {
             due = .unscheduled
         }
         if let prayer = suggestion.duePrayer {
-            linkPrayer = true
-            self.prayer = prayer
             // The stepper goes from two hours before to two hours after, in steps of five.
             let offset = min(max(suggestion.duePrayerOffset ?? 0, -120), 120)
-            self.offset = offset - offset % 5
+            timeMode = .prayer(prayer, offsetMinutes: offset - offset % 5)
+        } else if suggestion.dueDate != nil, let time = suggestion.dueTime {
+            timeMode = TaskTimeMode(dueTime: time, prayer: nil, offsetMinutes: nil)
         } else {
-            linkPrayer = false
+            timeMode = .allDay
         }
         priority = suggestion.priority
         if let id = suggestion.projectId, projects.contains(where: { $0.id == id }) {
@@ -295,20 +298,29 @@ struct AddTaskView: View {
     private func add() {
         guard !trimmedTitle.isEmpty else { return }
         let day = dueDay
-        let task = Store(context: context, sync: sync).addTask(
+        var dueTime: String?
+        var prayer: (Prayer, Int)?
+        switch timeMode {
+        case .allDay: break
+        case .clock(let hhmm): dueTime = hhmm
+        case .prayer(let picked, let offset): prayer = (picked, offset)
+        }
+        let store = Store(context: context, sync: sync)
+        let task = store.addTask(
             title: trimmedTitle,
             projectId: projectId,
             dueDate: day.map { formatter.dayString(from: $0) },
-            duePrayer: linkPrayer ? prayer : nil,
-            duePrayerOffset: linkPrayer ? offset : nil,
+            duePrayer: prayer?.0,
+            duePrayerOffset: prayer?.1,
             priority: priority,
             notes: fromAssistant ? notes : nil,
-            dueTime: fromAssistant ? dueTime : nil,
+            dueTime: dueTime,
             tags: fromAssistant ? parsedTags : [],
             startDate: hasStart && day != nil ? formatter.dayString(from: startDate) : nil
         )
+        store.ensureAtTimeReminder(task)
         if fromAssistant, let suggestedPlace {
-            // The form's day and the assistant's time, when both are still set.
+            // The form's day and time, when both are set.
             let at = day.flatMap { day in
                 dueTime.flatMap { clockDate($0, on: day) }
             }

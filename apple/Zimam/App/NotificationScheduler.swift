@@ -257,7 +257,7 @@ final class NotificationScheduler {
         let tasks = (try? context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { !$0.pendingDelete }))) ?? []
         let reminders = (try? context.fetch(FetchDescriptor<ReminderItem>(predicate: #Predicate { !$0.pendingDelete }))) ?? []
         let plannerTasks = tasks.map { task in
-            PlannerTask(id: task.id, title: task.title, dueDay: task.dueDate, duePrayer: task.duePrayer,
+            PlannerTask(id: task.id, title: task.title, dueDay: task.dueDate, dueTime: task.dueTime, duePrayer: task.duePrayer,
                         duePrayerOffset: task.duePrayerOffset, isDone: task.isDone)
         }
         let plannerReminders = reminders.map { reminder in

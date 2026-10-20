@@ -128,9 +128,9 @@ public final class APIClient: Sendable {
     }
 
     /// What this app asks the server for beyond what every app decodes: the "timeline" project
-    /// view and saved places. A pull without them moves past their records, so when this list
-    /// grows the app pulls once from the start (`SyncEngine`).
-    public static let pullIncludes = "timeline,place"
+    /// view, saved places, and reminders relative to their task's time. A pull without them moves
+    /// past their records, so when this list grows the app pulls once from the start (`SyncEngine`).
+    public static let pullIncludes = "timeline,place,relative"
 
     static func pullQuery(cursor: Int64, limit: Int) -> [URLQueryItem] {
         [URLQueryItem(name: "cursor", value: String(cursor)), URLQueryItem(name: "limit", value: String(limit)),

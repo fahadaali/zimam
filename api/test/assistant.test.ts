@@ -38,6 +38,15 @@ describe("Assistant (MCP backend)", () => {
       prayer: { prayer: "maghrib", offsetMinutes: 20, text: "بعد المغرب بـ٢٠ د" },
     });
 
+    // A task with a time gets «عند الموعد» for whoever added it; an all-day one gets none.
+    const other = await signIn();
+    value(await assistant.createTask(other.userId, { title: "بلا وقت", dueDate: "2026-10-13" }));
+    const reminders = `SELECT task_id, kind, offset_minutes FROM reminders WHERE user_id = ?`;
+    expect((await env.DB.prepare(reminders).bind(userId).all()).results).toEqual([
+      { task_id: created.id, kind: "relative", offset_minutes: 0 },
+    ]);
+    expect((await env.DB.prepare(reminders).bind(other.userId).all()).results).toEqual([]);
+
     const updated = value(await assistant.updateTask(userId, created.id, { dueDate: "2026-10-14", priority: "low" }));
     expect(updated).toMatchObject({ priority: "low", title: "مراجعة العقد", due: { date: "2026-10-14" } });
 

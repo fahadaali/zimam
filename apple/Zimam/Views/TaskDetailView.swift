@@ -81,11 +81,12 @@ private struct TaskDetailForm: View {
             // «المهمة الجارية»: a Live Activity with a timer (FocusSection.swift).
             FocusSection(task: task, projectName: projects.first { $0.id == task.projectId }?.name)
             #endif
+            // The time and the reminders that count from it, together.
             TaskDueSection(task: task, store: store)
+            TaskRemindersSection(task: task, reminders: reminders, store: store)
             TaskDetailsSection(task: task, projects: projects, store: store)
             TaskRecurrenceSection(task: task, store: store)
             TaskSubtasksSection(task: task, subtasks: subtasks, store: store)
-            TaskRemindersSection(task: task, reminders: reminders, store: store)
             // Files live on the server and download when opened (TaskAttachmentsSection.swift).
             TaskAttachmentsSection(task: task)
             // Comments are for the members of a shared project; they live on the server.

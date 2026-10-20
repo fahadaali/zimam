@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { pullChanges } from "../data/pull";
-import { type ChangeEntity, OPT_IN_ENTITIES, OPT_IN_VIEWS } from "../data/schemas";
+import { type ChangeEntity, OPT_IN_ENTITIES, OPT_IN_REMINDER_KINDS, OPT_IN_VIEWS } from "../data/schemas";
 import { fail, readJson } from "../http";
 import { markDevicesSeen } from "../push/devices";
 import type { AppEnv } from "../types";
@@ -14,7 +14,7 @@ export const sync = new Hono<AppEnv>();
  * GET /v1/sync?cursor=0&limit=500 — changes since the cursor, oldest first.
  * `include=attachment` adds attachment metadata and `include=place` saved places, which older
  * apps cannot decode, and `include=timeline` sends a project's "timeline" view as it is rather
- * than "list".
+ * than "list". `include=relative` adds reminders relative to their task's time.
  */
 sync.get("/", async (c) => {
   const query = z
@@ -29,7 +29,7 @@ sync.get("/", async (c) => {
   await markDevicesSeen(c.env.DB, c.var.token);
   const asked = (query.data.include ?? "").split(",").map((s) => s.trim());
   const include = asked.filter((s): s is ChangeEntity => (OPT_IN_ENTITIES as readonly string[]).includes(s));
-  const views = asked.filter((s) => OPT_IN_VIEWS.includes(s));
+  const views = asked.filter((s) => OPT_IN_VIEWS.includes(s) || OPT_IN_REMINDER_KINDS.includes(s));
   return c.json(await pullChanges(c.env.DB, c.var.access, query.data.cursor, query.data.limit, include, views));
 });
 

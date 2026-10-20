@@ -153,12 +153,14 @@ struct AddTaskIntent: AppIntent {
             case nil: return offsetMinutes ?? 0
             }
         }()
-        let task = Store(context: ZimamStore.shared.mainContext, sync: LiveSync.engine).addTask(
+        let store = Store(context: ZimamStore.shared.mainContext, sync: LiveSync.engine)
+        let task = store.addTask(
             title: trimmed,
             dueDate: day.map { formatter.dayString(from: $0) },
             duePrayer: duePrayer,
             duePrayerOffset: offset
         )
+        store.ensureAtTimeReminder(task)
 
         var when: [String] = []
         if let day { when.append(formatter.label(for: day)) }

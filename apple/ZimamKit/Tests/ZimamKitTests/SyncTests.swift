@@ -41,6 +41,25 @@ struct SyncTests {
         #expect((delete["updatedAt"] as? Int) == 2000)
     }
 
+    @Test func relativeRemindersRoundTrip() throws {
+        let reminder = ReminderRecord(taskId: UUID(), kind: .relative, offsetMinutes: -15, updatedAt: 1000)
+        let data = try JSONEncoder().encode(Mutation.upsert(.reminder(reminder)))
+        let sent = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let fields = sent["data"] as! [String: Any]
+        #expect((fields["kind"] as? String) == "relative")
+        #expect((fields["offsetMinutes"] as? Int) == -15)
+
+        let json = """
+        {"changes":[{"entity":"reminder","id":"\(reminder.id.uuidString)","op":"upsert","data":{
+          "id":"\(reminder.id.uuidString)","taskId":"\(reminder.taskId.uuidString)","kind":"relative","at":null,
+          "prayer":null,"offsetMinutes":-15,"location":null,"createdAt":1,"updatedAt":1000}}],"cursor":1,"hasMore":false}
+        """
+        let response = try JSONDecoder().decode(PullResponse.self, from: Data(json.utf8))
+        guard case .reminder(let pulled)? = response.changes[0].record else { Issue.record("expected a reminder"); return }
+        #expect(pulled.kind == .relative)
+        #expect(pulled.offsetMinutes == -15)
+    }
+
     @Test func startDateDecodesAndIsAlwaysSent() throws {
         let json = """
         {"id":"0b9c6f8e-6f2c-4a4e-9a51-1d2c3b4a5e6f","title":"رحلة إلى جدة","status":"todo","priority":0,"tags":[],
@@ -83,7 +102,7 @@ struct SyncTests {
         future.view = .kanban
         let chosen = try JSONSerialization.jsonObject(with: JSONEncoder().encode(future)) as! [String: Any]
         #expect((chosen["view"] as? String) == "kanban")
-        #expect(APIClient.pullQuery(cursor: 0, limit: 500).contains(URLQueryItem(name: "include", value: "timeline,place")))
+        #expect(APIClient.pullQuery(cursor: 0, limit: 500).contains(URLQueryItem(name: "include", value: "timeline,place,relative")))
     }
 
     @Test func decodesResultsWithLowercaseIds() throws {

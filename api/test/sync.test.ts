@@ -127,6 +127,42 @@ describe("Sync", () => {
     expect((await pullAll(member.token)).changes.map((c) => c.id)).toContain(reminderId);
   });
 
+  it("sends reminders relative to the task's time only to apps that ask for them", async () => {
+    const { token } = await signIn();
+    const taskId = uuid();
+    await push(token, [task(taskId, 1000, { dueDate: "2027-01-10", dueTime: "15:00" })]);
+    const relative = uuid();
+    const results = await push(token, [
+      { op: "upsert", entity: "reminder", data: { id: relative, taskId, kind: "relative", offsetMinutes: -15, updatedAt: 1000 } },
+      // Relative reminders come at or before the task's time, up to a week, and need an offset.
+      { op: "upsert", entity: "reminder", data: { id: uuid(), taskId, kind: "relative", offsetMinutes: 15, updatedAt: 1000 } },
+      { op: "upsert", entity: "reminder", data: { id: uuid(), taskId, kind: "relative", offsetMinutes: -10081, updatedAt: 1000 } },
+      { op: "upsert", entity: "reminder", data: { id: uuid(), taskId, kind: "relative", updatedAt: 1000 } },
+      // A prayer reminder still stays within 12 hours of its prayer.
+      { op: "upsert", entity: "reminder", data: { id: uuid(), taskId, kind: "prayer", prayer: "asr", offsetMinutes: -800, updatedAt: 1000 } },
+    ]);
+    expect(results.map((r) => r.status)).toEqual(["applied", "invalid", "invalid", "invalid", "invalid"]);
+
+    const old = await pullAll(token);
+    expect(old.changes.map((c) => c.id)).not.toContain(relative);
+    const asked = await call("GET", "/v1/sync?cursor=0&include=timeline,place,relative", { token });
+    const change = (asked.body as { changes: { id: string; data?: Record<string, unknown> }[] }).changes.find((c) => c.id === relative);
+    expect(change?.data).toMatchObject({ kind: "relative", offsetMinutes: -15 });
+  });
+
+  it("keeps a task's time to one kind: a prayer, or a clock time on its day", async () => {
+    const { token } = await signIn();
+    const anchored = uuid();
+    const undated = uuid();
+    await push(token, [
+      task(anchored, 1000, { dueDate: "2027-01-10", dueTime: "15:00", duePrayer: "asr" }),
+      task(undated, 1000, { dueTime: "15:00" }),
+    ]);
+    const tasks = new Map((await pullAll(token)).changes.map((c) => [c.id, c.data]));
+    expect(tasks.get(anchored)).toMatchObject({ dueTime: null, duePrayer: "asr" });
+    expect(tasks.get(undated)).toMatchObject({ dueTime: null });
+  });
+
   it("tells old members when a task moves out of their project", async () => {
     const owner = await signIn();
     const member = await signIn();

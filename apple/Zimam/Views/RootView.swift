@@ -66,6 +66,7 @@ struct RootView: View {
             }
         }
         .environment(\.dateFormatterZimam, DualDateFormatter(primary: session.user?.settings.calendar ?? .hijri, locale: ZimamLocale.current))
+        .environment(\.prayerScheduleZimam, location.schedule(session.user?.settings))
         .onAppear {
             // Weak: the engine owns this closure. A local, so the weak capture is of it rather than
             // of the strong one this closure already holds.
