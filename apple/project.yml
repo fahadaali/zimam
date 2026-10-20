@@ -21,7 +21,7 @@ settings:
     # below reads CFBundleShortVersionString and CFBundleVersion from these two, because
     # XcodeGen otherwise writes a fixed "1.0" and "1". Raise MARKETING_VERSION for each release;
     # Xcode Cloud replaces CURRENT_PROJECT_VERSION with its build number (ci_pre_xcodebuild.sh).
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
     # Your Apple Developer Team ID (Membership details). Set it here, not in Xcode,
     # so it survives regenerating the project.
