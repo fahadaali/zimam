@@ -1,6 +1,6 @@
 import type { Access } from "./access";
 import { OUT, type Row, TABLES } from "./rows";
-import { type ChangeEntity, OPT_IN_ENTITIES, OPT_IN_VIEWS } from "./schemas";
+import { type ChangeEntity, OPT_IN_ENTITIES, OPT_IN_REMINDER_KINDS, OPT_IN_VIEWS } from "./schemas";
 
 export interface Change {
   entity: ChangeEntity;
@@ -32,7 +32,8 @@ async function loadRows(db: D1Database, entity: ChangeEntity, ids: string[]): Pr
  * Opt-in entities (attachments, places) are left out unless `include` names them, but the
  * cursor still moves past their rows, so older apps neither see nor re-pull them.
  * Likewise a project's opt-in view ("timeline") reaches only clients that name it in
- * `views`; the others get "list", which every app can decode.
+ * `views`; the others get "list", which every app can decode. An opt-in reminder kind
+ * ("relative") reaches only clients that name it in `views` too; the others skip it.
  */
 export async function pullChanges(
   db: D1Database,
@@ -89,6 +90,9 @@ export async function pullChanges(
   const changes: Change[] = [];
   for (const c of wanted) {
     const row = rows.get(c.entity)?.get(c.entity_id);
+    if (c.entity === "reminder" && row && OPT_IN_REMINDER_KINDS.includes(row.kind as string) && !views.includes(row.kind as string)) {
+      continue;
+    }
     if (row && (await visible(c.entity, row))) {
       const data = OUT[c.entity](row);
       const view = c.entity === "project" ? (data.view as string) : null;

@@ -23,6 +23,16 @@ export const PRAYERS = ["fajr", "dhuhr", "asr", "maghrib", "isha"] as const;
 export const PROJECT_VIEWS = ["list", "kanban", "calendar", "timeline"] as const;
 export const OPT_IN_VIEWS: readonly string[] = ["timeline"];
 
+/**
+ * Reminder kinds. "relative" (migrations/0018) counts from the task's own time and is newer than
+ * the apps that decode `kind` strictly, so a pull sends it only to clients that ask
+ * (`include=relative`) and leaves it out for the rest (src/data/pull.ts).
+ */
+export const REMINDER_KINDS = ["time", "prayer", "location", "relative"] as const;
+export const OPT_IN_REMINDER_KINDS: readonly string[] = ["relative"];
+/** The furthest a relative reminder comes before its task's time: a week, in minutes. */
+export const RELATIVE_REMINDER_MIN = -7 * 24 * 60;
+
 /** Swift sends uppercase UUIDs; the server stores them lowercase. */
 export const Id = z.uuid().transform((s) => s.toLowerCase());
 const NullableId = Id.nullable().default(null);
@@ -88,7 +98,10 @@ export const TaskInput = z
   .refine((t) => t.startDate == null || (t.dueDate !== null && t.startDate <= t.dueDate), {
     message: "startDate needs a dueDate on or after it",
     path: ["startDate"],
-  });
+  })
+  // A task falls all day, at a clock time on its day, or around a prayer: a clock time needs a
+  // day, and a prayer replaces it (as the apps keep it).
+  .transform((t) => (t.dueTime !== null && (t.duePrayer !== null || t.dueDate === null) ? { ...t, dueTime: null } : t));
 export type TaskInput = z.infer<typeof TaskInput>;
 
 const Latitude = z.number().min(-90).max(90);
@@ -113,14 +126,19 @@ export const ReminderInput = z
   .object({
     id: Id,
     taskId: Id,
-    kind: z.enum(["time", "prayer", "location"]),
+    kind: z.enum(REMINDER_KINDS),
     /**
      * ISO 8601 date-time with offset, for kind "time". On a "location" reminder it is the time
      * that competes with the place: the reminder fires once, at whichever comes first.
      */
     at: z.iso.datetime({ offset: true }).nullable().default(null),
     prayer: z.enum(PRAYERS).nullable().default(null),
-    offsetMinutes: z.number().int().min(-720).max(720).nullable().default(null),
+    /**
+     * Minutes after the prayer for kind "prayer" (±720). For kind "relative", minutes from the
+     * task's own time, at it or before it: its clock time, its prayer, or 09:00 of its day when it
+     * has neither (`ALL_DAY_HOUR` in src/push/reminders.ts); 0 is «عند الموعد».
+     */
+    offsetMinutes: z.number().int().min(RELATIVE_REMINDER_MIN).max(720).nullable().default(null),
     location: Location.nullable().default(null),
     /**
      * When a location reminder with a time fired at the place, before its time (Unix ms). Left
@@ -132,8 +150,9 @@ export const ReminderInput = z
   .refine(
     (r) =>
       (r.kind === "time" && r.at !== null) ||
-      (r.kind === "prayer" && r.prayer !== null) ||
-      (r.kind === "location" && r.location !== null),
+      (r.kind === "prayer" && r.prayer !== null && (r.offsetMinutes === null || Math.abs(r.offsetMinutes) <= 720)) ||
+      (r.kind === "location" && r.location !== null) ||
+      (r.kind === "relative" && r.offsetMinutes !== null && r.offsetMinutes <= 0),
     { message: "A reminder needs the field that matches its kind" },
   );
 export type ReminderInput = z.infer<typeof ReminderInput>;

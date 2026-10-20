@@ -220,6 +220,8 @@ public struct ReminderRecord: Codable, Equatable, Sendable {
     /// place: the reminder fires once, at whichever comes first (`ReminderFiring`).
     public var at: String?
     public var prayer: Prayer?
+    /// Minutes after the prayer for `.prayer`; minutes after the task's own time for `.relative`
+    /// (negative is before: -15 is «قبل ١٥ د», 0 is «عند الموعد»).
     public var offsetMinutes: Int?
     public var location: Location?
     /// When a location reminder with a time fired at the place, before its time. Left out when
@@ -228,7 +230,9 @@ public struct ReminderRecord: Codable, Equatable, Sendable {
     public var createdAt: Milliseconds?
     public var updatedAt: Milliseconds
 
-    public enum Kind: String, Codable, Sendable { case time, prayer, location }
+    /// `.relative` counts from the task's own time (`TaskTiming`), so it moves with the task's
+    /// day, its clock time, or its prayer.
+    public enum Kind: String, Codable, Sendable { case time, prayer, location, relative }
 
     public struct Location: Codable, Equatable, Sendable {
         public var latitude: Double

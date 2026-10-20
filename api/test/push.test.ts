@@ -291,8 +291,9 @@ describe("Reminder pushes", () => {
     const noLocation = await userWithDevice({ timeZone: "Asia/Riyadh" });
     const dated = await addTask(user.token, { title: "مراجعة العقد", dueDate: day });
     const reminder = await addReminder(user.token, dated, { kind: "prayer", prayer: "asr", offsetMinutes: 20 });
-    // Anchored to Maghrib with no due day: every day.
+    // Anchored to Maghrib with no due day: every day, with «عند الموعد».
     const daily = await addTask(user.token, { title: "ورد المساء", duePrayer: "maghrib", duePrayerOffset: -10 });
+    await addReminder(user.token, daily, { kind: "relative", offsetMinutes: 0 });
     const elsewhere = await addTask(noLocation.token, { dueDate: day });
     await addReminder(noLocation.token, elsewhere, { kind: "prayer", prayer: "asr", offsetMinutes: 20 });
 
@@ -317,7 +318,7 @@ describe("Reminder pushes", () => {
     expect(fake.to(user.apns).map((m) => m.payload.taskId)).toEqual([dated, daily, daily]);
   });
 
-  it("notifies every member of a shared project for a task anchored to a prayer", async () => {
+  it("notifies each member of a shared project who keeps «عند الموعد» on a prayer-anchored task", async () => {
     const mecca = { latitude: 21.4, longitude: 39.8 };
     const day = "2027-04-11";
     const settings = { ...DEFAULT_SETTINGS, timeZone: "Asia/Riyadh", location: mecca };
@@ -329,17 +330,57 @@ describe("Reminder pushes", () => {
     await syncPush(owner.token, [{ op: "upsert", entity: "project", data: { id: projectId, name: "البيت", updatedAt: 1000 } }]);
     await addMember(projectId, member.userId, "editor");
     const task = await addTask(owner.token, { title: "سقي الزرع", projectId, dueDate: day, duePrayer: "fajr" });
-    // The owner's own reminder at the same minute does not double the notification.
+    await addReminder(member.token, task, { kind: "relative", offsetMinutes: 0 });
+    // The owner's prayer reminder at the same minute as their «عند الموعد» does not double it.
+    await addReminder(owner.token, task, { kind: "relative", offsetMinutes: 0 });
     await addReminder(owner.token, task, { kind: "prayer", prayer: "fajr", offsetMinutes: 0 });
+    // A task's time alone notifies no one: a third member who removed «عند الموعد» gets nothing.
+    const third = await userWithDevice({ timeZone: "Asia/Riyadh", location: mecca });
+    await addMember(projectId, third.userId, "editor");
 
     const fake = new FakePush();
     await sendDueReminders(env.DB, fake, windowEnd(fajr));
     expect(fake.to(owner.apns)).toHaveLength(1);
     expect(fake.to(member.apns)).toHaveLength(1);
+    expect(fake.to(third.apns)).toHaveLength(0);
     expect(fake.to(member.apns)[0]!.payload).toMatchObject({
       aps: { alert: { title: "البيت", body: "سقي الزرع" }, "thread-id": projectId },
       taskId: task,
     });
+  });
+
+  it("times relative reminders from a clock time, an all-day task's morning, and a prayer", async () => {
+    const riyadh = { latitude: 24.7, longitude: 46.7 };
+    const day = "2027-05-12";
+    const settings = { ...DEFAULT_SETTINGS, timeZone: "Asia/Riyadh", location: riyadh };
+    const user = await userWithDevice({ timeZone: "Asia/Riyadh", location: riyadh });
+
+    // 15:00 in Riyadh is 12:00 UTC; «قبل ١٥ د» fires at 11:45 UTC.
+    const meeting = await addTask(user.token, { title: "اجتماع", dueDate: day, dueTime: "15:00" });
+    const before = await addReminder(user.token, meeting, { kind: "relative", offsetMinutes: -15 });
+    // All day: «قبل يوم» is 09:00 the day before in Riyadh, 06:00 UTC.
+    const report = await addTask(user.token, { title: "تسليم التقرير", dueDate: day });
+    await addReminder(user.token, report, { kind: "relative", offsetMinutes: -24 * 60 });
+    // A prayer a week ahead: «قبل ساعة» from that day's Asr.
+    const later = "2027-05-19";
+    const visit = await addTask(user.token, { title: "زيارة", dueDate: later, duePrayer: "asr", duePrayerOffset: -10 });
+    await addReminder(user.token, visit, { kind: "relative", offsetMinutes: -60 });
+
+    const fake = new FakePush();
+    await sendDueReminders(env.DB, fake, Date.parse("2027-05-11T06:00:00Z"));
+    expect(fake.to(user.apns).map((m) => m.payload.taskId)).toEqual([report]);
+    await sendDueReminders(env.DB, fake, Date.parse("2027-05-12T11:45:00Z"));
+    expect(fake.to(user.apns).map((m) => m.payload.taskId)).toEqual([report, meeting]);
+    const sent = await env.DB.prepare(`SELECT source FROM reminder_pushes WHERE user_id = ? AND task_id = ?`)
+      .bind(user.userId, meeting)
+      .first<{ source: string }>();
+    expect(sent?.source).toBe(`reminder-${before}@${day}`);
+
+    const asr = prayerInstants(later, settings)!.asr.getTime() - 70 * MINUTE;
+    await sendDueReminders(env.DB, fake, windowEnd(asr) - CRON_WINDOW_MS);
+    expect(fake.to(user.apns)).toHaveLength(2);
+    await sendDueReminders(env.DB, fake, windowEnd(asr));
+    expect(fake.to(user.apns).map((m) => m.payload.taskId)).toEqual([report, meeting, visit]);
   });
 
   it("removes devices APNs no longer accepts", async () => {

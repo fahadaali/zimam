@@ -1,7 +1,7 @@
-import { addDays, dayIn } from "../data/dates";
+import { addDays, dayIn, localDateTime } from "../data/dates";
 import { prayerInstants } from "../data/prayers";
 import { userOut } from "../data/rows";
-import type { Settings } from "../data/schemas";
+import { RELATIVE_REMINDER_MIN, type Settings } from "../data/schemas";
 import { isDeadToken, type PushEnvironment, type PushSender } from "./apns";
 
 /**
@@ -16,6 +16,9 @@ import { isDeadToken, type PushEnvironment, type PushSender } from "./apns";
  * (T, T + 14 days] that it knew about, which is every change made before T. changedAt
  * is when the reminder (and, for prayer times, its task) last changed, so a reminder
  * added from the web or an assistant after the device's last pull is pushed too.
+ *
+ * A task's own time does not notify by itself: «عند الموعد» is a relative reminder at 0
+ * (migrations/0018), so each person who has the task can keep or remove theirs.
  */
 
 const MINUTE = 60_000;
@@ -29,6 +32,11 @@ export const CRON_WINDOW_MS = 5 * MINUTE;
 const SENT_RETENTION_MS = 30 * DAY;
 /** APNs keeps trying an offline device this long after the reminder's time. */
 const DELIVERY_GRACE_S = 24 * 60 * 60;
+/**
+ * The hour a reminder relative to an all-day task counts from: «قبل يوم» is 09:00 the day before.
+ * `TaskTiming.allDayHour` in ZimamKit; keep the two in step.
+ */
+export const ALL_DAY_HOUR = "09:00";
 /** The app's notification category, which carries the «إنجاز» and «تأجيل ساعة» buttons. */
 const CATEGORY = "zimam.task";
 const APP_NAME = "زمام";
@@ -81,6 +89,22 @@ const NEEDS_PUSH = (user: string, changed: string) => `
   AND NOT EXISTS (SELECT 1 FROM devices d WHERE d.user_id = ${user} AND d.last_seen_at >= MAX(?3, ${changed}))`;
 
 const HAS_LOCATION = `(CASE WHEN json_valid(u.settings) THEN json_extract(u.settings, '$.location') END) IS NOT NULL`;
+
+interface RelativeRow {
+  source: string;
+  user_id: string;
+  offset_minutes: number;
+  changed_at: number;
+  task_id: string;
+  title: string;
+  project_id: string | null;
+  project_name: string | null;
+  due_date: string | null;
+  due_time: string | null;
+  due_prayer: Prayer | null;
+  due_prayer_offset: number;
+  settings: string;
+}
 
 interface PrayerRow {
   source: string;
@@ -169,50 +193,84 @@ export async function dueReminders(db: D1Database, from: number, to: number): Pr
     .bind(dayMin, dayMax, surelyCoveredSince)
     .all<PrayerRow>();
 
-  // A task anchored to a prayer notifies everyone who has it, as the app does on each device.
-  const anchoredTasks = await db
+  // Relative to the task's time: its clock time or its prayer on its day (09:00 for an all-day
+  // task), or its prayer every day when it has no day. They come up to a week before it.
+  const relativeReminders = await db
     .prepare(
-      `WITH anchored AS (
-         SELECT id, owner_id, project_id, title, due_date, due_prayer, due_prayer_offset, updated_at FROM tasks
-         WHERE due_prayer IS NOT NULL AND deleted_at IS NULL AND status <> 'done'
-           AND (due_date IS NULL OR due_date BETWEEN ?1 AND ?2)
-       ),
-       audience AS (
-         SELECT id AS task_id, owner_id AS user_id FROM anchored WHERE project_id IS NULL
-         UNION ALL
-         SELECT a.id, m.user_id FROM anchored a JOIN project_members m ON m.project_id = a.project_id
-       )
-       SELECT 'task-' || t.id AS source, x.user_id, t.due_prayer AS prayer, COALESCE(t.due_prayer_offset, 0) AS offset_minutes,
-              t.updated_at AS changed_at, t.id AS task_id, t.title, t.project_id, t.due_date,
+      `SELECT 'reminder-' || r.id AS source, r.user_id, COALESCE(r.offset_minutes, 0) AS offset_minutes,
+              MAX(r.updated_at, t.updated_at) AS changed_at, t.id AS task_id, t.title, t.project_id, t.due_date,
+              t.due_time, t.due_prayer, COALESCE(t.due_prayer_offset, 0) AS due_prayer_offset,
               p.name AS project_name, u.settings
-       FROM audience x
-       JOIN anchored t ON t.id = x.task_id
-       JOIN users u ON u.id = x.user_id
+       FROM reminders r
+       JOIN tasks t ON t.id = r.task_id
+       JOIN users u ON u.id = r.user_id
        LEFT JOIN projects p ON p.id = t.project_id
-       WHERE ${HAS_LOCATION}
-         AND ${NEEDS_PUSH("x.user_id", "t.updated_at")}`,
+       WHERE r.kind = 'relative' AND r.deleted_at IS NULL
+         AND t.deleted_at IS NULL AND t.status <> 'done'
+         AND (t.due_date BETWEEN ?1 AND ?4 OR (t.due_date IS NULL AND t.due_prayer IS NOT NULL))
+         AND ${NEEDS_PUSH("r.user_id", "MAX(r.updated_at, t.updated_at)")}`,
     )
-    .bind(dayMin, dayMax, surelyCoveredSince)
-    .all<PrayerRow>();
+    .bind(dayMin, dayMax, surelyCoveredSince, addDays(dayMax, Math.ceil(-RELATIVE_REMINDER_MIN / (24 * 60))))
+    .all<RelativeRow>();
 
   const times = new Map<string, ReturnType<typeof prayerInstants>>();
   const settingsOf = new Map<string, Settings>();
-  for (const row of [...prayerReminders.results, ...anchoredTasks.results]) {
+  const settingsFor = (row: { user_id: string; settings: string }) => {
     let settings = settingsOf.get(row.user_id);
     if (!settings) {
       settings = userOut({ settings: row.settings }).settings;
       settingsOf.set(row.user_id, settings);
     }
+    return settings;
+  };
+  const prayerTime = (userId: string, day: string, settings: Settings, prayer: Prayer) => {
+    const key = `${userId}|${day}`;
+    if (!times.has(key)) times.set(key, prayerInstants(day, settings));
+    return times.get(key)?.[prayer];
+  };
+
+  for (const row of prayerReminders.results) {
+    const settings = settingsFor(row);
     if (!settings.location) continue;
     const today = dayIn(settings.timeZone, new Date(to));
     const days = row.due_date ? [row.due_date] : [addDays(today, -1), today, addDays(today, 1)];
     for (const day of days) {
-      const key = `${row.user_id}|${day}`;
-      if (!times.has(key)) times.set(key, prayerInstants(day, settings));
-      const instant = times.get(key)?.[row.prayer];
+      const instant = prayerTime(row.user_id, day, settings, row.prayer);
       if (!instant) continue;
       // Whole seconds, like time reminders (adhan already rounds to the minute).
       const fireAt = Math.floor((instant.getTime() + row.offset_minutes * MINUTE) / 1000) * 1000;
+      if (fireAt <= from || fireAt > to) continue;
+      candidates.push({
+        userId: row.user_id,
+        taskId: row.task_id,
+        title: row.title,
+        projectId: row.project_id,
+        projectName: row.project_name,
+        fireAt,
+        source: `${row.source}@${day}`,
+        changedAt: row.changed_at,
+      });
+    }
+  }
+  for (const row of relativeReminders.results) {
+    const settings = settingsFor(row);
+    if (row.due_prayer && !settings.location) continue;
+    const today = dayIn(settings.timeZone, new Date(to));
+    // Without a day the task repeats at its prayer; a reminder a day before today's falls on yesterday's.
+    const ahead = Math.ceil(-row.offset_minutes / (24 * 60));
+    const days = row.due_date
+      ? [row.due_date]
+      : Array.from({ length: ahead + 3 }, (_, i) => addDays(today, i - 1));
+    for (const day of days) {
+      let base: number | undefined;
+      if (row.due_prayer) {
+        base = prayerTime(row.user_id, day, settings, row.due_prayer)?.getTime();
+        if (base !== undefined) base += row.due_prayer_offset * MINUTE;
+      } else {
+        base = Date.parse(localDateTime(day, row.due_time ?? ALL_DAY_HOUR, settings.timeZone));
+      }
+      if (base === undefined || Number.isNaN(base)) continue;
+      const fireAt = Math.floor((base + row.offset_minutes * MINUTE) / 1000) * 1000;
       if (fireAt <= from || fireAt > to) continue;
       candidates.push({
         userId: row.user_id,

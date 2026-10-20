@@ -32,14 +32,56 @@ extension Store {
     }
 
     /// Sets or clears the due day. The start day stays while it is still before the new due day.
+    /// A clock time needs a day, so clearing the day clears it; a prayer stays and repeats daily.
     func setDueDate(_ task: TaskItem, _ day: String?) {
         var start: String?
         if let current = task.startDate, let day, current < day { start = current }
-        guard task.dueDate != day || task.startDate != start else { return }
+        let time = day == nil ? nil : task.dueTime
+        guard task.dueDate != day || task.startDate != start || task.dueTime != time else { return }
         update(task) { item in
             item.dueDate = day
             item.startDate = start
+            item.dueTime = time
         }
+    }
+
+    // MARK: Time of day
+
+    /// Sets when in its day the task falls: all day, a clock time, or around a prayer, which
+    /// exclude each other. A clock time needs a day, so an undated task gets `today`. Going from
+    /// all day to a time adds «عند الموعد», as a time the user sets is one they want to be told of.
+    func setTime(_ task: TaskItem, _ mode: TaskTimeMode, today: String) {
+        let current = task.timeMode
+        guard current != mode else { return }
+        update(task) { item in
+            switch mode {
+            case .allDay:
+                item.dueTime = nil
+                item.duePrayer = nil
+                item.duePrayerOffset = nil
+            case .clock(let hhmm):
+                item.dueTime = hhmm
+                item.duePrayer = nil
+                item.duePrayerOffset = nil
+                if item.dueDate == nil { item.dueDate = today }
+            case .prayer(let prayer, let offset):
+                item.dueTime = nil
+                item.duePrayer = prayer
+                item.duePrayerOffset = offset
+            }
+        }
+        if current.isAllDay { ensureAtTimeReminder(task) }
+    }
+
+    /// Adds «عند الموعد» to a task with a time, unless it already has a reminder relative to it.
+    func ensureAtTimeReminder(_ task: TaskItem) {
+        guard !task.timeMode.isAllDay else { return }
+        let taskId = task.id
+        let relative = ReminderRecord.Kind.relative.rawValue
+        let descriptor = FetchDescriptor<ReminderItem>(
+            predicate: #Predicate { $0.taskId == taskId && $0.kindRaw == relative && !$0.pendingDelete })
+        guard (try? context.fetchCount(descriptor)) == 0 else { return }
+        addRelativeReminder(to: task.id, offsetMinutes: 0)
     }
 
     // MARK: The matrix

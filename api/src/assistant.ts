@@ -230,7 +230,16 @@ export class Assistant {
     if (!(await this.activeUser(userId))) return this.gone();
     const id = crypto.randomUUID();
     const data = { ...toTaskInput(parsed.data), id, updatedAt: Date.now() };
-    return this.write(userId, id, data);
+    const created = await this.write(userId, id, data);
+    // A task with a time gets «عند الموعد» for whoever added it, as in the app.
+    if (created.ok && (created.value.due?.time || created.value.prayer)) {
+      await new Mutator(this.db, new Access(this.db, userId)).apply({
+        op: "upsert",
+        entity: "reminder",
+        data: { id: crypto.randomUUID(), taskId: id, kind: "relative", offsetMinutes: 0, updatedAt: Date.now() },
+      });
+    }
+    return created;
   }
 
   async updateTask(userId: string, id: string, fields: TaskFields): Promise<Outcome<AssistantTask>> {

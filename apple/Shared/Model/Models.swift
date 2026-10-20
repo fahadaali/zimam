@@ -209,6 +209,11 @@ final class TaskItem {
 
     var isDone: Bool { status == .done }
 
+    /// All day, a clock time, or a prayer: what its relative reminders count from.
+    var timeMode: TaskTimeMode {
+        TaskTimeMode(dueTime: dueTime, prayer: duePrayer, offsetMinutes: duePrayerOffset)
+    }
+
     /// The days the task occupies on the calendar and the timeline; nil without a due day.
     var span: DaySpan? { DaySpan(startDate: startDate, dueDate: dueDate) }
 }

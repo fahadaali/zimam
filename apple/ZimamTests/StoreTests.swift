@@ -43,6 +43,64 @@ struct StoreTests {
         #expect(store.isAnchored(other))
     }
 
+    // MARK: Time of day (Store+Schedule.swift)
+
+    private func relativeReminders(_ task: TaskItem) -> [ReminderItem] {
+        let taskId = task.id
+        let kind = ReminderRecord.Kind.relative.rawValue
+        return (try? store.context.fetch(FetchDescriptor<ReminderItem>(
+            predicate: #Predicate { $0.taskId == taskId && $0.kindRaw == kind && !$0.pendingDelete }))) ?? []
+    }
+
+    @Test func aClockTimeUntiesThePrayerAndNeedsADay() {
+        let task = store.addTask(title: "زيارة", duePrayer: .asr, duePrayerOffset: -10)
+        store.setTime(task, .clock("15:00"), today: "2026-10-20")
+        #expect(task.dueTime == "15:00")
+        #expect(task.duePrayer == nil)
+        #expect(task.duePrayerOffset == nil)
+        #expect(task.dueDate == "2026-10-20")
+    }
+
+    @Test func aPrayerClearsTheClockTime() {
+        let task = store.addTask(title: "زيارة", dueDate: "2026-11-20", dueTime: "15:00")
+        store.setTime(task, .prayer(.maghrib, offsetMinutes: 5), today: "2026-10-20")
+        #expect(task.dueTime == nil)
+        #expect(task.timeMode == .prayer(.maghrib, offsetMinutes: 5))
+        #expect(task.dueDate == "2026-11-20")
+    }
+
+    @Test func clearingTheDayClearsTheClockTimeButKeepsThePrayer() {
+        let timed = store.addTask(title: "اجتماع", dueDate: "2026-10-20", dueTime: "15:00")
+        store.setDueDate(timed, nil)
+        #expect(timed.dueTime == nil)
+
+        let anchored = store.addTask(title: "ورد", dueDate: "2026-10-20", duePrayer: .fajr, duePrayerOffset: 0)
+        store.setDueDate(anchored, nil)
+        #expect(anchored.duePrayer == .fajr)
+    }
+
+    @Test func settingATimeAddsAtTheTimeOnce() {
+        let task = store.addTask(title: "اجتماع", dueDate: "2026-10-20")
+        store.setTime(task, .clock("15:00"), today: "2026-10-20")
+        #expect(relativeReminders(task).map(\.offsetMinutes) == [0])
+
+        // Moving between a clock time and a prayer keeps the reminders as they are.
+        store.setTime(task, .prayer(.asr, offsetMinutes: 0), today: "2026-10-20")
+        store.ensureAtTimeReminder(task)
+        #expect(relativeReminders(task).count == 1)
+
+        // Removed by the user, it does not come back until the task goes all day and back.
+        store.deleteReminder(relativeReminders(task)[0])
+        store.setTime(task, .clock("16:00"), today: "2026-10-20")
+        #expect(relativeReminders(task).isEmpty)
+    }
+
+    @Test func anAllDayTaskGetsNoAtTheTime() {
+        let task = store.addTask(title: "تسليم", dueDate: "2026-10-20")
+        store.ensureAtTimeReminder(task)
+        #expect(relativeReminders(task).isEmpty)
+    }
+
     // MARK: move(_:toProject:section:) (Store+Move.swift)
 
     @Test func moveTakesTheSubtasksAndSetsTheSection() throws {

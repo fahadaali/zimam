@@ -2,12 +2,13 @@ import SwiftData
 import SwiftUI
 import ZimamKit
 
-// MARK: Due date and prayer
+// MARK: Due date and time
 
+/// «الموعد»: the day, the start day of a task that spans days, and the time in the day (all
+/// day, a clock time, or a prayer, `TaskTimeRows`). The reminders follow in their own section,
+/// and most count from this time.
 struct TaskDueSection: View {
     @Environment(\.dateFormatterZimam) private var formatter
-    @Environment(SessionStore.self) private var session
-    @Environment(LocationProvider.self) private var location
 
     let task: TaskItem
     let store: Store
@@ -29,32 +30,6 @@ struct TaskDueSection: View {
         return (earliest ?? .distantPast)...
     }
 
-    private var hasPrayer: Binding<Bool> {
-        Binding(
-            get: { task.duePrayer != nil },
-            set: { on in
-                store.update(task) { item in
-                    item.duePrayer = on ? Prayer.asr : nil
-                    item.duePrayerOffset = on ? 0 : nil
-                }
-            }
-        )
-    }
-
-    private var prayerBinding: Binding<Prayer> {
-        Binding(
-            get: { task.duePrayer ?? Prayer.asr },
-            set: { prayer in store.update(task) { item in item.duePrayer = prayer } }
-        )
-    }
-
-    private var offsetBinding: Binding<Int> {
-        Binding(
-            get: { task.duePrayerOffset ?? 0 },
-            set: { offset in store.update(task) { item in item.duePrayerOffset = offset } }
-        )
-    }
-
     var body: some View {
         let dueDate = task.dueDate.flatMap { formatter.date(fromDay: $0) }
         Section("الموعد") {
@@ -66,31 +41,10 @@ struct TaskDueSection: View {
                     .foregroundStyle(ZimamColor.inkMuted)
                 TaskStartDateRows(task: task, store: store)
             }
-            Toggle("مرتبطة بوقت صلاة", isOn: hasPrayer)
-            if let prayer = task.duePrayer {
-                Picker("الصلاة", selection: prayerBinding) {
-                    ForEach(Prayer.allCases, id: \.self) { Text($0.arabicName).tag($0) }
-                }
-                Stepper(value: offsetBinding, in: -120...120, step: 5) {
-                    PrayerChip(text: PrayerPhrase.text(prayer, offsetMinutes: task.duePrayerOffset, locale: formatter.locale))
-                }
-                if let time = prayerTime(prayer, on: dueDate ?? Date()) {
-                    Text("الوقت المحسوب: \(formatter.time(time))")
-                        .font(ZimamType.caption)
-                        .foregroundStyle(ZimamColor.sand)
-                } else if location.coordinate == nil {
-                    Text("حدّد موقعك لحساب وقت الصلاة.")
-                        .font(ZimamType.caption)
-                        .foregroundStyle(ZimamColor.inkMuted)
-                    LocationRequestRows()
-                }
+            TaskTimeRows(mode: task.timeMode, day: task.dueDate) { mode in
+                store.setTime(task, mode, today: formatter.dayString(from: Date()))
             }
         }
-    }
-
-    private func prayerTime(_ prayer: Prayer, on day: Date) -> Date? {
-        guard let schedule = location.schedule(session.user?.settings) else { return nil }
-        return schedule.time(of: prayer, on: day.addingTimeInterval(12 * 3600), offsetMinutes: task.duePrayerOffset ?? 0)
     }
 
     private func dateBinding(_ current: Date) -> Binding<Date> {

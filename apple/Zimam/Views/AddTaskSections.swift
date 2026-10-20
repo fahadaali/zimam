@@ -131,7 +131,7 @@ struct AddTaskAssistantSection: View {
 
 // MARK: Due
 
-/// «الموعد», «تاريخ البداية», and the time a suggestion brought.
+/// «الموعد» and «تاريخ البداية»; the time in the day follows in `TaskTimeRows`.
 struct AddTaskDueSection: View {
     @Environment(\.dateFormatterZimam) private var formatter
 
@@ -139,10 +139,8 @@ struct AddTaskDueSection: View {
     @Binding var pickedDate: Date
     @Binding var hasStart: Bool
     @Binding var startDate: Date
-    @Binding var dueTime: String?
     /// The day before the due day, nil when unscheduled.
     let latestStart: Date?
-    let linkPrayer: Bool
 
     var body: some View {
         Section {
@@ -165,40 +163,6 @@ struct AddTaskDueSection: View {
                     Text(formatter.dual(startDate, withYear: true))
                         .font(ZimamType.caption)
                         .foregroundStyle(ZimamColor.inkMuted)
-                }
-            }
-            if let dueTime, due != .unscheduled, !linkPrayer,
-               let time = clockTime(dueTime, formatter: formatter) {
-                HStack(spacing: ZimamSpacing.space2) {
-                    Text("الوقت: \(time)")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("إزالة") { self.dueTime = nil }
-                        .buttonStyle(.zimamQuiet)
-                }
-            }
-        }
-    }
-}
-
-// MARK: Prayer
-
-/// «مرتبطة بوقت صلاة»: the prayer and the minutes before or after it.
-struct AddTaskPrayerSection: View {
-    @Environment(\.dateFormatterZimam) private var formatter
-
-    @Binding var linkPrayer: Bool
-    @Binding var prayer: Prayer
-    @Binding var offset: Int
-
-    var body: some View {
-        Section {
-            Toggle("مرتبطة بوقت صلاة", isOn: $linkPrayer)
-            if linkPrayer {
-                Picker("الصلاة", selection: $prayer) {
-                    ForEach(Prayer.allCases, id: \.self) { Text($0.arabicName).tag($0) }
-                }
-                Stepper(value: $offset, in: -120...120, step: 5) {
-                    PrayerChip(text: PrayerPhrase.text(prayer, offsetMinutes: offset, locale: formatter.locale))
                 }
             }
         }

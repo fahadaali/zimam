@@ -86,19 +86,65 @@ final class ReminderPlannerTests {
         #expect(plan([task], [reminder], schedule: nil).isEmpty)
     }
 
-    @Test func taskAnchoredToAPrayerFiresAtItsTime() {
+    @Test func aTaskTimeAloneDoesNotNotify() {
+        let anchored = PlannerTask(id: UUID(), title: "شراء الخبز", dueDay: "2026-10-14", duePrayer: .maghrib, duePrayerOffset: -10)
+        let timed = PlannerTask(id: UUID(), title: "اجتماع", dueDay: "2026-10-14", dueTime: "15:00")
+        #expect(plan([anchored, timed], [], schedule: schedule).isEmpty)
+    }
+
+    @Test func atTheTimeOfAPrayerAnchoredTask() {
         let task = PlannerTask(id: UUID(), title: "شراء الخبز", dueDay: "2026-10-14", duePrayer: .maghrib, duePrayerOffset: -10)
-        let result = plan([task], [], schedule: schedule)
+        let reminder = PlannerReminder(id: UUID(), taskId: task.id, kind: .relative, offsetMinutes: 0)
+        let result = plan([task], [reminder], schedule: schedule)
         #expect(result.count == 1)
-        #expect(result[0].id == "task-\(task.id.uuidString)@2026-10-14")
+        #expect(result[0].id == "reminder-\(reminder.id.uuidString)")
         #expect(result[0].date == schedule.time(of: .maghrib, on: noon("2026-10-14"), offsetMinutes: -10))
         #expect(result[0].body == "قبل المغرب بـ١٠ د")
     }
 
-    @Test func aReminderRepeatingTheTaskAnchorIsSentOnce() {
+    @Test func relativeToAClockTime() {
+        let task = PlannerTask(id: UUID(), title: "اجتماع", dueDay: "2026-10-14", dueTime: "15:00")
+        let atTime = PlannerReminder(id: UUID(), taskId: task.id, kind: .relative, offsetMinutes: 0)
+        let before = PlannerReminder(id: UUID(), taskId: task.id, kind: .relative, offsetMinutes: -15)
+        let result = plan([task], [atTime, before], schedule: nil)
+        let threePM = formatter.date(fromDay: "2026-10-14")!.addingTimeInterval(15 * 3600)
+        #expect(result.map(\.date) == [threePM.addingTimeInterval(-15 * 60), threePM])
+        #expect(result.map(\.body) == ["موعدها بعد ١٥ د", "حان موعدها"])
+    }
+
+    @Test func relativeToAnAllDayTaskCountsFromNine() {
+        let task = PlannerTask(id: UUID(), title: "تسليم التقرير", dueDay: "2026-10-15")
+        let dayBefore = PlannerReminder(id: UUID(), taskId: task.id, kind: .relative, offsetMinutes: -1440)
+        let result = plan([task], [dayBefore], schedule: nil)
+        #expect(result.count == 1)
+        #expect(result[0].date == formatter.date(fromDay: "2026-10-14")!.addingTimeInterval(9 * 3600))
+        #expect(result[0].body == "موعدها غداً")
+    }
+
+    @Test func relativeToAPrayerWithoutADayRepeatsDaily() {
+        let task = PlannerTask(id: UUID(), title: "ورد يومي", duePrayer: .asr, duePrayerOffset: 20)
+        let reminder = PlannerReminder(id: UUID(), taskId: task.id, kind: .relative, offsetMinutes: -5)
+        let result = plan([task], [reminder], schedule: schedule)
+        #expect(result.count == 14)
+        #expect(result.first?.date == schedule.time(of: .asr, on: now, offsetMinutes: 15))
+        #expect(result.first?.id == "reminder-\(reminder.id.uuidString)@2026-10-13")
+    }
+
+    @Test func relativeNeedsATimeToCountFrom() {
+        let undated = PlannerTask(id: UUID(), title: "بلا موعد")
+        let prayerWithoutPlace = PlannerTask(id: UUID(), title: "بعد العصر", dueDay: "2026-10-14", duePrayer: .asr)
+        let reminders = [
+            PlannerReminder(id: UUID(), taskId: undated.id, kind: .relative, offsetMinutes: 0),
+            PlannerReminder(id: UUID(), taskId: prayerWithoutPlace.id, kind: .relative, offsetMinutes: 0),
+        ]
+        #expect(plan([undated, prayerWithoutPlace], reminders, schedule: nil).isEmpty)
+    }
+
+    @Test func aReminderRepeatingTheTaskTimeIsSentOnce() {
         let task = PlannerTask(id: UUID(), title: "مراجعة", dueDay: "2026-10-14", duePrayer: .asr, duePrayerOffset: 20)
-        let reminder = PlannerReminder(id: UUID(), taskId: task.id, kind: .prayer, prayer: .asr, offsetMinutes: 20)
-        #expect(plan([task], [reminder], schedule: schedule).count == 1)
+        let atTime = PlannerReminder(id: UUID(), taskId: task.id, kind: .relative, offsetMinutes: 0)
+        let prayer = PlannerReminder(id: UUID(), taskId: task.id, kind: .prayer, prayer: .asr, offsetMinutes: 20)
+        #expect(plan([task], [atTime, prayer], schedule: schedule).count == 1)
     }
 
     @Test func keepsTheSoonestUpToTheLimit() {

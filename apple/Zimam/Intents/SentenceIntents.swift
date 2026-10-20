@@ -78,7 +78,8 @@ struct AddTaskFromSentenceIntent: AppIntent {
             descriptor.fetchLimit = 1
             if (try? context.fetch(descriptor).first) != nil { projectId = id }
         }
-        let task = Store(context: context, sync: LiveSync.engine).addTask(
+        let store = Store(context: context, sync: LiveSync.engine)
+        let task = store.addTask(
             title: record.title,
             projectId: projectId,
             dueDate: record.dueDate,
@@ -89,6 +90,7 @@ struct AddTaskFromSentenceIntent: AppIntent {
             dueTime: record.dueTime,
             tags: record.tags
         )
+        store.ensureAtTimeReminder(task)
         var message = Self.confirmation(for: task, reading: reading, formatter: formatter)
         if let spoken = reading.suggestion.place {
             message += " " + (await Self.addPlaceReminder(spoken, to: task, reading: reading, formatter: formatter))

@@ -82,9 +82,10 @@ struct CalendarEventSheet: View {
 
     private func convert() {
         guard !converted, let fields = item.event.taskFields(timeZone: formatter.timeZone) else { return }
-        let task = Store(context: context, sync: sync)
-            .addTask(title: fields.title, dueDate: fields.dueDate, notes: fields.notes, dueTime: fields.dueTime,
-                     startDate: fields.startDate)
+        let store = Store(context: context, sync: sync)
+        let task = store.addTask(title: fields.title, dueDate: fields.dueDate, notes: fields.notes, dueTime: fields.dueTime,
+                                 startDate: fields.startDate)
+        store.ensureAtTimeReminder(task)
         refs.remember(tasks: [item.event.importKey(timeZone: formatter.timeZone): task.id], projects: [:])
         withAnimation(.zimam(reduceMotion: reduceMotion)) { converted = true }
         AccessibilityNotification.Announcement("أُضيفت المهمة «\(fields.title)»").post()

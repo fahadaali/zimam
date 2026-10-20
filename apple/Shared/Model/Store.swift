@@ -151,6 +151,17 @@ struct Store {
         return reminder
     }
 
+    /// A reminder `offsetMinutes` from the task's own time (negative is before): it moves with
+    /// the task's day, clock time or prayer (`ReminderPlanner`).
+    @discardableResult
+    func addRelativeReminder(to taskId: UUID, offsetMinutes: Int) -> ReminderItem {
+        let record = ReminderRecord(taskId: taskId, kind: .relative, offsetMinutes: offsetMinutes)
+        let reminder = ReminderItem(record, dirty: true)
+        context.insert(reminder)
+        commit()
+        return reminder
+    }
+
     /// A reminder on arriving at or leaving a place. The place fires on iPhone and iPad only
     /// (`NotificationScheduler`, `PlaceMonitor`). With `at` it fires once, at whichever comes
     /// first; the server pushes that time if no device took it back (`markFired`).
