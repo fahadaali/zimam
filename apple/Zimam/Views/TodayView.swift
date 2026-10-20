@@ -68,6 +68,12 @@ struct TodayView: View {
         .overlay(alignment: .bottomTrailing) { AddTaskButton { showingAdd = true } }
         .sheet(isPresented: $showingAdd) { AddTaskView(due: .today) }
         .sheet(isPresented: $showingPrayers) { PrayerTimesSheet() }
+        // «أوقات الصلاة» from the prayer widget (zimam://prayer).
+        .onChange(of: PlaceOpener.shared.pending, initial: true) { _, link in
+            guard link == .prayer else { return }
+            PlaceOpener.shared.pending = nil
+            showingPrayers = true
+        }
         .sheet(item: $openEvent) { item in CalendarEventSheet(item: item) }
         .toolbar { ToolbarItem { AccountMenu() } }
     }

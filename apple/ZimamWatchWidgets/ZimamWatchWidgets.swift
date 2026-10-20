@@ -6,6 +6,38 @@ import ZimamKit
 struct ZimamWatchWidgetBundle: WidgetBundle {
     var body: some Widget {
         WatchGlanceWidget()
+        WatchPrayerWidget()
+    }
+}
+
+/// The next prayer's countdown, and for half an hour after the adhan the time since it, computed
+/// on the watch from the place the iPhone sent (`WatchPrayerStore`). The views are the iPhone
+/// Lock Screen's (Glance/PrayerGlanceViews.swift).
+struct WatchPrayerWidget: Widget {
+    static let kind = "app.zimam.watch.prayer"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: Self.kind, provider: WatchPrayerProvider()) { entry in
+            PrayerAccessoryView(entry: entry)
+        }
+        .configurationDisplayName("الصلاة القادمة")
+        .description("المتبقي على الصلاة القادمة، وما مضى على الأذان.")
+        .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline, .accessoryCorner])
+    }
+}
+
+struct WatchPrayerProvider: TimelineProvider {
+    func placeholder(in context: Context) -> PrayerEntry {
+        .placeholder
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (PrayerEntry) -> Void) {
+        let place = WatchPrayerStore.read()
+        completion(context.isPreview && place == nil ? .placeholder : PrayerEntry(date: Date(), place: place))
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<PrayerEntry>) -> Void) {
+        completion(PrayerEntry.timeline(place: WatchPrayerStore.read()))
     }
 }
 

@@ -47,6 +47,10 @@ struct ZimamApp: App {
         }
         location.onChange = { [weak notifications, session, weak location] in
             notifications?.reschedule()
+            #if os(iOS)
+            // The watch's prayer complications follow the place.
+            WatchLink.shared.sendSession()
+            #endif
             let coordinate = location?.coordinate
             Task { await session.sharePlace(latitude: coordinate?.latitude, longitude: coordinate?.longitude) }
         }

@@ -71,6 +71,15 @@ nonisolated enum SharedSettings {
                               timeZone: .current)
     }
 
+    /// The place, method and madhab for the prayer widgets and the watch, or nil before the first location.
+    static func prayerPlace() -> PrayerPlace? {
+        guard let coordinate = coordinate() else { return nil }
+        let settings = user()?.settings
+        return PrayerPlace(latitude: coordinate.latitude, longitude: coordinate.longitude,
+                           method: settings?.prayerMethod ?? .ummAlQura, madhab: settings?.asrMadhab ?? .shafi,
+                           name: placeName())
+    }
+
     /// Copies what earlier versions kept in the app's own defaults into the App Group, once.
     /// Called by the app at launch, before anything reads these settings.
     static func migrateFromStandardDefaults() {

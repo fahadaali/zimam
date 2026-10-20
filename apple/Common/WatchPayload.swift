@@ -9,6 +9,8 @@ nonisolated enum WatchPayload {
     static let token = "token"
     /// The user's primary calendar, "hijri" or "gregorian".
     static let calendar = "calendar"
+    /// The place and calculation for prayer times (`PrayerPlace` as JSON), or absent before the first location.
+    static let prayerPlace = "prayerPlace"
     /// When it was sent, so each send counts as a change and is delivered.
     static let sentAt = "sentAt"
     /// Sent by the watch, as a message, to ask the phone for the session.

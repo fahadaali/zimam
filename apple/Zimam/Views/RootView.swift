@@ -47,6 +47,9 @@ struct RootView: View {
                     .onChange(of: session.user?.settings) { _, _ in
                         notifications.reschedule()
                         ZimamShared.reloadWidgets()
+                        #if os(iOS)
+                        WatchLink.shared.sendSession()
+                        #endif
                     }
             } else {
                 SignInView()

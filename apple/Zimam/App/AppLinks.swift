@@ -14,7 +14,7 @@ enum AppLinks {
         switch link {
         case .task(let id):
             TaskOpener.shared.pending = id
-        case .today, .calendar, .day:
+        case .today, .calendar, .day, .prayer:
             PlaceOpener.shared.pending = link
         }
         return true
@@ -22,7 +22,8 @@ enum AppLinks {
 }
 
 /// The place a widget link asked for. `MainView` switches to «اليوم» or «التقويم» and clears it,
-/// except for a day, which `CalendarView` selects and then clears.
+/// except for a day, which `CalendarView` selects and then clears, and «أوقات الصلاة», which
+/// `TodayView` opens and then clears.
 @MainActor
 @Observable
 final class PlaceOpener {
