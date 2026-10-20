@@ -334,6 +334,8 @@ public struct User: Codable, Equatable, Sendable {
     public var name: String?
     public var email: String?
     public var settings: Settings
+    /// When the photo last changed (milliseconds), or nil without one (`APIClient.avatar()`).
+    public var avatarVersion: Milliseconds?
 
     public struct Settings: Codable, Equatable, Sendable {
         public var calendar: CalendarKind
@@ -344,6 +346,10 @@ public struct User: Codable, Equatable, Sendable {
         public var timeZone: String?
         /// Where the server computes prayer times for agendas. Set only when the user shares a location.
         public var location: Coordinate?
+        /// Asr by the majority or the Hanafi madhab; nil (an older server or account) is the majority.
+        public var asrMadhab: AsrMadhab?
+        /// Adhan and iqama alerts per prayer; nil has none. They sync, and each device schedules its own.
+        public var prayerAlerts: PrayerAlertSettings?
 
         public struct Coordinate: Codable, Equatable, Sendable {
             public var latitude: Double
@@ -356,14 +362,19 @@ public struct User: Codable, Equatable, Sendable {
         }
 
         public init(calendar: CalendarKind = .hijri, prayerMethod: PrayerMethod = .ummAlQura, weekStart: Int = 0,
-                    timeZone: String? = nil, location: Coordinate? = nil) {
+                    timeZone: String? = nil, location: Coordinate? = nil, asrMadhab: AsrMadhab? = nil,
+                    prayerAlerts: PrayerAlertSettings? = nil) {
             self.calendar = calendar
             self.prayerMethod = prayerMethod
             self.weekStart = weekStart
             self.timeZone = timeZone
             self.location = location
+            self.asrMadhab = asrMadhab
+            self.prayerAlerts = prayerAlerts
         }
-        private enum CodingKeys: String, CodingKey { case calendar, prayerMethod, weekStart, timeZone, location }
+        private enum CodingKeys: String, CodingKey {
+            case calendar, prayerMethod, weekStart, timeZone, location, asrMadhab, prayerAlerts
+        }
 
         /// Sends `location: null` when there is none, so turning sharing off clears it on the server.
         public func encode(to encoder: Encoder) throws {
@@ -373,6 +384,8 @@ public struct User: Codable, Equatable, Sendable {
             try c.encode(weekStart, forKey: .weekStart)
             try c.encodeIfPresent(timeZone, forKey: .timeZone)
             try c.encode(location, forKey: .location)
+            try c.encodeIfPresent(asrMadhab, forKey: .asrMadhab)
+            try c.encodeIfPresent(prayerAlerts, forKey: .prayerAlerts)
         }
     }
 }

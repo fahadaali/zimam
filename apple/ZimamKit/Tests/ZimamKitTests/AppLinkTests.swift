@@ -5,7 +5,7 @@ import Testing
 struct AppLinkTests {
     @Test func linksRoundTrip() {
         let id = UUID()
-        let links: [AppLink] = [.today, .calendar, .day("2026-10-15"), .task(id)]
+        let links: [AppLink] = [.today, .calendar, .day("2026-10-15"), .task(id), .prayer]
         for link in links {
             #expect(AppLink(url: link.url) == link)
         }

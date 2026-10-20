@@ -124,6 +124,15 @@ final class SessionStore {
             let response = try await api.signInWithGoogle(
                 idToken: idToken, nonce: nonce, name: result.user.profile?.name, device: Self.deviceName)
             begin(response)
+            // The Google account's photo becomes the account's, once, if it has none yet. The
+            // device downloads it; the server never fetches outside links.
+            if response.user.avatarVersion == nil, result.user.profile?.hasImage == true,
+               let url = result.user.profile?.imageURL(withDimension: UInt(AvatarImage.side)) {
+                Task {
+                    guard let (data, _) = try? await URLSession.shared.data(from: url) else { return }
+                    _ = await AvatarStore.shared.upload(data, session: self)
+                }
+            }
         } catch {
             errorMessage = "تعذّر الاتصال بزمام. تحقّق من الإنترنت وحاول مرة أخرى."
         }
@@ -186,6 +195,17 @@ final class SessionStore {
         }
     }
 
+    /// Saves the account's name (`PATCH /v1/me`); an empty name clears it. False if the server
+    /// could not be reached, and the name stays as it was.
+    func updateName(_ name: String) async -> Bool {
+        do {
+            setUser(try await api.updateMe(name: name))
+            return true
+        } catch {
+            return false
+        }
+    }
+
     /// Whether the user chose to keep an approximate location on the server (off by default).
     nonisolated static let shareLocationKey = "location.shareWithServer"
 
@@ -236,6 +256,7 @@ final class SessionStore {
         Keychain.delete(Self.tokenAccount)
         // Attachment lists and files opened under this account (TaskAttachmentsSection.swift).
         AttachmentCache.clearAll()
+        AvatarStore.shared.clear()
         user = nil
         Self.saveCachedUser(nil)
         isSignedIn = false

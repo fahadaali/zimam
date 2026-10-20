@@ -11,6 +11,8 @@ struct ZimamWidgetBundle: WidgetBundle {
         WeekWidget()
         UpcomingWidget()
         MatrixWidget()
+        // The next prayer's countdown, on the home screen and the Lock Screen (PrayerWidget.swift).
+        PrayerWidget()
         #if os(iOS)
         // The Lock Screen (LockScreenWidget.swift) and «المهمة الجارية» (FocusLiveActivity.swift).
         LockScreenWidget()

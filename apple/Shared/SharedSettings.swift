@@ -8,6 +8,8 @@ nonisolated enum SharedSettings {
     private static let userKey = "session.user"
     private static let latitudeKey = "location.latitude"
     private static let longitudeKey = "location.longitude"
+    private static let placeNameKey = "location.name"
+    private static let manualKey = "location.manual"
 
     struct Coordinate: Equatable {
         let latitude: Double
@@ -36,16 +38,46 @@ nonisolated enum SharedSettings {
         return Coordinate(latitude: latitude, longitude: longitude)
     }
 
-    static func saveCoordinate(_ coordinate: Coordinate) {
-        ZimamShared.defaults.set(coordinate.latitude, forKey: latitudeKey)
-        ZimamShared.defaults.set(coordinate.longitude, forKey: longitudeKey)
+    /// Saves the place with its name («الرياض»), if known. `manual` is a place picked on the map,
+    /// which the device's location no longer moves.
+    static func saveCoordinate(_ coordinate: Coordinate, name: String? = nil, manual: Bool = false) {
+        let defaults = ZimamShared.defaults
+        defaults.set(coordinate.latitude, forKey: latitudeKey)
+        defaults.set(coordinate.longitude, forKey: longitudeKey)
+        defaults.set(manual, forKey: manualKey)
+        if let name { defaults.set(name, forKey: placeNameKey) } else { defaults.removeObject(forKey: placeNameKey) }
     }
 
-    /// Prayer times for the saved place with the user's method, or nil before the first location.
+    /// The saved place's name, once known.
+    static func placeName() -> String? {
+        ZimamShared.defaults.string(forKey: placeNameKey)
+    }
+
+    static func savePlaceName(_ name: String?) {
+        if let name { ZimamShared.defaults.set(name, forKey: placeNameKey) } else { ZimamShared.defaults.removeObject(forKey: placeNameKey) }
+    }
+
+    /// True when the place was picked on the map rather than read from the device.
+    static func isManualPlace() -> Bool {
+        ZimamShared.defaults.bool(forKey: manualKey)
+    }
+
+    /// Prayer times for the saved place with the user's method and madhab, or nil before the first location.
     static func prayerSchedule() -> PrayerSchedule? {
         guard let coordinate = coordinate() else { return nil }
+        let settings = user()?.settings
         return PrayerSchedule(latitude: coordinate.latitude, longitude: coordinate.longitude,
-                              method: user()?.settings.prayerMethod ?? .ummAlQura, timeZone: .current)
+                              method: settings?.prayerMethod ?? .ummAlQura, madhab: settings?.asrMadhab ?? .shafi,
+                              timeZone: .current)
+    }
+
+    /// The place, method and madhab for the prayer widgets and the watch, or nil before the first location.
+    static func prayerPlace() -> PrayerPlace? {
+        guard let coordinate = coordinate() else { return nil }
+        let settings = user()?.settings
+        return PrayerPlace(latitude: coordinate.latitude, longitude: coordinate.longitude,
+                           method: settings?.prayerMethod ?? .ummAlQura, madhab: settings?.asrMadhab ?? .shafi,
+                           name: placeName())
     }
 
     /// Copies what earlier versions kept in the app's own defaults into the App Group, once.

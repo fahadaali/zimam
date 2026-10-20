@@ -272,6 +272,14 @@ describe("Reminder pushes", () => {
     expect(isCovered([{ last_seen_at: 0 }, { last_seen_at: fireAt - DAY }], fireAt, fireAt - 2 * DAY)).toBe(true);
   });
 
+  it("puts Hanafi Asr later than the majority's", () => {
+    const settings = { ...DEFAULT_SETTINGS, location: { latitude: 24.7, longitude: 46.7 } };
+    const shafi = prayerInstants("2027-03-20", settings)!;
+    const hanafi = prayerInstants("2027-03-20", { ...settings, asrMadhab: "hanafi" })!;
+    expect(hanafi.asr.getTime()).toBeGreaterThan(shafi.asr.getTime() + 30 * MINUTE);
+    expect(hanafi.dhuhr.getTime()).toBe(shafi.dhuhr.getTime());
+  });
+
   it("times prayer reminders from the user's location and time zone", async () => {
     const riyadh = { latitude: 24.7, longitude: 46.7 };
     const day = "2027-03-20";

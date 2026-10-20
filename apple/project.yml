@@ -156,6 +156,12 @@ targets:
         NSCalendarsFullAccessUsageDescription: يقرأ زمام أحداث التقاويم التي تختارها حين تفعّل «إظهار أحداث التقويم» أو تطلب استيرادها. تبقى الأحداث على جهازك، ولا يُضاف منها إلى حسابك على زمام إلا ما تحوّله إلى مهمة أو تستورده. لا يغيّر زمام التقويم ولا يحذف منه شيئاً.
         # «المهمة الجارية» (Shared/LiveActivity, ZimamWidgets/FocusLiveActivity.swift), iPhone only.
         NSSupportsLiveActivities: true
+        # The system wakes the app now and then to renew the notification window, so the adhan and
+        # iqama alerts (two days ahead) keep coming when the app stays closed (App/BackgroundRefresh.swift).
+        BGTaskSchedulerPermittedIdentifiers:
+          - app.zimam.ios.refresh
+        UIBackgroundModes:
+          - fetch
         # «إملاء» in the add screen (Zimam/App/SpeechDictation.swift): speech to text, on the device
         # when it supports Arabic, otherwise by Apple. The text, not the audio, goes to the assistant.
         NSMicrophoneUsageDescription: يستمع زمام إلى الميكروفون حين تضغط «إملاء» فقط، لتقول المهمة بصوتك بدل كتابتها. يتوقف الاستماع حين تنتهي، ولا يحفظ زمام الصوت.

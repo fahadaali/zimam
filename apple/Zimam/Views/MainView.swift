@@ -226,8 +226,8 @@ struct MainView: View {
     /// Goes to «اليوم» or «التقويم» for a widget link. A day stays pending until `CalendarView`
     /// selects it.
     private func open(place link: AppLink) {
-        let item: SidebarItem = link == .today ? .today : .calendar
-        if PlaceOpener.shared.pendingDay == nil {
+        let item: SidebarItem = link == .today || link == .prayer ? .today : .calendar
+        if PlaceOpener.shared.pendingDay == nil, link != .prayer {
             PlaceOpener.shared.pending = nil
         }
         if isRegular {

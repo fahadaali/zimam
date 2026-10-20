@@ -18,13 +18,19 @@ struct RootView: View {
                         await notifications.prepare()
                         PushRegistration.shared.register()
                         await session.loadUser()
+                        await AvatarStore.shared.refresh(session: session)
                         await session.sharePlace(latitude: location.coordinate?.latitude,
                                                  longitude: location.coordinate?.longitude)
                         await sync.sync()
                     }
                     .onChange(of: scenePhase) { _, phase in
                         // Each return also moves the rolling notification window forward.
-                        if phase == .active { Task { await sync.sync() } }
+                        if phase == .active {
+                            notifications.reschedule()
+                            Task { await sync.sync() }
+                        }
+                        // Leaving: ask the system to wake the app to renew the window while it is closed.
+                        if phase == .background { BackgroundRefresh.schedule() }
                     }
                     // Realtime only while the app is in use; the pull on return catches up.
                     .onChange(of: scenePhase, initial: true) { _, phase in
@@ -38,8 +44,17 @@ struct RootView: View {
                     .onDisappear { sync.stopRealtime() }
                     // Shared projects' members are kept in memory for the signed-in account only.
                     .onDisappear { ProjectMembers.shared.clear() }
-                    .onChange(of: session.user?.settings.prayerMethod) { _, _ in
+                    // A photo changed on another device.
+                    .onChange(of: session.user?.avatarVersion) { _, _ in
+                        Task { await AvatarStore.shared.refresh(session: session) }
+                    }
+                    // The method, the madhab and the alerts move the prayer alerts and the widgets.
+                    .onChange(of: session.user?.settings) { _, _ in
                         notifications.reschedule()
+                        ZimamShared.reloadWidgets()
+                        #if os(iOS)
+                        WatchLink.shared.sendSession()
+                        #endif
                     }
             } else {
                 SignInView()

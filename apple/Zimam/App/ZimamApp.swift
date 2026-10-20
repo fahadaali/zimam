@@ -47,6 +47,10 @@ struct ZimamApp: App {
         }
         location.onChange = { [weak notifications, session, weak location] in
             notifications?.reschedule()
+            #if os(iOS)
+            // The watch's prayer complications follow the place.
+            WatchLink.shared.sendSession()
+            #endif
             let coordinate = location?.coordinate
             Task { await session.sharePlace(latitude: coordinate?.latitude, longitude: coordinate?.longitude) }
         }
@@ -54,6 +58,8 @@ struct ZimamApp: App {
         PushRegistration.shared.api = session.api
         // Siri and Shortcuts run their intents in this process; their edits sync through the same engine.
         LiveSync.engine = sync
+        // The system's background wakes renew the notification window (adhan and iqama alerts).
+        BackgroundRefresh.scheduler = notifications
         #if os(iOS)
         // Hands the session to the Apple Watch app.
         WatchLink.shared.start()
@@ -108,6 +114,11 @@ struct ZimamApp: App {
             }
         }
         .modelContainer(container)
+        #if os(iOS)
+        .backgroundTask(.appRefresh(BackgroundRefresh.identifier)) {
+            await BackgroundRefresh.run()
+        }
+        #endif
         #if os(macOS)
         // «مهمة جديدة» (⌘N) and the «المهام» menu (AppNavigation.swift).
         .commands { ZimamCommands() }
@@ -121,6 +132,8 @@ struct ZimamApp: App {
                 .environment(sync)
                 .environment(location)
                 .environment(notifications)
+                // The subscription page (Settings/SettingsView.swift) reads it here too.
+                .environment(subscriptions)
         }
         .modelContainer(container)
         #endif

@@ -200,8 +200,7 @@ private struct DueSection: View {
     }
 
     private func prayerTime(_ prayer: Prayer, on day: Date) -> Date? {
-        let method = session.user?.settings.prayerMethod ?? .ummAlQura
-        guard let schedule = location.schedule(method: method) else { return nil }
+        guard let schedule = location.schedule(session.user?.settings) else { return nil }
         return schedule.time(of: prayer, on: day.addingTimeInterval(12 * 3600), offsetMinutes: task.duePrayerOffset ?? 0)
     }
 

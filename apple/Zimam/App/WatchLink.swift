@@ -4,9 +4,10 @@ import os
 import WatchConnectivity
 import ZimamKit
 
-/// Hands the session to the Apple Watch app, which talks to the API itself.
-/// The token travels over WatchConnectivity (encrypted between the paired devices)
-/// on launch, after sign-in and sign-out, and when the watch asks for it.
+/// Hands the session to the Apple Watch app, which talks to the API itself, with the place for
+/// prayer times. They travel over WatchConnectivity (encrypted between the paired devices)
+/// on launch, after sign-in and sign-out, when the place or the prayer settings change, and when
+/// the watch asks for them.
 /// WatchConnectivity calls the delegate on its own queue, so this is not tied to the main actor
 /// (with the main actor by default, a call from that queue would stop the app). It keeps no state.
 nonisolated final class WatchLink: NSObject, WCSessionDelegate, Sendable {
@@ -39,6 +40,10 @@ nonisolated final class WatchLink: NSObject, WCSessionDelegate, Sendable {
         ]
         if let calendar = SharedSettings.user()?.settings.calendar {
             payload[WatchPayload.calendar] = calendar.rawValue
+        }
+        // The watch's prayer complications compute the times themselves from this.
+        if let place = SharedSettings.prayerPlace(), let data = try? JSONEncoder().encode(place) {
+            payload[WatchPayload.prayerPlace] = data
         }
         return payload
     }

@@ -35,3 +35,23 @@ final class PrayerTests {
         #expect(afterIsha.time > day)
     }
 }
+
+final class PrayerMadhabTests {
+    let riyadh = TimeZone(identifier: "Asia/Riyadh")!
+    let day = Date(timeIntervalSince1970: 1_791_882_000) // 2026-10-13 12:00 Riyadh
+
+    @Test func hanafiAsrIsLaterAndTheRestStay() throws {
+        let shafi = PrayerSchedule(latitude: 24.7136, longitude: 46.6753, timeZone: riyadh).times(on: day)
+        let hanafi = PrayerSchedule(latitude: 24.7136, longitude: 46.6753, madhab: .hanafi, timeZone: riyadh).times(on: day)
+        #expect(hanafi[.asr]!.timeIntervalSince(shafi[.asr]!) > 30 * 60)
+        #expect(hanafi[.dhuhr] == shafi[.dhuhr])
+        #expect(hanafi[.maghrib] == shafi[.maghrib])
+    }
+
+    @Test func sunriseFallsBetweenFajrAndDhuhr() throws {
+        let schedule = PrayerSchedule(latitude: 24.7136, longitude: 46.6753, timeZone: riyadh)
+        let times = schedule.times(on: day)
+        let sunrise = try #require(schedule.sunrise(on: day))
+        #expect(sunrise > times[.fajr]! && sunrise < times[.dhuhr]!)
+    }
+}

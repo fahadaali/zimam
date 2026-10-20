@@ -8,7 +8,9 @@ struct LocationRequestRows: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        Button(location.coordinate == nil ? "استعمال موقعي الحالي" : "تحديث موقعي", systemImage: "location") {
+        // After a place picked on the map, this goes back to the device's location.
+        Button(location.coordinate == nil || location.isManual ? "استعمال موقعي الحالي" : "تحديث موقعي",
+               systemImage: "location") {
             location.requestLocation()
         }
         .disabled(location.isLocating)

@@ -51,10 +51,28 @@ struct CalendarView: View {
                     MoveTaskSheet(task: task, kind: kind) { day in reschedule([task.id], to: day) }
                 }
             }
+            #if os(iOS)
+            .navigationTitle(isRegular ? "" : "التقويم")
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button("اليوم") { selectedDay = today }
                         .accessibilityHint("يعود إلى اليوم في التقويم")
+                }
+                if !isRegular {
+                    // The iPhone's «هجري / ميلادي», out of the header to give the grid room.
+                    ToolbarItem(placement: .primaryAction) {
+                        Menu {
+                            Picker("التقويم", selection: kindBinding) {
+                                Text("هجري").tag(CalendarKind.hijri)
+                                Text("ميلادي").tag(CalendarKind.gregorian)
+                            }
+                        } label: {
+                            Text(kind == .hijri ? "هجري" : "ميلادي")
+                        }
+                        .accessibilityLabel("التقويم المعروض")
+                    }
                 }
                 ToolbarItem(placement: .primaryAction) {
                     CalendarEventsMenu(showingSettings: $showingEventSettings)
@@ -144,25 +162,62 @@ struct CalendarView: View {
         }
     }
 
+    /// iPad and Mac: the large title, both switches side by side, and the period with its steps.
+    /// iPhone: the title is the navigation bar's, the calendar switch is in the toolbar, and the
+    /// period sits between its steps over a full-width «شهر / أسبوع», so the grid starts higher.
+    @ViewBuilder
     private var header: some View {
-        VStack(alignment: .leading, spacing: ZimamSpacing.space3) {
-            ScreenHeader(title: "التقويم")
-            HStack(spacing: ZimamSpacing.space2) {
-                ChoiceBar(label: "العرض", options: [(Mode.month, "شهر"), (Mode.week, "أسبوع")], selection: $mode)
-                ChoiceBar(label: "التقويم", options: [(CalendarKind.hijri, "هجري"), (CalendarKind.gregorian, "ميلادي")],
-                          selection: kindBinding)
+        if isRegular {
+            VStack(alignment: .leading, spacing: ZimamSpacing.space3) {
+                ScreenHeader(title: "التقويم")
+                HStack(spacing: ZimamSpacing.space2) {
+                    ChoiceBar(label: "العرض", options: [(Mode.month, "شهر"), (Mode.week, "أسبوع")], selection: $mode)
+                    ChoiceBar(label: "التقويم", options: [(CalendarKind.hijri, "هجري"), (CalendarKind.gregorian, "ميلادي")],
+                              selection: kindBinding)
+                }
+                HStack(spacing: ZimamSpacing.space1) {
+                    Text(periodTitle)
+                        .font(ZimamType.headline)
+                        .foregroundStyle(ZimamColor.ink)
+                        .lineSpacing(ZimamType.headlineLineSpacing)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityAddTraits(.isHeader)
+                    stepButton(-1)
+                    stepButton(1)
+                }
             }
-            HStack(spacing: ZimamSpacing.space1) {
-                Text(periodTitle)
-                    .font(ZimamType.headline)
-                    .foregroundStyle(ZimamColor.ink)
-                    .lineSpacing(ZimamType.headlineLineSpacing)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            VStack(spacing: ZimamSpacing.space3) {
+                HStack(spacing: ZimamSpacing.space1) {
+                    stepButton(-1)
+                    VStack(spacing: 0) {
+                        Text(periodParts.primary)
+                            .font(ZimamType.headline)
+                            .foregroundStyle(ZimamColor.ink)
+                        if let secondary = periodParts.secondary {
+                            Text(secondary)
+                                .font(ZimamType.caption)
+                                .foregroundStyle(ZimamColor.inkMuted)
+                        }
+                    }
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityElement(children: .combine)
                     .accessibilityAddTraits(.isHeader)
-                stepButton(-1)
-                stepButton(1)
+                    stepButton(1)
+                }
+                ChoiceBar(label: "العرض", options: [(Mode.month, "شهر"), (Mode.week, "أسبوع")], selection: $mode)
             }
+            .padding(.top, ZimamSpacing.space2)
         }
+    }
+
+    /// The period in the grid's calendar, and in the other one under it: «جمادى الأولى ١٤٤٨هـ»
+    /// over «أكتوبر – نوفمبر ٢٠٢٦م».
+    private var periodParts: (primary: String, secondary: String?) {
+        let parts = periodTitle.components(separatedBy: "، ")
+        guard parts.count > 1 else { return (periodTitle, nil) }
+        return (parts[0], parts.dropFirst().joined(separator: "، "))
     }
 
     private func monthGrid(_ byDay: [String: [TaskItem]], spans: [SpanItem], events: [ShownEvent]) -> some View {
@@ -266,7 +321,7 @@ struct CalendarView: View {
     private func tasksByDay() -> (byDay: [String: [TaskItem]], spans: [SpanItem]) {
         let visible = mode == .month ? grid.monthDays(containing: selectedNoon) : grid.weekDays(containing: selectedNoon)
         guard let first = visible.first?.day, let last = visible.last?.day else { return ([:], []) }
-        let schedule = location.schedule(method: session.user?.settings.prayerMethod ?? .ummAlQura)
+        let schedule = location.schedule(session.user?.settings)
         var result: [String: [TaskItem]] = [:]
         var spans: [SpanItem] = []
         for task in tasks where task.parentId == nil && (!task.isDone || lingering.contains(task.id)) {

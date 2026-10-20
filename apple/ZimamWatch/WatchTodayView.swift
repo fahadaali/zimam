@@ -1,8 +1,9 @@
 import SwiftUI
 import ZimamKit
 
-/// The watch shows today only: the dual date, today's open tasks (tap to complete),
-/// and a field to add a task by dictation or typing, read by the assistant when online.
+/// The watch shows today only: the next prayer with its countdown (from the place the iPhone
+/// sent), the dual date, today's open tasks (tap to complete), and a field to add a task by
+/// dictation or typing, read by the assistant when online.
 struct WatchTodayView: View {
     @Environment(WatchModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
@@ -14,6 +15,11 @@ struct WatchTodayView: View {
     var body: some View {
         NavigationStack {
             List {
+                if let place = WatchPrayerStore.read() {
+                    Section {
+                        WatchPrayerRow(schedule: place.schedule)
+                    }
+                }
                 Section {
                     if !model.isSignedIn {
                         WatchNote(text: "افتح زمام على الآيفون وسجّل الدخول، ثم عُد إلى هنا.")
@@ -66,6 +72,37 @@ struct WatchTodayView: View {
         let title = newTitle
         newTitle = ""
         Task { await model.add(title: title) }
+    }
+}
+
+/// «المتبقي على العصر ١:١٢:٠٥», or for half an hour after the adhan the time since it, in the
+/// sand colour of prayer times.
+private struct WatchPrayerRow: View {
+    let schedule: PrayerSchedule
+
+    @Environment(WatchModel.self) private var model
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            if let state = PrayerClock(schedule: schedule).state(at: context.date) {
+                VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
+                    switch state {
+                    case .since(let prayer, _):
+                        Text("مضى على أذان \(prayer.arabicName)")
+                    case .until(let prayer, _):
+                        Text("المتبقي على \(prayer.arabicName)")
+                    }
+                    Text(state.time, style: .timer)
+                        .font(ZimamType.title)
+                        .monospacedDigit()
+                    Text(model.formatter.time(state.time))
+                        .font(ZimamType.caption)
+                }
+                .font(ZimamType.callout)
+                .foregroundStyle(ZimamColor.sand)
+                .accessibilityElement(children: .combine)
+            }
+        }
     }
 }
 

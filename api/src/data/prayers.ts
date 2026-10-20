@@ -1,4 +1,4 @@
-import { CalculationMethod, Coordinates, PrayerTimes } from "adhan";
+import { CalculationMethod, Coordinates, Madhab, PrayerTimes } from "adhan";
 import { hijriMonth, timeIn } from "./dates";
 import type { Settings } from "./schemas";
 
@@ -19,6 +19,7 @@ export type PrayerTimesOfDay = Record<"fajr" | "dhuhr" | "asr" | "maghrib" | "is
 export function prayerInstants(day: string, settings: Settings): Record<keyof PrayerTimesOfDay, Date> | null {
   if (!settings.location) return null;
   const params = METHODS[settings.prayerMethod]();
+  params.madhab = settings.asrMadhab === "hanafi" ? Madhab.Hanafi : Madhab.Shafi;
   // Umm al-Qura sets Isha 120 minutes after Maghrib in Ramadan instead of 90.
   if (settings.prayerMethod === "ummAlQura" && hijriMonth(day) === 9) params.ishaInterval = 120;
   const [y, m, d] = day.split("-").map(Number) as [number, number, number];

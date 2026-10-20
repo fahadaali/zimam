@@ -47,17 +47,39 @@ public enum PrayerMethod: String, CaseIterable, Codable, Sendable {
     }
 }
 
+/// When Asr begins: at one shadow length (the majority, «الجمهور») or two (Hanafi).
+public enum AsrMadhab: String, CaseIterable, Codable, Sendable {
+    case shafi, hanafi
+
+    public var arabicName: String {
+        switch self {
+        case .shafi: "الجمهور"
+        case .hanafi: "الحنفي"
+        }
+    }
+
+    var adhanMadhab: Madhab {
+        switch self {
+        case .shafi: .shafi
+        case .hanafi: .hanafi
+        }
+    }
+}
+
 /// Prayer times for one place, computed on the device without a network.
 public struct PrayerSchedule: Sendable {
     public let latitude: Double
     public let longitude: Double
     public let method: PrayerMethod
+    public let madhab: AsrMadhab
     public let timeZone: TimeZone
 
-    public init(latitude: Double, longitude: Double, method: PrayerMethod = .ummAlQura, timeZone: TimeZone = .current) {
+    public init(latitude: Double, longitude: Double, method: PrayerMethod = .ummAlQura, madhab: AsrMadhab = .shafi,
+                timeZone: TimeZone = .current) {
         self.latitude = latitude
         self.longitude = longitude
         self.method = method
+        self.madhab = madhab
         self.timeZone = timeZone
     }
 
@@ -69,17 +91,25 @@ public struct PrayerSchedule: Sendable {
 
     /// The times of the five prayers on the local day that contains `day`.
     public func times(on day: Date) -> [Prayer: Date] {
+        guard let times = adhanTimes(on: day) else { return [:] }
+        return [.fajr: times.fajr, .dhuhr: times.dhuhr, .asr: times.asr, .maghrib: times.maghrib, .isha: times.isha]
+    }
+
+    /// Sunrise on that day: shown with the prayer times (the end of Fajr), not a prayer itself.
+    public func sunrise(on day: Date) -> Date? {
+        adhanTimes(on: day)?.sunrise
+    }
+
+    private func adhanTimes(on day: Date) -> PrayerTimes? {
         let components = gregorian.dateComponents([.year, .month, .day], from: day)
         var parameters = method.adhanMethod.params
+        parameters.madhab = madhab.adhanMadhab
         // Umm al-Qura sets Isha 120 minutes after Maghrib in Ramadan instead of 90.
         if method == .ummAlQura, Self.isRamadan(day, timeZone: timeZone) {
             parameters.ishaInterval = 120
         }
         let coordinates = Coordinates(latitude: latitude, longitude: longitude)
-        guard let times = PrayerTimes(coordinates: coordinates, date: components, calculationParameters: parameters) else {
-            return [:]
-        }
-        return [.fajr: times.fajr, .dhuhr: times.dhuhr, .asr: times.asr, .maghrib: times.maghrib, .isha: times.isha]
+        return PrayerTimes(coordinates: coordinates, date: components, calculationParameters: parameters)
     }
 
     /// When a prayer-anchored task or reminder falls on that day.

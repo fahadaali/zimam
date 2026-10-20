@@ -74,6 +74,17 @@ describe("Account", () => {
     expect((await call("PATCH", "/v1/me", { token, body: { settings: { calendar: "julian" } } })).status).toBe(400);
   });
 
+  it("keeps the Asr madhab and prayer alerts", async () => {
+    const { token } = await signIn();
+    expect((await call("GET", "/v1/me", { token })).body).toMatchObject({ settings: { asrMadhab: "shafi", prayerAlerts: {} } });
+    const alerts = { asr: { adhan: true, iqama: true, iqamaMinutes: 20 } };
+    const res = await call("PATCH", "/v1/me", { token, body: { settings: { asrMadhab: "hanafi", prayerAlerts: alerts } } });
+    expect(res.body).toMatchObject({ settings: { asrMadhab: "hanafi", prayerAlerts: alerts } });
+    const tooLong = { asr: { adhan: true, iqama: true, iqamaMinutes: 90 } };
+    expect((await call("PATCH", "/v1/me", { token, body: { settings: { prayerAlerts: tooLong } } })).status).toBe(400);
+    expect((await call("PATCH", "/v1/me", { token, body: { settings: { prayerAlerts: { sunrise: tooLong.asr } } } })).status).toBe(400);
+  });
+
   it("deletes the account and its data", async () => {
     const { token } = await signIn("apple-delete");
     await call("POST", "/v1/tasks", { token, body: { title: "مهمة" } });

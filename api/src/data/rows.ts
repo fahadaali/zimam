@@ -140,5 +140,7 @@ export function userOut(r: Row) {
     name: strOrNull(r.name),
     email: strOrNull(r.email),
     settings: { ...DEFAULT_SETTINGS, ...(stored.success ? stored.data : {}) },
+    /** When the photo last changed (GET /v1/me/avatar), or null without one. */
+    avatarVersion: numOrNull(r.avatar_updated_at),
   };
 }
