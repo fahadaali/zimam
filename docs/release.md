@@ -75,7 +75,7 @@ xcodegen && open Zimam.xcodeproj
 | --- | --- |
 | **General** | الاسم `TestFlight من main`، والمشروع `apple/Zimam.xcodeproj` كما يكتشفه Xcode. فعّل **Restrict Editing** إن أردت ألا يغيّره غيرك |
 | **Environment** | **Xcode Version:** Latest Release، و**macOS Version:** Latest Release. وفعّل **Clean** ليبدأ كل بناء من الصفر، فبناء الإصدار لا يتأثر ببقايا بناء سابق |
-| **Start Conditions** | احذف الشرط الافتراضي، وأضف **Branch Changes** بالفرع `main` وحده. ومن **Files and Folders** اختر «Start a build if any file changes in» المجلدين `apple/` و`design/`، لأن الدمج الذي يغيّر `api/` أو `web/` فقط لا يحتاج بناء التطبيق. وفعّل **Auto-cancel Builds** |
+| **Start Conditions** | احذف الشرط الافتراضي، وأضف **Branch Changes** بالفرع `main` وحده. ومن **Files and Folders** اختر «Start a build if any file changes in» المجلدين `apple/` و`design/`، لأن الدمج الذي يغيّر `api/` أو `web/` فقط لا يحتاج بناء التطبيق. وفعّل **Auto-cancel Builds**. ثم أضف شرطاً ثانياً **On a Schedule** للتجديد الأسبوعي، كما في «تجديد مدة TestFlight كل أسبوع» أدناه |
 | **Actions** | **+ ← Archive**: Platform **iOS**، وScheme **Zimam**، وDistribution Preparation **App Store Connect**. ثم **+ ← Archive** ثانية: Platform **macOS**، والإعدادان نفسهما. واحذف إجراءات **Build** التي يضيفها المعالج: الأرشيف يبني التطبيق، والساعة تُبنى داخل أرشيف iOS |
 | **Post-Actions** | **+ ← TestFlight Internal Testing**: Artifact من أرشيف iOS، والمجموعة `الفريق`. ثم مثلها لأرشيف macOS. المجموعة تُنشأ أولاً في App Store Connect (الخطوة ٤ في «قبل أول بناء»)، وإلا بقيت القائمة فارغة |
 
@@ -85,6 +85,29 @@ xcodegen && open Zimam.xcodeproj
 
 5. **Save**، ثم **Start Build**. أول بناء أطول من غيره لأنه ينزّل الحزم. وتتابعه في Xcode من **Report Navigator ← Cloud**، أو في App Store Connect من **Xcode Cloud**.
 6. بعد نجاح البناء يعالج App Store Connect الملف دقائق، ثم يظهر في **TestFlight** ويصل لمجموعة `الفريق`.
+
+## تجديد مدة TestFlight كل أسبوع
+
+كل بناء في TestFlight ينتهي بعد ٩٠ يوماً من رفعه، فيتوقف التطبيق عند المختبرين إن مرّت المدة دون دمج يغيّر `apple/` أو `design/`. لذلك يبني سير العمل نفسه `main` كل أسبوع ولو لم يتغيّر شيء، فيصل بناء جديد بمدة ٩٠ يوماً جديدة.
+
+المؤقت في إعداد سير العمل على Xcode Cloud لا في المستودع، ولا يحتاج سراً ولا مفتاحاً. أضفه مرة واحدة:
+
+1. في Xcode: **Report Navigator ← Cloud**، ثم انقر بالزر الأيمن على سير العمل `TestFlight من main` ← **Edit Workflow**. أو من App Store Connect: **Apps ← زمام ← Xcode Cloud ← Manage Workflows**.
+2. في **Start Conditions** أبقِ شرط **Branch Changes**، واضغط **+ ← On a Schedule**:
+
+| الحقل | القيمة |
+| --- | --- |
+| Source Branch | `main` |
+| Frequency | **Weekly** |
+| Day / Time | يوم ووقت هادئان، مثلاً الأحد الساعة ٣ فجراً بتوقيتك |
+
+3. **Save**.
+
+- البناء المجدول يمر بالخطوات نفسها: `ci_post_clone.sh`، ثم `ci_pre_xcodebuild.sh` يضع رقم بناء أكبر، ثم الأرشيفان والرفع لمجموعة `الفريق`. فلا يرفضه App Store Connect مع أن الإصدار `MARKETING_VERSION` لم يتغيّر.
+- مع **Automatically distribute builds** في المجموعة (انظر «إضافة المختبرين») يصل البناء الأسبوعي للمختبرين الداخليين دون خطوة منك، ويحدّثه تطبيق TestFlight عندهم إن فعّلوا التحديث التلقائي.
+- المختبرون الخارجيون لا يأخذون البناء تلقائياً: أضفه لمجموعتهم من **External Testing**، أو فعّل فيها **Automatically distribute builds** إن ظهر الخيار.
+- ساعات Xcode Cloud محدودة في الاشتراك (٢٥ ساعة شهرياً في الباقة المجانية). بناء أسبوعي للأرشيفين يستهلك جزءاً صغيراً منها، وتتابع الاستهلاك في **App Store Connect ← Xcode Cloud ← Usage**.
+- لإيقاف التجديد عند الإطلاق أو بعده: احذف شرط **On a Schedule** من سير العمل.
 
 ## إضافة المختبرين
 
