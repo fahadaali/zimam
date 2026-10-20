@@ -266,7 +266,7 @@ struct CalendarView: View {
     private func tasksByDay() -> (byDay: [String: [TaskItem]], spans: [SpanItem]) {
         let visible = mode == .month ? grid.monthDays(containing: selectedNoon) : grid.weekDays(containing: selectedNoon)
         guard let first = visible.first?.day, let last = visible.last?.day else { return ([:], []) }
-        let schedule = location.schedule(method: session.user?.settings.prayerMethod ?? .ummAlQura)
+        let schedule = location.schedule(session.user?.settings)
         var result: [String: [TaskItem]] = [:]
         var spans: [SpanItem] = []
         for task in tasks where task.parentId == nil && (!task.isDone || lingering.contains(task.id)) {

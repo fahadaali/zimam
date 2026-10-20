@@ -163,10 +163,30 @@ export const Mutation = z.discriminatedUnion("op", [
 ]);
 export type Mutation = z.infer<typeof Mutation>;
 
+/** One prayer's alerts: at the adhan, and before the iqama after `iqamaMinutes`. */
+export const PrayerAlert = z.object({
+  adhan: z.boolean(),
+  iqama: z.boolean(),
+  iqamaMinutes: z.number().int().min(5).max(60),
+});
+export type PrayerAlert = z.infer<typeof PrayerAlert>;
+
 export const Settings = z.object({
   /** The calendar shown first; the other one is always shown beside it. */
   calendar: z.enum(["hijri", "gregorian"]),
   prayerMethod: z.enum(["ummAlQura", "muslimWorldLeague", "egyptian", "karachi", "dubai", "kuwait", "qatar", "northAmerica"]),
+  /** Asr at one shadow length (shafi: the majority) or two (hanafi). */
+  asrMadhab: z.enum(["shafi", "hanafi"]),
+  /** Adhan and iqama alerts per prayer; the device schedules them. A missing prayer has none. */
+  prayerAlerts: z
+    .object({
+      fajr: PrayerAlert.optional(),
+      dhuhr: PrayerAlert.optional(),
+      asr: PrayerAlert.optional(),
+      maghrib: PrayerAlert.optional(),
+      isha: PrayerAlert.optional(),
+    })
+    .strict(),
   /** 0 = Sunday. */
   weekStart: z.number().int().min(0).max(6),
   /** IANA zone the user's days start in, for agendas built on the server (MCP). */
@@ -181,6 +201,8 @@ export type Settings = z.infer<typeof Settings>;
 export const DEFAULT_SETTINGS: Settings = {
   calendar: "hijri",
   prayerMethod: "ummAlQura",
+  asrMadhab: "shafi",
+  prayerAlerts: {},
   weekStart: 0,
   timeZone: "Asia/Riyadh",
   location: null,

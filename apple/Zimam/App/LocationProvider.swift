@@ -24,6 +24,10 @@ final class LocationProvider {
     }
 
     private(set) var coordinate: Coordinate? = nil
+    /// The place's name («الرياض»): the city found for a reading, or the place picked on the map.
+    private(set) var placeName: String? = nil
+    /// The place was picked on the map («تحديد يدوي»); readings of the device no longer move it.
+    private(set) var isManual = false
     /// True while a reading is running (not while the permission prompt is up).
     private(set) var isLocating = false
     private(set) var errorMessage: String? = nil
@@ -52,6 +56,8 @@ final class LocationProvider {
         if let saved = SharedSettings.coordinate() {
             coordinate = Coordinate(latitude: saved.latitude, longitude: saved.longitude)
         }
+        placeName = SharedSettings.placeName()
+        isManual = SharedSettings.isManualPlace()
         authorization = manager.authorizationStatus
         isPrecise = manager.accuracyAuthorization == .fullAccuracy
         // City level is enough for prayer times, and quicker to get than a precise fix.
@@ -146,10 +152,18 @@ final class LocationProvider {
         #endif
     }
 
-    /// Prayer times for the saved place, or nil before the first location.
-    func schedule(method: PrayerMethod) -> PrayerSchedule? {
+    /// Prayer times for the saved place with the account's method and madhab, or nil before the first location.
+    func schedule(_ settings: User.Settings?) -> PrayerSchedule? {
         guard let coordinate else { return nil }
-        return PrayerSchedule(latitude: coordinate.latitude, longitude: coordinate.longitude, method: method, timeZone: .current)
+        return PrayerSchedule(latitude: coordinate.latitude, longitude: coordinate.longitude,
+                              method: settings?.prayerMethod ?? .ummAlQura, madhab: settings?.asrMadhab ?? .shafi,
+                              timeZone: .current)
+    }
+
+    /// Uses a place picked on the map for prayer times, until the user asks for their location again.
+    func choose(latitude: Double, longitude: Double, name: String?) {
+        stopReading(message: nil)
+        save(latitude: latitude, longitude: longitude, name: name, manual: true)
     }
 
     /// Asks for permission if needed, then reads the location once.
@@ -223,10 +237,28 @@ final class LocationProvider {
     private func received(latitude: Double, longitude: Double) {
         guard isLocating else { return }
         stopReading(message: nil)
+        save(latitude: latitude, longitude: longitude, name: nil, manual: false)
+        Task { await self.nameReading(latitude: latitude, longitude: longitude) }
+    }
+
+    private func save(latitude: Double, longitude: Double, name: String?, manual: Bool) {
         coordinate = Coordinate(latitude: latitude, longitude: longitude)
-        SharedSettings.saveCoordinate(SharedSettings.Coordinate(latitude: latitude, longitude: longitude))
+        placeName = name
+        isManual = manual
+        SharedSettings.saveCoordinate(SharedSettings.Coordinate(latitude: latitude, longitude: longitude), name: name, manual: manual)
         ZimamShared.reloadWidgets()
         onChange?()
+    }
+
+    /// Names the city of a reading, for the prayer screen. Without a network the place stays unnamed.
+    private func nameReading(latitude: Double, longitude: Double) async {
+        let reading = CLLocation(latitude: latitude, longitude: longitude)
+        let placemark = try? await CLGeocoder().reverseGeocodeLocation(reading, preferredLocale: Locale(identifier: "ar")).first
+        guard let name = placemark?.locality ?? placemark?.administrativeArea,
+              coordinate == Coordinate(latitude: latitude, longitude: longitude), !isManual else { return }
+        placeName = name
+        SharedSettings.savePlaceName(name)
+        ZimamShared.reloadWidgets()
     }
 
     private func failed(_ code: CLError.Code?) {

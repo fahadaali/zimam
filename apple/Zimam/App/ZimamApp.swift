@@ -54,6 +54,8 @@ struct ZimamApp: App {
         PushRegistration.shared.api = session.api
         // Siri and Shortcuts run their intents in this process; their edits sync through the same engine.
         LiveSync.engine = sync
+        // The system's background wakes renew the notification window (adhan and iqama alerts).
+        BackgroundRefresh.scheduler = notifications
         #if os(iOS)
         // Hands the session to the Apple Watch app.
         WatchLink.shared.start()
@@ -108,6 +110,11 @@ struct ZimamApp: App {
             }
         }
         .modelContainer(container)
+        #if os(iOS)
+        .backgroundTask(.appRefresh(BackgroundRefresh.identifier)) {
+            await BackgroundRefresh.run()
+        }
+        #endif
         #if os(macOS)
         // «مهمة جديدة» (⌘N) and the «المهام» menu (AppNavigation.swift).
         .commands { ZimamCommands() }

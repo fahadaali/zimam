@@ -12,6 +12,7 @@ struct TodayView: View {
     private var tasks: [TaskItem]
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }) private var projects: [ProjectItem]
     @State private var showingAdd = false
+    @State private var showingPrayers = false
     @State private var lingering = Lingering()
     /// The Apple Calendar event whose details are open.
     @State private var openEvent: ShownEvent?
@@ -33,6 +34,10 @@ struct TodayView: View {
         let items = self.items
         List(selection: taskSelection) {
             Section {
+                // The next prayer and its countdown; opens «أوقات الصلاة».
+                NextPrayerLine { showingPrayers = true }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 // «ملخص اليوم» from the assistant; hidden offline.
                 DaySummaryRow()
                 if items.isEmpty { EmptyLine(text: "لا مهام اليوم. يومك لك.") }
@@ -62,6 +67,7 @@ struct TodayView: View {
         .zimamList()
         .overlay(alignment: .bottomTrailing) { AddTaskButton { showingAdd = true } }
         .sheet(isPresented: $showingAdd) { AddTaskView(due: .today) }
+        .sheet(isPresented: $showingPrayers) { PrayerTimesSheet() }
         .sheet(item: $openEvent) { item in CalendarEventSheet(item: item) }
         .toolbar { ToolbarItem { AccountMenu() } }
     }

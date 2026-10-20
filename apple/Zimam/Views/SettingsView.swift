@@ -10,8 +10,6 @@ import UIKit
 struct SettingsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncEngine.self) private var sync
-    @Environment(LocationProvider.self) private var location
-    @AppStorage(SessionStore.shareLocationKey) private var shareLocation = false
     @Environment(NotificationScheduler.self) private var notifications
     @Environment(SubscriptionStore.self) private var subscriptions
     @Environment(\.dateFormatterZimam) private var formatter
@@ -82,32 +80,17 @@ struct SettingsView: View {
         }
     }
 
+    /// «أوقات الصلاة» has its own screen: the place, the calculation, and the adhan and iqama alerts.
     private var prayerSection: some View {
         Section {
-            Picker("طريقة الحساب", selection: methodBinding) {
-                ForEach(PrayerMethod.allCases, id: \.self) { method in
-                    Text(method.arabicName).tag(method)
-                }
+            NavigationLink {
+                PrayerTimesView()
+            } label: {
+                Label("أوقات الصلاة", systemImage: "moon.stars")
             }
-            .disabled(session.user == nil)
-            LocationRequestRows()
-            if let schedule = location.schedule(method: settings.prayerMethod) {
-                PrayerTimesList(schedule: schedule)
-            }
-            Toggle("أوقات الصلاة في كلود وChatGPT", isOn: $shareLocation)
-                .frame(minHeight: ZimamSpacing.space11)
-                .onChange(of: shareLocation) { _, _ in
-                    Task {
-                        await session.sharePlace(latitude: location.coordinate?.latitude,
-                                                 longitude: location.coordinate?.longitude)
-                    }
-                }
-        } header: {
-            Text("أوقات الصلاة")
+            .frame(minHeight: ZimamSpacing.space11)
         } footer: {
-            Text(shareLocation
-                 ? "تُحسب الأوقات على جهازك، ويُحفظ في خادم زمام موقع تقريبي على مستوى المدينة لتظهر الأوقات في جدولك عند كلود وChatGPT."
-                 : "تُحسب الأوقات على جهازك، ولا يُرسل موقعك إلى أي خادم.")
+            Text("المواقيت، والموقع، وطريقة الحساب، وتنبيهات الأذان والإقامة.")
         }
     }
 
@@ -244,17 +227,6 @@ struct SettingsView: View {
         )
     }
 
-    private var methodBinding: Binding<PrayerMethod> {
-        Binding(
-            get: { settings.prayerMethod },
-            set: { value in
-                var updated = settings
-                updated.prayerMethod = value
-                save(updated)
-            }
-        )
-    }
-
     private func save(_ updated: User.Settings) {
         guard updated != settings else { return }
         Task {
@@ -295,46 +267,4 @@ struct SettingsView: View {
     #else
     private static var systemSettingsURL: URL? { URL(string: "x-apple.systempreferences:com.apple.preference.notifications") }
     #endif
-}
-
-/// Today's five prayer times in the sand colour reserved for prayer times, under the dual date.
-private struct PrayerTimesList: View {
-    let schedule: PrayerSchedule
-
-    @Environment(\.dateFormatterZimam) private var formatter
-
-    var body: some View {
-        let now = Date()
-        let times = schedule.times(on: now)
-        VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
-            Text(formatter.dual(now))
-                .font(ZimamType.caption)
-                .foregroundStyle(ZimamColor.inkMuted)
-            ForEach(Prayer.allCases, id: \.self) { prayer in
-                if let time = times[prayer] {
-                    PrayerTimeRow(name: prayer.arabicName, time: formatter.time(time))
-                }
-            }
-        }
-        .padding(.vertical, ZimamSpacing.space1)
-    }
-}
-
-private struct PrayerTimeRow: View {
-    let name: String
-    let time: String
-
-    var body: some View {
-        HStack(spacing: ZimamSpacing.space2) {
-            Label(name, systemImage: "moon.stars")
-            Spacer(minLength: ZimamSpacing.space2)
-            Text(time)
-        }
-        .font(ZimamType.callout)
-        .foregroundStyle(ZimamColor.sand)
-        .padding(.horizontal, ZimamSpacing.space3)
-        .frame(minHeight: ZimamSpacing.space11)
-        .background(ZimamColor.sandSoft, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
-        .accessibilityElement(children: .combine)
-    }
 }

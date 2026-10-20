@@ -25,7 +25,7 @@ const MePatch = z
   })
   .strict();
 
-/** PATCH /v1/me { name?, settings?: { calendar?, prayerMethod?, weekStart? } } */
+/** PATCH /v1/me { name?, settings?: { calendar?, prayerMethod?, asrMadhab?, prayerAlerts?, weekStart?, … } } */
 me.patch("/", async (c) => {
   const body = MePatch.safeParse(await readJson(c));
   if (!body.success) return fail(c, 400, "invalid", "Invalid name or settings");

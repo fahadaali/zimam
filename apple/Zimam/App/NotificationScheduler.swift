@@ -8,10 +8,12 @@ import SwiftData
 import UserNotifications
 import ZimamKit
 
-/// Keeps the pending local notifications in step with the tasks and reminders.
+/// Keeps the pending local notifications in step with the tasks, reminders and prayer alerts.
 /// iOS allows 64 per app, so it schedules the soonest ones (see `ReminderPlanner`)
 /// and recomputes the window on launch, after each sync and after each local edit.
-/// The server sends what lies beyond the window over APNs.
+/// The server sends what lies beyond the window over APNs. Adhan and iqama alerts
+/// (`PrayerAlertPlanner`) take up to 20 of the 60 for the next two days; the app renews
+/// them whenever it runs, and in the background (`BackgroundRefresh`).
 ///
 /// Location reminders («تذكير بالموقع») fire on iPhone and iPad, in one of two ways:
 /// - With location «دائماً», `PlaceMonitor` watches each place (`PlaceWatchPlanner`, up to 20) and
@@ -42,6 +44,7 @@ final class NotificationScheduler {
     @ObservationIgnored private var pending: Task<Void, Never>?
 
     static let categoryId = "zimam.task"
+    static let prayerCategoryId = "zimam.prayer"
     static let doneAction = "zimam.task.done"
     static let snoozeAction = "zimam.task.snooze"
     private static let askedKey = "notifications.asked"
@@ -58,7 +61,8 @@ final class NotificationScheduler {
         let snooze = UNNotificationAction(identifier: Self.snoozeAction, title: "تأجيل ساعة", options: [])
         let category = UNNotificationCategory(identifier: Self.categoryId, actions: [done, snooze],
                                               intentIdentifiers: [], options: [])
-        center.setNotificationCategories([category])
+        let prayer = UNNotificationCategory(identifier: Self.prayerCategoryId, actions: [], intentIdentifiers: [], options: [])
+        center.setNotificationCategories([category, prayer])
         delegate.onAction = { [weak self] action, taskId in
             await self?.handle(action: action, taskId: taskId)
         }
@@ -120,6 +124,12 @@ final class NotificationScheduler {
         }
     }
 
+    /// Recomputes now, for a background wake that may end at any moment (`BackgroundRefresh`).
+    func rescheduleNow() async {
+        pending?.cancel()
+        await apply()
+    }
+
     private func apply() async {
         let center = UNUserNotificationCenter.current()
         await refreshStatus()
@@ -133,7 +143,7 @@ final class NotificationScheduler {
             return
         }
 
-        let (times, places, monitored) = plan()
+        let (times, prayers, places, monitored) = plan()
         watchedPlaces = Set(places.map(\.reminderId)).union(monitored.flatMap(\.reminderIds))
         // With «دائماً» the app watches places itself; otherwise this stops it.
         self.places.watch(monitored)
@@ -162,6 +172,23 @@ final class NotificationScheduler {
             let request = UNNotificationRequest(identifier: item.id, content: content, trigger: trigger)
             await add(request, to: center)
         }
+        for alert in prayers {
+            guard !Task.isCancelled else { return }
+            await add(Self.request(for: alert), to: center)
+        }
+    }
+
+    /// An adhan or iqama alert: no task, so none of the task actions. The adhan sound comes later;
+    /// for now the system sound.
+    private static func request(for alert: PlannedPrayerAlert) -> UNNotificationRequest {
+        let content = UNMutableNotificationContent()
+        content.title = alert.title
+        content.body = alert.body
+        content.sound = .default
+        content.categoryIdentifier = prayerCategoryId
+        content.threadIdentifier = prayerCategoryId
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, alert.date.timeIntervalSinceNow), repeats: false)
+        return UNNotificationRequest(identifier: alert.id, content: content, trigger: trigger)
     }
 
     /// Adds one reminder. A failure is logged, not swallowed: the reminder would silently never
@@ -224,7 +251,8 @@ final class NotificationScheduler {
 
     /// The time window; the places the system watches without «دائماً», which come out of the
     /// same budget; and the places the app watches itself with it.
-    private func plan() -> (times: [PlannedNotification], places: [PlannedRegion], monitored: [WatchedPlace]) {
+    private func plan() -> (times: [PlannedNotification], prayers: [PlannedPrayerAlert], places: [PlannedRegion],
+                            monitored: [WatchedPlace]) {
         let now = Date()
         let tasks = (try? context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { !$0.pendingDelete }))) ?? []
         let reminders = (try? context.fetch(FetchDescriptor<ReminderItem>(predicate: #Predicate { !$0.pendingDelete }))) ?? []
@@ -250,11 +278,15 @@ final class NotificationScheduler {
         }
         let settings = session.user?.settings
         let formatter = DualDateFormatter(primary: settings?.calendar ?? .hijri, locale: ZimamLocale.current)
-        let times = ReminderPlanner.plan(tasks: plannerTasks, reminders: plannerReminders,
-                                         schedule: location.schedule(method: settings?.prayerMethod ?? .ummAlQura),
+        let schedule = location.schedule(settings)
+        // Adhan and iqama alerts first (at most `PrayerAlertPlanner.limit`); the reminders get the rest.
+        let prayers = PrayerAlertPlanner.plan(settings: settings?.prayerAlerts ?? PrayerAlertSettings(), schedule: schedule,
+                                              now: now, locale: ZimamLocale.current)
+        let times = ReminderPlanner.plan(tasks: plannerTasks, reminders: plannerReminders, schedule: schedule,
                                          now: now, formatter: formatter,
-                                         limit: LocationReminderPlanner.timeLimit(reserving: places.count))
-        return (times, places, monitored)
+                                         limit: LocationReminderPlanner.timeLimit(
+                                             reserving: places.count, total: ReminderPlanner.defaultLimit - prayers.count))
+        return (times, prayers, places, monitored)
     }
 
     /// «إنجاز» completes the task; «تأجيل ساعة» adds a one-off reminder an hour from now.
