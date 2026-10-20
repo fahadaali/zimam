@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="/app/features.css">
 <link rel="stylesheet" href="/app/attachments.css">
 <link rel="stylesheet" href="/app/plan.css">
+<link rel="stylesheet" href="/app/editor.css">
 <!-- Last, so the frame's shared controls (icon buttons) win over the feature sheets. -->
 <link rel="stylesheet" href="/app/shell.css">
 <link rel="modulepreload" href="/app/lib/dates.js">
@@ -119,6 +120,8 @@
       <h2 class="title task-title" id="task-title" tabindex="-1"></h2>
       <p class="callout muted" id="task-missing" hidden>لم تعد هذه المهمة موجودة.</p>
       <dl class="details" id="task-details"></dl>
+      <!-- Filled by task-editor.js: the task as a form for those who can change it. -->
+      <div id="task-editor"></div>
       <!-- Filled by task-extras.js: duration, assignee, subtasks and comments. -->
       <div class="task-extras" id="task-extras"></div>
       <!-- Filled by attachments-view.js. -->
@@ -190,55 +193,80 @@
 <!-- One polite region for status announcements. -->
 <div class="visually-hidden" id="announcer" aria-live="polite"></div>
 
+<!-- «مهمة جديدة» (AddTaskView.swift): a sheet from the bottom on phones, a dialog on wide screens. -->
 <dialog class="sheet" id="add-dialog" aria-labelledby="add-title">
   <form class="sheet-form" id="add-form" method="dialog" novalidate>
-    <h2 class="title" id="add-title">مهمة جديدة</h2>
+    <div class="sheet-bar">
+      <button type="button" class="zm-btn zm-btn-quiet" id="add-cancel">إلغاء</button>
+      <h2 class="headline sheet-bar-title" id="add-title">مهمة جديدة</h2>
+      <button type="submit" class="zm-btn zm-btn-primary" id="add-submit" value="add">إضافة</button>
+    </div>
 
     <div class="field">
-      <label class="headline" for="add-title-input">العنوان</label>
-      <input class="input body" id="add-title-input" name="title" type="text" required maxlength="500" enterkeyhint="done" aria-describedby="add-title-error">
+      <label class="visually-hidden" for="add-title-input">عنوان المهمة</label>
+      <input class="input body" id="add-title-input" name="title" type="text" required maxlength="500" placeholder="عنوان المهمة" enterkeyhint="done" aria-describedby="add-title-error">
       <p class="caption field-error" id="add-title-error"></p>
     </div>
 
     <div class="field">
-      <label class="headline" for="add-date">التاريخ</label>
-      <input class="input body" id="add-date" name="dueDate" type="date" aria-describedby="add-date-preview">
-      <p class="caption muted" id="add-date-preview" aria-live="polite"></p>
-    </div>
-
-    <!-- A start date makes the task span the days up to its date (duration-view.js). -->
-    <div class="field">
-      <label class="headline" for="add-start">تاريخ البداية <span class="caption muted">(اختياري)</span></label>
-      <input class="input body" id="add-start" name="startDate" type="date" aria-describedby="add-start-preview add-start-error">
-      <p class="caption muted" id="add-start-preview" aria-live="polite"></p>
-      <p class="caption field-error" id="add-start-error"></p>
+      <label class="visually-hidden" for="add-notes">ملاحظات</label>
+      <textarea class="input body" id="add-notes" name="notes" rows="2" maxlength="20000" placeholder="ملاحظات"></textarea>
+      <label class="visually-hidden" for="add-tags">الوسوم، مفصولة بفاصلة</label>
+      <input class="input callout" id="add-tags" name="tags" type="text" maxlength="1600" placeholder="الوسوم، مفصولة بفاصلة" autocomplete="off">
     </div>
 
     <fieldset class="field group">
-      <legend class="headline">مع الصلاة <span class="caption muted">(اختياري)</span></legend>
-      <div class="row">
-        <label class="caption muted" for="add-prayer">الصلاة</label>
-        <select class="input body" id="add-prayer" name="duePrayer">
-          <option value="">بلا صلاة</option>
-          <option value="fajr">الفجر</option>
-          <option value="dhuhr">الظهر</option>
-          <option value="asr">العصر</option>
-          <option value="maghrib">المغرب</option>
-          <option value="isha">العشاء</option>
-        </select>
+      <legend class="headline">الموعد</legend>
+      <div class="segmented form-segmented" role="radiogroup" aria-label="الموعد">
+        <label class="segment-choice callout"><input type="radio" name="due" value="none">بلا موعد</label>
+        <label class="segment-choice callout"><input type="radio" name="due" value="today">اليوم</label>
+        <label class="segment-choice callout"><input type="radio" name="due" value="tomorrow">غداً</label>
+        <label class="segment-choice callout"><input type="radio" name="due" value="other">تاريخ آخر</label>
+      </div>
+      <div class="row" id="add-date-row" hidden>
+        <label class="caption muted" for="add-date">التاريخ</label>
+        <input class="input body" id="add-date" name="dueDate" type="date" aria-describedby="add-date-preview">
+      </div>
+      <p class="caption muted" id="add-date-preview" aria-live="polite"></p>
+      <!-- A start date makes the task span the days up to its date (duration-view.js). -->
+      <div class="row" id="add-start-row" hidden>
+        <label class="caption muted" for="add-start">تاريخ البداية <span class="caption muted">(اختياري)</span></label>
+        <input class="input body" id="add-start" name="startDate" type="date" aria-describedby="add-start-preview add-start-error">
+        <p class="caption muted" id="add-start-preview" aria-live="polite"></p>
+        <p class="caption field-error" id="add-start-error"></p>
+      </div>
+    </fieldset>
+
+    <fieldset class="field group">
+      <legend class="headline">الوقت</legend>
+      <div class="segmented form-segmented" role="radiogroup" aria-label="الوقت">
+        <label class="segment-choice callout"><input type="radio" name="timeMode" value="allDay" checked>طوال اليوم</label>
+        <label class="segment-choice callout"><input type="radio" name="timeMode" value="clock">ساعة</label>
+        <label class="segment-choice callout"><input type="radio" name="timeMode" value="prayer">صلاة</label>
+      </div>
+      <div class="row" id="add-time-row" hidden>
+        <label class="caption muted" for="add-time">الساعة</label>
+        <input class="input body" id="add-time" name="dueTime" type="time" step="300">
+        <p class="caption muted" id="add-time-note" hidden>اختر تاريخاً للمهمة لتحدد ساعتها.</p>
       </div>
       <div class="prayer-offset" id="prayer-offset" hidden>
-        <fieldset class="choices">
-          <legend class="visually-hidden">قبل الصلاة أو بعدها</legend>
-          <label class="choice callout"><input type="radio" name="relation" value="after" checked>بعد</label>
-          <label class="choice callout"><input type="radio" name="relation" value="before">قبل</label>
-        </fieldset>
         <div class="row">
-          <label class="caption muted" for="add-minutes">بكم دقيقة</label>
-          <input class="input body minutes" id="add-minutes" name="minutes" type="text" inputmode="numeric" autocomplete="off" maxlength="3" placeholder="٠" aria-describedby="add-minutes-error">
+          <label class="caption muted" for="add-prayer">الصلاة</label>
+          <select class="input body" id="add-prayer" name="duePrayer">
+            <option value="fajr">الفجر</option>
+            <option value="dhuhr">الظهر</option>
+            <option value="asr" selected>العصر</option>
+            <option value="maghrib">المغرب</option>
+            <option value="isha">العشاء</option>
+          </select>
         </div>
-        <p class="caption field-error" id="add-minutes-error"></p>
-        <p class="prayer-preview"><span class="zm-chip zm-chip-prayer" id="prayer-preview"></span></p>
+        <!-- Five minutes a step, from 120 before to 120 after, as the app's Stepper. -->
+        <div class="stepper">
+          <button type="button" class="icon-button" id="add-offset-minus" aria-label="قبل بخمس دقائق" title="قبل بخمس دقائق"><span data-icon="minus"></span></button>
+          <span class="zm-chip zm-chip-prayer" id="prayer-preview" aria-live="polite"></span>
+          <button type="button" class="icon-button" id="add-offset-plus" aria-label="بعد بخمس دقائق" title="بعد بخمس دقائق"><span data-icon="plus"></span></button>
+        </div>
+        <input type="hidden" id="add-offset" name="duePrayerOffset" value="0">
       </div>
     </fieldset>
 
@@ -260,10 +288,6 @@
     </div>
 
     <p class="callout field-error" id="add-error" role="alert"></p>
-    <div class="sheet-actions">
-      <button type="submit" class="zm-btn zm-btn-primary" id="add-submit" value="add">إضافة</button>
-      <button type="button" class="zm-btn zm-btn-secondary" id="add-cancel">إلغاء</button>
-    </div>
   </form>
 </dialog>
 

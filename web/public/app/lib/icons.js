@@ -36,6 +36,10 @@ export const ICON_PATHS = {
   "log-out": [p("M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9")], // rectangle.portrait.and.arrow.right
   download: [p("M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3")], // square.and.arrow.down
   summary: [p("M21 6H3M21 12H9M21 18H7")], // text.alignright
+  minus: [p("M5 12h14")], // minus
+  bell: [p("M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"), p("M10.3 21a1.94 1.94 0 0 0 3.4 0")], // bell
+  trash: [p("M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2")], // trash
+  repeat: [p("m17 2 4 4-4 4"), p("M3 11v-1a4 4 0 0 1 4-4h14"), p("m7 22-4-4 4-4"), p("M21 13v1a4 4 0 0 1-4 4H3")], // repeat
   ellipsis: [circle(12, 12, 1), circle(19, 12, 1), circle(5, 12, 1)], // ellipsis
 };
 

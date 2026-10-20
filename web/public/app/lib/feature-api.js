@@ -28,6 +28,7 @@ export const boardApi = {
   project: (projectId) => request("GET", `/v1/projects/${id(projectId)}`),
   setView: (projectId, view) => request("PATCH", `/v1/projects/${id(projectId)}`, { view }),
   patchTask: (taskId, fields) => request("PATCH", `/v1/tasks/${id(taskId)}`, fields),
+  completeTask: (taskId) => request("POST", `/v1/tasks/${id(taskId)}/complete`),
   createTask: (task) => request("POST", "/v1/tasks", task),
   tasks: (params) => {
     const search = new URLSearchParams({ limit: "500" });
@@ -45,3 +46,15 @@ export const boardApi = {
 
 /** A section's next `updatedAt`: now, and always after the version it replaces. */
 export const nextUpdatedAt = (current) => Math.max(Date.now(), (current ?? 0) + 1);
+
+/** A task's reminders: read through REST, written through sync like the apps (reminders are personal). */
+export const remindersApi = {
+  list: (taskId) => request("GET", `/v1/tasks/${id(taskId)}/reminders`),
+  async save(mutations) {
+    const { results } = await request("POST", "/v1/sync", { mutations });
+    const failed = results.find((r) => r.status !== "applied");
+    if (failed) throw new ApiError(400, failed.status, failed.message ?? failed.status);
+  },
+  add: (reminder) => remindersApi.save([{ op: "upsert", entity: "reminder", data: reminder }]),
+  remove: (reminder) => remindersApi.save([{ op: "delete", entity: "reminder", id: reminder.id, updatedAt: nextUpdatedAt(reminder.updatedAt) }]),
+};

@@ -149,6 +149,7 @@ export const api = {
   tasks: (params = {}) => request("GET", `/v1/tasks${query({ limit: 500, ...params })}`),
   createTask: (task) => request("POST", "/v1/tasks", task),
   completeTask: (id) => request("POST", `/v1/tasks/${encodeURIComponent(id)}/complete`),
+  patchTask: (id, fields) => request("PATCH", `/v1/tasks/${encodeURIComponent(id)}`, fields),
   reopenTask: (id) => request("PATCH", `/v1/tasks/${encodeURIComponent(id)}`, { status: "todo" }),
   deleteTask: (id) => request("DELETE", `/v1/tasks/${encodeURIComponent(id)}`),
   /** A single-use ticket for the realtime socket (lib/realtime.js); browsers cannot send headers on it. */

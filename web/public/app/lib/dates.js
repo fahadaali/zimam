@@ -73,6 +73,13 @@ export function dualDate(iso, { primary = "hijri", today } = {}) {
   return primary === "gregorian" ? `${gregorian}، ${hijri}` : `${hijri}، ${gregorian}`;
 }
 
+/** Both calendars with their years, primary first: «٩ جمادى الأولى ١٤٤٨ هـ، ٢٠ أكتوبر ٢٠٢٦». */
+export function dualDateWithYear(iso, { primary = "hijri" } = {}) {
+  const hijri = formatHijri(iso, { year: true });
+  const gregorian = formatGregorian(iso, { year: true });
+  return primary === "gregorian" ? `${gregorian}، ${hijri}` : `${hijri}، ${gregorian}`;
+}
+
 /** "اليوم", "غداً", or the weekday for the rest of the coming week; null otherwise. */
 export function relativeDay(iso, today) {
   const diff = dayDiff(today, iso);

@@ -3,7 +3,7 @@
 // before the person accepts: the suggestion card (design/components/AISuggestion) offers
 // «إضافة», «تعديل» (fills the form) and «تجاهل».
 // Plain DOM through h() and textContent; nothing here parses HTML.
-import { Button, h } from "./lib/components.js";
+import { Button, h, icons } from "./lib/components.js";
 import { icon } from "./lib/icons.js";
 import { assistantErrorText, breakdownText, isoWithOffset, suggestionLines, suggestionToTask } from "./lib/assistant.js";
 import { assistantApi, boardApi } from "./lib/feature-api.js";
@@ -38,8 +38,6 @@ function lines(list) {
 
 const add = {
   ready: false,
-  /** What the form cannot hold (notes, tags, a clock time) after «تعديل», added on submit. */
-  extras: null,
   box: null,
   button: null,
   hint: null,
@@ -66,21 +64,10 @@ export function setupAddAssistant(getCtx) {
 /** Clears the card and anything kept from it, when the dialog opens again. */
 export function resetAddAssistant() {
   add.run++;
-  add.extras = null;
   add.box?.replaceChildren();
   if (add.button) add.button.disabled = false;
 }
 
-/** On submit: notes, tags and a clock time from an edited suggestion, while they still fit. */
-export function withAssistantExtras(body) {
-  const extras = add.extras;
-  if (!extras) return body;
-  const out = { ...body };
-  if (extras.notes) out.notes = extras.notes;
-  if (extras.tags?.length) out.tags = extras.tags;
-  if (extras.dueTime && out.dueDate && !out.duePrayer) out.dueTime = extras.dueTime;
-  return out;
-}
 
 async function suggest(ctx) {
   const titleInput = document.getElementById("add-title-input");
@@ -93,7 +80,6 @@ async function suggest(ctx) {
     return;
   }
   const run = ++add.run;
-  add.extras = null;
   add.button.disabled = true;
   add.box.replaceChildren(h("p", { className: "callout muted", role: "status" }, "يقرأ المساعد المهمة…"));
   try {
@@ -143,29 +129,9 @@ function showSuggestion(task, ctx) {
   accept.focus();
 }
 
-/** «تعديل»: the suggestion into the form's fields, with their previews updated as if typed. */
+/** «تعديل»: the suggestion into the form's fields; main.js's add sheet follows them as if typed. */
 function fillForm(task) {
-  const form = document.getElementById("add-form");
-  const set = (id, value, event) => {
-    const el = document.getElementById(id);
-    el.value = value;
-    el.dispatchEvent(new Event(event, { bubbles: true }));
-  };
-  set("add-title-input", task.title, "input");
-  set("add-date", task.dueDate ?? "", "input");
-  set("add-prayer", task.duePrayer ?? "", "change");
-  const offset = task.duePrayerOffset ?? 0;
-  const relation = form.querySelector(`input[name="relation"][value="${offset < 0 ? "before" : "after"}"]`);
-  if (relation) {
-    relation.checked = true;
-    relation.dispatchEvent(new Event("change", { bubbles: true }));
-  }
-  set("add-minutes", offset ? arabicNumber(Math.abs(offset)) : "", "input");
-  const priority = form.querySelector(`input[name="priority"][value="${task.priority}"]`);
-  if (priority) priority.checked = true;
-  const project = document.getElementById("add-project");
-  if (task.projectId && [...project.options].some((o) => o.value === task.projectId)) project.value = task.projectId;
-  add.extras = { notes: task.notes, tags: task.tags, dueTime: task.dueTime };
+  document.getElementById("add-form").dispatchEvent(new CustomEvent("zimam:fill", { detail: task }));
 }
 
 // ——— «ملخص اليوم» on Today ———
@@ -223,22 +189,45 @@ export function todaySummary(ctx) {
 // ——— «تقسيم إلى خطوات» in a task's details ———
 
 /**
- * The task's subtasks and the breakdown. `ctx`: { primary, today, role, announce, errorText,
- * isCurrent() } where isCurrent() is false once the dialog shows another task.
+ * «المهام الفرعية» (TaskSubtasksSection.swift): each with its completion circle and opening on its
+ * own, «مهمة فرعية جديدة», then «تقسيم إلى خطوات». `ctx`: { primary, today, role, announce,
+ * errorText, isCurrent(), openTask(task) } where isCurrent() is false once the pane shows another task.
  */
 export function breakdownSection(task, ctx) {
   const list = h("ul", { className: "subtask-list", role: "list" });
   const box = h("div", { className: "assist-box", "aria-live": "polite" });
   const editable = canEdit(ctx.role ?? (task.projectId ? null : "owner"));
-  const section = h("section", { className: "extra-section", "aria-labelledby": "subtasks-title" }, h("h3", { className: "headline", id: "subtasks-title" }, "الخطوات"), list);
+  const listError = h("p", { className: "callout field-error", role: "alert" });
+  const section = h("section", { className: "extra-section", "aria-labelledby": "subtasks-title" }, h("h3", { className: "headline", id: "subtasks-title" }, "المهام الفرعية"), list, listError);
   let children = [];
 
-  const drawList = () => {
-    list.replaceChildren(
-      ...(children.length
-        ? children.map((t) => h("li", { className: `callout subtask${isOpen(t) ? "" : " is-done"}` }, h("span", { className: "zm-sr" }, isOpen(t) ? "" : "منجزة: "), t.title))
-        : [h("li", { className: "callout muted" }, "لا خطوات بعد.")]),
+  const subtaskRow = (t) => {
+    const done = !isOpen(t);
+    const check = h(
+      "button",
+      { type: "button", className: `zm-check${done ? " zm-check-on" : ""}`, "aria-pressed": String(done), "aria-label": `${done ? "إلغاء إنجاز" : "إنجاز"}: ${t.title}`, disabled: !editable },
+      done ? icons.check() : null,
     );
+    check.addEventListener("click", async () => {
+      listError.textContent = "";
+      check.disabled = true;
+      try {
+        ctx.markLocalChange?.();
+        Object.assign(t, done ? await boardApi.patchTask(t.id, { status: "todo" }) : await boardApi.completeTask(t.id));
+        ctx.announce(done ? "أُعيدت المهمة الفرعية إلى المفتوحة." : "أُنجزت المهمة الفرعية.");
+        if (ctx.isCurrent()) drawList();
+      } catch (failure) {
+        check.disabled = false;
+        if (failure.status !== 401) listError.textContent = ctx.errorText(failure);
+      }
+    });
+    const open = h("button", { type: "button", className: "subtask-open callout" }, t.title);
+    open.addEventListener("click", () => ctx.openTask?.(t));
+    return h("li", { className: `subtask${done ? " is-done" : ""}` }, check, open);
+  };
+
+  const drawList = () => {
+    list.replaceChildren(...(children.length ? children.map(subtaskRow) : [h("li", { className: "callout muted" }, "لا مهام فرعية بعد.")]));
   };
 
   const loadChildren = async () => {
@@ -254,8 +243,33 @@ export function breakdownSection(task, ctx) {
   loadChildren();
 
   if (!editable) return section;
-  const ask = Button({ variant: "secondary" }, "تقسيم إلى خطوات");
-  section.append(h("div", { className: "assist-row" }, ask), box);
+
+  // «مهمة فرعية جديدة» with a quiet «إضافة», as in the app.
+  const newTitle = h("input", { className: "input body", type: "text", maxlength: "500", placeholder: "مهمة فرعية جديدة", "aria-label": "مهمة فرعية جديدة", enterkeyhint: "done" });
+  const addSub = Button({ variant: "quiet", type: "submit" }, "إضافة");
+  const addForm = h("form", { className: "subtask-add" }, newTitle, addSub);
+  addForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const title = newTitle.value.trim();
+    if (!title) return;
+    addSub.disabled = true;
+    listError.textContent = "";
+    try {
+      ctx.markLocalChange?.();
+      await boardApi.createTask({ title, parentId: task.id, projectId: task.projectId ?? null, sortOrder: after(children.map((t) => t.sortOrder ?? 0)) });
+      newTitle.value = "";
+      ctx.announce("أُضيفت المهمة الفرعية.");
+      await loadChildren();
+      newTitle.focus();
+    } catch (failure) {
+      if (failure.status !== 401) listError.textContent = ctx.errorText(failure);
+    } finally {
+      addSub.disabled = false;
+    }
+  });
+
+  const ask = h("button", { type: "button", className: "zm-btn zm-btn-quiet assist-ask" }, icon("summary", { size: "sm" }), "تقسيم إلى خطوات");
+  section.append(addForm, h("div", { className: "assist-row" }, ask), box);
 
   ask.addEventListener("click", async () => {
     ask.disabled = true;
