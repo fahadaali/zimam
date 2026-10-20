@@ -20,7 +20,7 @@
 
 ## النص الملصوق (Notes، ٤٠٠٠ حرف على الأكثر)
 
-احذف من السطرين بين المعقوفين ما لا ينطبق قبل اللصق.
+المزايا مفتوحة في الإطلاق (`SUBSCRIPTIONS_ENFORCED = "false"`)، فسطر الاشتراك مكتوب على ذلك. وإن فعّلت البوابة قبل الإرسال فاستبدله بـ: `Without a subscription, the assistant stops after its free monthly quota and shows the paywall.` واحذف السطر بين المعقوفين في «SIGN IN» إن لم تنشئ حساباً تجريبياً.
 
 ```text
 Zimam is an Arabic-first task manager for iPhone, iPad, Mac and Apple Watch, with a web app on the same account. The interface is in Arabic and right-to-left.
@@ -41,7 +41,7 @@ PERMISSIONS
 Location (optional): prayer times and location-based reminders. "Always" is requested only when the user adds a location reminder or saves a place, after a screen that explains why: the app watches the user's saved places with CLMonitor so it is woken on arriving or leaving, shows the reminder, and cancels the same reminder's time notification when the place comes first (a reminder tied to a place and a time fires once, at whichever comes first). The device's position and movements are never sent to our server. Without "Always", location reminders still work through UNLocationNotificationTrigger. Microphone and speech recognition (optional): dictating a task. Reminders (optional): a one-time import of the lists the user picks. Notifications: task reminders.
 
 SUBSCRIPTION
-"Zimam Pro" (monthly and yearly auto-renewable subscriptions) adds the AI assistant quota, connecting Claude and ChatGPT through Zimam's MCP server, and importing from other apps. It is in Settings > الاشتراك. [During this review all features are open without a subscription; the paywall shows the plans and purchases work in the sandbox.] [Without a subscription, the assistant stops after its free monthly quota and shows the paywall.]
+"Zimam Pro" (monthly and yearly auto-renewable subscriptions) adds the AI assistant quota, connecting Claude and ChatGPT through Zimam's MCP server, and importing from other apps. It is in Settings > الاشتراك. During this review all features are open without a subscription; the paywall shows the plans and purchases work in the sandbox.
 
 ACCOUNT DELETION
 Settings > الحساب > حذف الحساب deletes the account and its data on the server and revokes Sign in with Apple.
@@ -55,7 +55,7 @@ Privacy policy: https://zimam-web.fahad2ao.workers.dev/privacy/
 Terms: https://zimam-web.fahad2ao.workers.dev/terms/
 ```
 
-الطول: ٢٧٣٠ حرفاً قبل حذف ما لا ينطبق.
+الطول: ٣٤٦٥ حرفاً مع السطر الذي بين المعقوفين.
 
 - «revokes Sign in with Apple» صحيحة بعد إضافة سرّي `APPLE_KEY_ID` و`APPLE_PRIVATE_KEY` (`docs/setup.md`، «مفتاح Sign in with Apple»). دونهما يتم الحذف ولا يُلغى الربط عند أبل، وهذا شرط في الإرشاد 5.1.1(v)، فأضفهما قبل الإرسال.
 - تحقق قبل اللصق من أن الأسماء العربية في النص (الإعدادات، أوقات الصلاة، مشاركة المشروع، الاشتراك، الحساب، حذف الحساب) ما زالت كما تظهر في التطبيق.
@@ -64,9 +64,9 @@ Terms: https://zimam-web.fahad2ao.workers.dev/terms/
 
 | الحقل | القيمة |
 | --- | --- |
-| First / Last Name | [اسم المالك] |
+| First / Last Name | Fahad / Alotaibi |
 | Phone Number | [رقم بصيغة دولية، يتصل عليه المراجع عند الحاجة] |
-| Email | [بريد التواصل نفسه في صفحة الخصوصية] |
+| Email | fahad2ao@gmail.com |
 
 ## مرفق (اختياري)
 
