@@ -37,6 +37,8 @@ import { nextOccurrence } from "./lib/recurrence.js";
 import { newReminder } from "./lib/reminders.js";
 import { canEdit } from "./lib/sharing.js";
 import { openShare } from "./share-view.js";
+import { hasProjectActions, showProjectMenu, toggleArchive } from "./project-menu.js";
+import { projectPermissions, splitArchived } from "./lib/project-actions.js";
 // Start dates, the timeline (Gantt) and the priority matrix.
 import { addStartField } from "./duration-view.js";
 import { viewMatrix } from "./matrix-view.js";
@@ -581,6 +583,8 @@ const frame = createShell({
   onLayout: () => markSelected(pane.currentId()),
   moveTask,
   sync: syncNow,
+  // «خيارات المشروع» on a right-click (or the Menu key) on a project in the sidebar.
+  projectMenu: (event, project) => showProjectMenu(event, project, projectMenuContext()),
 });
 
 const pane = createTaskPane({
@@ -977,7 +981,7 @@ async function viewUpcoming() {
 
 async function viewProjects() {
   ({ projects: state.projects } = await api.projects());
-  const projects = state.projects.filter((p) => p.kind !== "folder" && !p.archivedAt);
+  const { active: projects, archived } = splitArchived(state.projects);
   const newProject = IconButton({ icon: "plus", label: "مشروع جديد", "aria-haspopup": "dialog", onclick: () => frame.openNewProject() });
   const join = IconButton({ icon: "user-plus", label: "الانضمام بدعوة", "aria-haspopup": "dialog", onclick: () => frame.openJoin() });
   const out = [ViewToolbar(join, newProject), ScreenHeader("المشاريع")];
@@ -996,7 +1000,29 @@ async function viewProjects() {
     }
     out.push(grid);
   }
+  if (archived.length) out.push(archivedProjects(archived));
   return out;
+}
+
+/** «المشاريع المؤرشفة»: folded under the grid, each with «استرجاع» and its menu. */
+function archivedProjects(archived) {
+  const list = h("ul", { className: "archived-list", role: "list" });
+  for (const p of archived) {
+    const restore = projectPermissions(p).canArchive ? h("button", { type: "button", className: "zm-btn zm-btn-secondary" }, icon("undo", { size: "sm" }), "استرجاع") : null;
+    restore?.addEventListener("click", async () => {
+      restore.disabled = true;
+      await toggleArchive(p, projectMenuContext());
+    });
+    list.append(
+      h("li", { className: "archived-row" },
+        h("a", { className: "body archived-name", href: `#/projects/${encodeURIComponent(p.id)}` }, p.name),
+        restore,
+        hasProjectActions(p) ? projectOptionsButton(p, { compact: true }) : null),
+    );
+  }
+  return h("details", { className: "done-section archived-projects" },
+    h("summary", { className: "headline muted" }, "المشاريع المؤرشفة ", h("span", { className: "caption muted" }, arabicNumber(archived.length))),
+    list);
 }
 
 function overviewRow(href, iconName, label) {
@@ -1065,7 +1091,35 @@ async function viewProject({ id, section }) {
   return projectTasksView({ title: project.name, subtitle: counts, projectId: id, project, empty: "لا مهام مفتوحة في هذا المشروع." });
 }
 
-/** List, board or timeline, and «مشاركة», under a project's title. */
+/** What «خيارات المشروع» needs: after a change the list, the sidebar and this view redraw. */
+function projectMenuContext() {
+  return {
+    announce,
+    showError,
+    refreshProjects: async () => {
+      await refreshProjects();
+      frame.refreshSidebar();
+      render({ focus: false });
+    },
+    // Archived or deleted while open: back to the projects.
+    onRemoved: (project) => {
+      const route = parseHash(location.hash);
+      if (route.name === "project" && route.id === project.id) location.hash = "#/projects";
+    },
+  };
+}
+
+/** «خيارات» for a project: a button that opens its menu (project-menu.js). */
+function projectOptionsButton(project, { compact = false } = {}) {
+  const label = `خيارات المشروع «${project.name}»`;
+  const button = compact
+    ? IconButton({ icon: "ellipsis", label, "aria-haspopup": "menu" })
+    : h("button", { type: "button", className: "zm-btn zm-btn-secondary", "aria-haspopup": "menu", "aria-label": label }, icon("ellipsis", { size: "sm" }), "خيارات");
+  button.addEventListener("click", (event) => showProjectMenu(event, project, projectMenuContext()));
+  return button;
+}
+
+/** List, board or timeline, «مشاركة» and «خيارات», under a project's title. */
 function projectTools(project) {
   const share = h("button", { type: "button", className: "zm-btn zm-btn-secondary", "aria-haspopup": "dialog" }, icon("users", { size: "sm" }), "مشاركة");
   share.addEventListener("click", () =>
@@ -1076,7 +1130,7 @@ function projectTools(project) {
       },
     }),
   );
-  return h("div", { className: "project-tools" }, layoutToggle(project, featureContext()), share);
+  return h("div", { className: "project-tools" }, layoutToggle(project, featureContext()), share, hasProjectActions(project) ? projectOptionsButton(project) : null);
 }
 
 async function viewInbox() {

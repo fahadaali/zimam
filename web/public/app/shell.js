@@ -127,6 +127,7 @@ export function createShell(ctx) {
           count: counts.byProject.get(project.id),
           drop: editable ? { projectId: project.id, sectionId: null, label: project.name } : null,
         });
+        link.addEventListener("contextmenu", (event) => ctx.projectMenu?.(event, project));
         const head = h("div", { className: "sidebar-project" }, link);
         const li = h("li", null, head);
         if (projectSections.length) {
