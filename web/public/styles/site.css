@@ -1,19 +1,74 @@
 /* زمام — the website: the landing page, and the header and footer the other pages share.
    Calm: neutral surfaces, brand only for actions, sand only for prayer times. The screenshots are
-   the web app itself (scripts/screenshots.mjs), shown in device frames drawn here.
+   the web app itself (scripts/screenshots.mjs): the phone and iPad come framed in the picture, the
+   Mac's window is drawn here. Light or dark follows the system, or the toggle (theme.js).
    Tokens only; logical properties only. */
 
 :root {
-  /* The frame around a phone screenshot: dark glass in both themes. */
-  --bezel: var(--ink);
   --site-glass: color-mix(in srgb, var(--surface) 76%, transparent);
-  --wide: calc(var(--space-11) * 30); /* 1320px: the landing page's widest rows */
+}
+
+/* ——— Light and dark: the toggle sets data-theme on <html>; without it, the system decides ——— */
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Every screenshot and logo comes in both themes; the one for the other theme is hidden, and as
+   it loads lazily it is not fetched until it shows. Only hiding is written here, so the one shown
+   keeps its own display (.shot's block, the logo's inline). */
+:root[data-theme="light"] .theme-dark,
+:root[data-theme="dark"] .theme-light {
+  display: none;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .theme-dark {
+    display: none;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bezel: var(--surface-sunken);
+  :root:not([data-theme]) .theme-light {
+    display: none;
   }
+}
+
+/* The toggle: a quiet 44px circle, the moon in light (to go dark), the sun in dark. */
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--space-11);
+  block-size: var(--space-11);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.theme-toggle:active {
+  opacity: var(--opacity-pressed);
+}
+
+.theme-toggle[aria-pressed="true"] .theme-icon-moon,
+.theme-toggle[aria-pressed="false"] .theme-icon-sun {
+  display: none;
+}
+
+/* The themes cross-fade (theme.js), briefly; nothing moves. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--duration-complete);
 }
 
 .site-header,
@@ -177,7 +232,7 @@ main:focus {
   position: absolute;
   inset-block-end: 0;
   inset-inline-end: var(--space-6);
-  inline-size: clamp(calc(var(--space-11) * 3), 22%, calc(var(--space-11) * 6));
+  inline-size: clamp(calc(var(--space-11) * 4), 26%, calc(var(--space-11) * 7));
 }
 
 /* Phones: the phone alone, centred; the window would be too small to read. */
@@ -192,7 +247,7 @@ main:focus {
 
   .hero-stage .device-phone {
     position: static;
-    inline-size: min(100%, calc(var(--space-11) * 7));
+    inline-size: min(100%, calc(var(--space-11) * 8));
     margin-inline: auto;
   }
 }
@@ -209,26 +264,11 @@ main:focus {
   block-size: auto;
 }
 
-.device-phone {
-  padding: calc(var(--space-2) + var(--space-1) / 2);
-  border-radius: calc(var(--space-11) + var(--space-2));
-  background: var(--bezel);
-  border: 1px solid var(--line-strong);
-}
-
-.device-phone .shot {
-  border-radius: calc(var(--space-11) - var(--space-1));
-}
-
+/* The iPhone and iPad are in the picture itself, frame, status bar and all, on a transparent
+   ground with room for their shadow (scripts/device-frame.mjs). */
+.device-phone,
 .device-tablet {
-  padding: var(--space-3);
-  border-radius: calc(var(--space-8) + var(--space-1));
-  background: var(--bezel);
-  border: 1px solid var(--line-strong);
-}
-
-.device-tablet .shot {
-  border-radius: var(--space-6);
+  line-height: 0;
 }
 
 .device-window {
@@ -309,7 +349,7 @@ main:focus {
 }
 
 .story-media .device-phone {
-  inline-size: min(100%, calc(var(--space-11) * 7));
+  inline-size: min(100%, calc(var(--space-11) * 8));
 }
 
 .story-media .device-tablet,

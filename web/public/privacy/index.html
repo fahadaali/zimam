@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="/design/components/bundle.css">
 <link rel="stylesheet" href="/styles/base.css">
 <link rel="stylesheet" href="/styles/site.css">
+<script src="/theme.js"></script>
 <link rel="stylesheet" href="/styles/pages.css">
 </head>
 <body class="zm-root">
@@ -20,15 +21,17 @@
 <header class="site-header">
   <div class="site-bar">
     <a class="site-logo" href="/">
-      <picture>
-        <source srcset="/design/logos/zimam-lockup-ar-on-dark.svg" media="(prefers-color-scheme: dark)">
-        <img src="/design/logos/zimam-lockup-ar.svg" alt="زمام" width="496" height="160">
-      </picture>
+      <img class="theme-light" src="/design/logos/zimam-lockup-ar.svg" alt="زمام" width="496" height="160" loading="lazy">
+      <img class="theme-dark" src="/design/logos/zimam-lockup-ar-on-dark.svg" alt="زمام" width="496" height="160" loading="lazy">
     </a>
     <nav aria-label="الموقع">
       <ul class="site-nav">
         <li><a class="callout" href="/terms/">شروط الاستخدام</a></li>
         <li><a class="callout" href="/app/">زمام على الويب</a></li>
+        <li><button type="button" class="theme-toggle" data-theme-toggle hidden aria-pressed="false" aria-label="الوضع الداكن" title="الوضع الداكن">
+          <svg class="theme-icon-moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          <svg class="theme-icon-sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2m-7.07-17.07 1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        </button></li>
       </ul>
     </nav>
   </div>

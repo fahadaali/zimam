@@ -1,7 +1,9 @@
 // The website's screenshots, taken from the web app itself (public/app/) with demo data
 // (scripts/demo-data.mjs), so the landing page shows Zimam's real screens and they can be taken
 // again whenever the app changes: `npm run screenshots` (after `npm run build`, which it runs).
-// Phone, iPad and Mac sizes, light and dark, saved as WebP in public/images/screens/.
+// Phone, iPad and Mac sizes, light and dark, saved as WebP in public/images/screens/. The phone and
+// iPad pictures come framed in the device, with its status bar (scripts/device-frame.mjs); the
+// Mac's window is drawn by the page (styles/site.css).
 //
 // Needs Playwright and Chromium, which the site itself does not: `npm i -g playwright` and
 // `npx playwright install chromium`, or set CHROMIUM_PATH to a Chromium already installed.
@@ -12,6 +14,7 @@ import { createRequire } from "node:module";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NOW, answer } from "./demo-data.mjs";
+import { appViewport, DEVICES, frameHtml, frameSize } from "./device-frame.mjs";
 
 const web = join(dirname(fileURLToPath(import.meta.url)), "..");
 const root = join(web, "public");
@@ -55,11 +58,36 @@ function serve() {
 
 // ——— The screens ———
 
+// The app is shown below the device's status bar, as it lays out inside the safe area.
 const SIZES = {
-  phone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
-  tablet: { viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1.5 },
+  phone: { viewport: appViewport("phone"), deviceScaleFactor: DEVICES.phone.scale, isMobile: true, hasTouch: true },
+  tablet: { viewport: appViewport("tablet"), deviceScaleFactor: DEVICES.tablet.scale },
   desktop: { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1.5 },
 };
+
+/**
+ * The bottom safe area the device gives the page (env(safe-area-inset-bottom)), which a desktop
+ * browser reports as 0: the same rules the app's CSS writes, with the device's inset in them.
+ */
+const SAFE_AREA = {
+  phone: `.tabbar{padding-block-end:34px!important}
+.fab{inset-block-end:calc(var(--tabbar) + var(--space-4) + 34px)!important}
+.sheet{padding-block-end:34px!important}`,
+  tablet: `.fab{inset-block-end:calc(var(--space-4) + 20px)!important}`,
+};
+
+// What the status bar says at NOW: «٩:٤١»، and on the iPad the day too, «الأربعاء ٢١ أكتوبر».
+const STATUS_TIME = new Intl.DateTimeFormat("ar-SA-u-nu-arab", { timeZone: "Asia/Riyadh", hour: "numeric", minute: "2-digit", hour12: true })
+  .formatToParts(new Date(NOW))
+  .filter((p) => p.type === "hour" || p.type === "minute" || p.type === "literal")
+  .map((p) => p.value)
+  .join("")
+  .trim();
+const STATUS_DATE = new Intl.DateTimeFormat("ar-SA-u-nu-arab-ca-gregory", { timeZone: "Asia/Riyadh", weekday: "long", day: "numeric", month: "long" })
+  .formatToParts(new Date(NOW))
+  .filter((p) => p.type !== "literal")
+  .map((p) => p.value)
+  .join(" ");
 
 /** name → [size, route, what to do before the picture] */
 const SHOTS = {
@@ -82,6 +110,23 @@ const SHOTS = {
   "desktop-timeline": ["desktop", "#/timeline"],
   "desktop-matrix": ["desktop", "#/matrix"],
 };
+
+/**
+ * Date and time fields as Safari draws them in Arabic, which Chromium does not: it writes them in
+ * its own way (10/21/2026), with a calendar icon no Arabic iPhone or Mac shows. On the iPhone and
+ * iPad «٢١ أكتوبر ٢٠٢٦», on the Mac «٢١‏/١٠‏/٢٠٢٦»; and on a touch screen no textarea resize grip.
+ */
+function asSafari(touch) {
+  const date = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-arab", touch ? { day: "numeric", month: "long", year: "numeric" } : { day: "numeric", month: "numeric", year: "numeric" });
+  const time = new Intl.DateTimeFormat("ar-SA-u-nu-arab", { hour: "numeric", minute: "2-digit" });
+  for (const input of document.querySelectorAll('input[type="date"], input[type="time"]')) {
+    if (!input.value) continue;
+    const text = input.type === "date" ? date.format(new Date(`${input.value}T12:00:00`)) : time.format(new Date(`2000-01-01T${input.value}:00`));
+    input.type = "text";
+    input.value = text;
+  }
+  if (touch) for (const area of document.querySelectorAll("textarea")) area.style.setProperty("resize", "none");
+}
 
 /** Fixes the clock at NOW and signs in, before any of the app's code runs. */
 function prepare(now) {
@@ -108,6 +153,27 @@ const server = await serve();
 const base = `http://localhost:${server.address().port}/app/`;
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 const converter = await browser.newPage();
+const origin = `http://localhost:${server.address().port}`;
+
+/** The app's screenshot framed in its device, as a transparent PNG. */
+async function framed(device, png) {
+  const { width, height } = frameSize(device);
+  const context = await browser.newContext({ viewport: { width: Math.ceil(width), height: Math.ceil(height) }, deviceScaleFactor: DEVICES[device].scale });
+  const page = await context.newPage();
+  await page.setContent(
+    frameHtml(device, {
+      screen: `data:image/png;base64,${png.toString("base64")}`,
+      time: STATUS_TIME,
+      date: device === "tablet" ? STATUS_DATE : null,
+      font: `${origin}/design/fonts/web/thmanyahsans-Bold.woff2`,
+    }),
+  );
+  await page.waitForSelector("body[data-ready]");
+  await page.evaluate(() => document.fonts.ready);
+  const result = await page.screenshot({ type: "png", omitBackground: true });
+  await context.close();
+  return result;
+}
 await mkdir(out, { recursive: true });
 
 /** PNG bytes to WebP, by the browser's own encoder: no image package needed. */
@@ -144,13 +210,16 @@ for (const scheme of ["light", "dark"]) {
       await page.goto("about:blank");
       await page.goto(base + route);
       await page.waitForSelector("#view h1", { state: "attached" });
+      if (SAFE_AREA[size]) await page.addStyleTag({ content: SAFE_AREA[size] });
       await page.waitForTimeout(600);
       if (act) await act(page);
       await page.waitForTimeout(500);
+      await page.evaluate(asSafari, Boolean(DEVICES[size]));
       // No caret or focus ring in a picture.
       await page.evaluate(() => document.activeElement?.blur?.());
       await page.addStyleTag({ content: "*{caret-color:transparent!important}:focus,:focus-visible{outline:none!important}" });
-      const webp = await toWebp(await page.screenshot({ type: "png" }));
+      const shot = await page.screenshot({ type: "png" });
+      const webp = await toWebp(DEVICES[size] ? await framed(size, shot) : shot);
       const file = join(out, `${name}-${scheme}.webp`);
       await writeFile(file, webp);
       total += webp.length;

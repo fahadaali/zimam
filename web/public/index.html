@@ -17,25 +17,31 @@
 <link rel="stylesheet" href="/design/components/bundle.css">
 <link rel="stylesheet" href="/styles/base.css">
 <link rel="stylesheet" href="/styles/site.css">
+<!-- Applies the theme chosen with the toggle before the page paints (theme.js). -->
+<script src="/theme.js"></script>
 <script type="module" src="/site.js"></script>
 </head>
 <body class="zm-root">
 <a class="skip-link visually-hidden" href="#content">تخطَّ إلى المحتوى</a>
 
-<!-- The screenshots are the web app itself with demo data (npm run screenshots, scripts/screenshots.mjs). -->
+<!-- The screenshots are the web app itself with demo data (npm run screenshots, scripts/screenshots.mjs).
+     Each comes light and dark; the page shows the one for its theme (theme-light / theme-dark in
+     site.css), and the hidden one is never fetched, as both load lazily. -->
 <header class="site-header">
   <div class="site-bar">
     <a class="site-logo" href="/">
-      <picture>
-        <source srcset="/design/logos/zimam-lockup-ar-on-dark.svg" media="(prefers-color-scheme: dark)">
-        <img src="/design/logos/zimam-lockup-ar.svg" alt="زمام" width="496" height="160">
-      </picture>
+      <img class="theme-light" src="/design/logos/zimam-lockup-ar.svg" alt="زمام" width="496" height="160" loading="lazy">
+      <img class="theme-dark" src="/design/logos/zimam-lockup-ar-on-dark.svg" alt="زمام" width="496" height="160" loading="lazy">
     </a>
     <nav aria-label="الموقع">
       <ul class="site-nav" role="list">
         <li class="site-nav-wide"><a class="callout" href="#features">المزايا</a></li>
         <li class="site-nav-wide"><a class="callout" href="#platforms">الأجهزة</a></li>
         <li class="site-nav-wide"><a class="callout" href="#mcp">كلود وChatGPT</a></li>
+        <li><button type="button" class="theme-toggle" data-theme-toggle hidden aria-pressed="false" aria-label="الوضع الداكن" title="الوضع الداكن">
+          <svg class="theme-icon-moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          <svg class="theme-icon-sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2m-7.07-17.07 1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        </button></li>
         <li><a class="zm-btn zm-btn-primary zm-btn-link site-open" href="/app/">افتح زمام</a></li>
       </ul>
     </nav>
@@ -60,16 +66,12 @@
     <div class="hero-stage">
       <figure class="device device-window">
         <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-        <picture>
-          <source srcset="/images/screens/desktop-today-dark.webp" media="(prefers-color-scheme: dark)">
-          <img class="shot" src="/images/screens/desktop-today-light.webp" alt="زمام على الماك بثلاثة أعمدة: الشريط الجانبي، ومهام اليوم، وتفاصيل المهمة المفتوحة" width="2160" height="1350" decoding="async" fetchpriority="high">
-        </picture>
+        <img class="shot theme-light" src="/images/screens/desktop-today-light.webp" alt="زمام على الماك بثلاثة أعمدة: الشريط الجانبي، ومهام اليوم، وتفاصيل المهمة المفتوحة" width="2160" height="1350" decoding="async" loading="lazy" fetchpriority="high">
+        <img class="shot theme-dark" src="/images/screens/desktop-today-dark.webp" alt="زمام على الماك بثلاثة أعمدة: الشريط الجانبي، ومهام اليوم، وتفاصيل المهمة المفتوحة" width="2160" height="1350" decoding="async" loading="lazy" fetchpriority="high">
       </figure>
       <figure class="device device-phone">
-        <picture>
-          <source srcset="/images/screens/phone-today-dark.webp" media="(prefers-color-scheme: dark)">
-          <img class="shot" src="/images/screens/phone-today-light.webp" alt="شاشة «اليوم» في زمام على الجوال: سطر الصلاة القادمة، ومهام اليوم بشرائح التاريخ والصلاة" width="780" height="1688" decoding="async" fetchpriority="high">
-        </picture>
+        <img class="shot theme-light" src="/images/screens/phone-today-light.webp" alt="شاشة «اليوم» في زمام على الجوال: سطر الصلاة القادمة، ومهام اليوم بشرائح التاريخ والصلاة" width="956" height="1864" decoding="async" loading="lazy" fetchpriority="high">
+        <img class="shot theme-dark" src="/images/screens/phone-today-dark.webp" alt="شاشة «اليوم» في زمام على الجوال: سطر الصلاة القادمة، ومهام اليوم بشرائح التاريخ والصلاة" width="956" height="1864" decoding="async" loading="lazy" fetchpriority="high">
       </figure>
     </div>
   </section>
@@ -86,10 +88,8 @@
       </div>
       <div class="story-media">
         <figure class="device device-phone">
-        <picture>
-          <source srcset="/images/screens/phone-prayer-dark.webp" media="(prefers-color-scheme: dark)">
-          <img class="shot" src="/images/screens/phone-prayer-light.webp" alt="شاشة أوقات الصلاة في زمام: الوقت المتبقي على الصلاة القادمة ومواقيت اليوم" width="780" height="1688" decoding="async" loading="lazy">
-        </picture>
+        <img class="shot theme-light" src="/images/screens/phone-prayer-light.webp" alt="شاشة أوقات الصلاة في زمام: الوقت المتبقي على الصلاة القادمة ومواقيت اليوم" width="956" height="1864" decoding="async" loading="lazy">
+        <img class="shot theme-dark" src="/images/screens/phone-prayer-dark.webp" alt="شاشة أوقات الصلاة في زمام: الوقت المتبقي على الصلاة القادمة ومواقيت اليوم" width="956" height="1864" decoding="async" loading="lazy">
       </figure>
       </div>
     </article>
@@ -103,10 +103,8 @@
       </div>
       <div class="story-media">
         <figure class="device device-tablet">
-        <picture>
-          <source srcset="/images/screens/tablet-calendar-dark.webp" media="(prefers-color-scheme: dark)">
-          <img class="shot" src="/images/screens/tablet-calendar-light.webp" alt="تقويم زمام شهرياً بالهجري مع الميلادي، وفيه المهام والمهام الممتدة أياماً" width="1770" height="1230" decoding="async" loading="lazy">
-        </picture>
+        <img class="shot theme-light" src="/images/screens/tablet-calendar-light.webp" alt="تقويم زمام شهرياً بالهجري مع الميلادي، وفيه المهام والمهام الممتدة أياماً" width="1926" height="1386" decoding="async" loading="lazy">
+        <img class="shot theme-dark" src="/images/screens/tablet-calendar-dark.webp" alt="تقويم زمام شهرياً بالهجري مع الميلادي، وفيه المهام والمهام الممتدة أياماً" width="1926" height="1386" decoding="async" loading="lazy">
       </figure>
       </div>
     </article>
@@ -121,10 +119,8 @@
       <div class="story-media">
         <figure class="device device-window">
         <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-        <picture>
-          <source srcset="/images/screens/desktop-board-dark.webp" media="(prefers-color-scheme: dark)">
-          <img class="shot" src="/images/screens/desktop-board-light.webp" alt="مشروع في زمام بلوحة كانبان: أعمدة «للتنفيذ» و«قيد العمل» و«بانتظار»" width="2160" height="1350" decoding="async" loading="lazy">
-        </picture>
+        <img class="shot theme-light" src="/images/screens/desktop-board-light.webp" alt="مشروع في زمام بلوحة كانبان: أعمدة «للتنفيذ» و«قيد العمل» و«بانتظار»" width="2160" height="1350" decoding="async" loading="lazy">
+        <img class="shot theme-dark" src="/images/screens/desktop-board-dark.webp" alt="مشروع في زمام بلوحة كانبان: أعمدة «للتنفيذ» و«قيد العمل» و«بانتظار»" width="2160" height="1350" decoding="async" loading="lazy">
       </figure>
       </div>
     </article>
@@ -138,10 +134,8 @@
       </div>
       <div class="story-media">
         <figure class="device device-phone">
-        <picture>
-          <source srcset="/images/screens/phone-task-dark.webp" media="(prefers-color-scheme: dark)">
-          <img class="shot" src="/images/screens/phone-task-light.webp" alt="تفاصيل مهمة في زمام: الموعد مرتبط بصلاة المغرب، والتذكيرات، والتكرار" width="780" height="1688" decoding="async" loading="lazy">
-        </picture>
+        <img class="shot theme-light" src="/images/screens/phone-task-light.webp" alt="تفاصيل مهمة في زمام: الموعد مرتبط بصلاة المغرب، والتذكيرات، والتكرار" width="956" height="1864" decoding="async" loading="lazy">
+        <img class="shot theme-dark" src="/images/screens/phone-task-dark.webp" alt="تفاصيل مهمة في زمام: الموعد مرتبط بصلاة المغرب، والتذكيرات، والتكرار" width="956" height="1864" decoding="async" loading="lazy">
       </figure>
       </div>
     </article>
@@ -155,10 +149,8 @@
       </div>
       <div class="story-media">
         <figure class="device device-phone">
-        <picture>
-          <source srcset="/images/screens/phone-add-dark.webp" media="(prefers-color-scheme: dark)">
-          <img class="shot" src="/images/screens/phone-add-light.webp" alt="«مهمة جديدة» في زمام: جملة مكتوبة كما تُقال، واقتراح المساعد بموعدها وصلاتها ومشروعها" width="780" height="1688" decoding="async" loading="lazy">
-        </picture>
+        <img class="shot theme-light" src="/images/screens/phone-add-light.webp" alt="«مهمة جديدة» في زمام: جملة مكتوبة كما تُقال، واقتراح المساعد بموعدها وصلاتها ومشروعها" width="956" height="1864" decoding="async" loading="lazy">
+        <img class="shot theme-dark" src="/images/screens/phone-add-dark.webp" alt="«مهمة جديدة» في زمام: جملة مكتوبة كما تُقال، واقتراح المساعد بموعدها وصلاتها ومشروعها" width="956" height="1864" decoding="async" loading="lazy">
       </figure>
       </div>
     </article>
@@ -207,17 +199,13 @@
     <div class="gallery">
       <figure class="device device-window">
         <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-        <picture>
-          <source srcset="/images/screens/desktop-matrix-dark.webp" media="(prefers-color-scheme: dark)">
-          <img class="shot" src="/images/screens/desktop-matrix-light.webp" alt="مصفوفة الأولويات في زمام: مهم وعاجل، ومهم، وعاجل، ويوماً ما" width="2160" height="1350" decoding="async" loading="lazy">
-        </picture>
+        <img class="shot theme-light" src="/images/screens/desktop-matrix-light.webp" alt="مصفوفة الأولويات في زمام: مهم وعاجل، ومهم، وعاجل، ويوماً ما" width="2160" height="1350" decoding="async" loading="lazy">
+        <img class="shot theme-dark" src="/images/screens/desktop-matrix-dark.webp" alt="مصفوفة الأولويات في زمام: مهم وعاجل، ومهم، وعاجل، ويوماً ما" width="2160" height="1350" decoding="async" loading="lazy">
       </figure>
       <figure class="device device-window">
         <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-        <picture>
-          <source srcset="/images/screens/desktop-timeline-dark.webp" media="(prefers-color-scheme: dark)">
-          <img class="shot" src="/images/screens/desktop-timeline-light.webp" alt="المخطط الزمني في زمام: المهام أشرطة على محور الأيام بالهجري والميلادي" width="2160" height="1350" decoding="async" loading="lazy">
-        </picture>
+        <img class="shot theme-light" src="/images/screens/desktop-timeline-light.webp" alt="المخطط الزمني في زمام: المهام أشرطة على محور الأيام بالهجري والميلادي" width="2160" height="1350" decoding="async" loading="lazy">
+        <img class="shot theme-dark" src="/images/screens/desktop-timeline-dark.webp" alt="المخطط الزمني في زمام: المهام أشرطة على محور الأيام بالهجري والميلادي" width="2160" height="1350" decoding="async" loading="lazy">
       </figure>
     </div>
   </section>
