@@ -1,29 +1,22 @@
-// Additions to the task details dialog (index.html #task-dialog), kept out of main.js: the assignee
-// picker and comments (share-view.js), the subtasks with «تقسيم إلى خطوات» (assistant-view.js), and
-// «المدة» with the start date (duration-view.js).
-// They live in their own container after #task-details, so other additions to the dialog stay
-// separate from these.
+// Additions to the open task (index.html #inspector, task-pane.js), kept out of main.js: the
+// assignee picker and comments (share-view.js), the subtasks with «تقسيم إلى خطوات»
+// (assistant-view.js), and «المدة» with the start date (duration-view.js).
+// They live in their own container (#task-extras) after #task-details.
 import { breakdownSection } from "./assistant-view.js";
 import { durationSection } from "./duration-view.js";
-import { h } from "./lib/components.js";
 import { assigneeSection, commentsSection } from "./share-view.js";
 
 let shown = 0;
 
 /**
  * Fills the extras for `task`. `ctx`: { me, primary, today, role, announce, errorText,
- * markLocalChange, onChanged(task) } from main.js. Requests that finish after the dialog moved
- * on to another task are dropped.
+ * markLocalChange, onChanged(task), isTaskShown(id) } from main.js and task-pane.js. Requests
+ * that finish after the pane moved on to another task, or closed, are dropped.
  */
 export function showTaskExtras(task, ctx) {
-  let box = document.getElementById("task-extras");
-  if (!box) {
-    box = h("div", { className: "task-extras", id: "task-extras" });
-    document.getElementById("task-details").after(box);
-  }
+  const box = document.getElementById("task-extras");
   const token = ++shown;
-  const dialog = document.getElementById("task-dialog");
-  const isCurrent = () => token === shown && dialog.open;
+  const isCurrent = () => token === shown && ctx.isTaskShown(task.id);
   const scoped = { ...ctx, isCurrent };
   box.replaceChildren(
     durationSection(task, scoped),

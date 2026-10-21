@@ -1,9 +1,8 @@
 // Plain-DOM equivalents of the reference components in design/components/bundle.js (which needs
 // React). Same class names, markup and behaviour, so design/components/bundle.css styles them.
 // Text always goes in through textContent; nothing here parses HTML.
+import { icon } from "./icons.js";
 import { arabicNumber } from "./numbers.js";
-
-const SVG = "http://www.w3.org/2000/svg";
 
 /** h("div", { className: "x", onclick }, child, "text") */
 export function h(tag, props = {}, ...children) {
@@ -27,37 +26,13 @@ function append(el, children) {
   }
 }
 
-function svg(build) {
-  const root = document.createElementNS(SVG, "svg");
-  root.setAttribute("viewBox", "0 0 16 16");
-  root.setAttribute("width", "14");
-  root.setAttribute("height", "14");
-  root.setAttribute("aria-hidden", "true");
-  root.setAttribute("class", "zm-ico");
-  for (const [tag, attrs] of build) {
-    const node = document.createElementNS(SVG, tag);
-    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
-    root.append(node);
-  }
-  return root;
-}
-
-const stroke = (width) => ({ fill: "none", stroke: "currentColor", "stroke-width": width, "stroke-linecap": "round", "stroke-linejoin": "round" });
-
+/** The chip and row icons, from the shared set (lib/icons.js). */
 export const icons = {
-  check: () => svg([["path", { d: "M3.5 8.5l3 3 6-7", ...stroke(2) }]]),
-  flag: () => svg([["path", { d: "M4 14V2.5M4 3h7.5l-1.8 2.75L11.5 8.5H4", ...stroke(1.6) }]]),
-  calendar: () =>
-    svg([
-      ["rect", { x: 2.5, y: 3.5, width: 11, height: 10, rx: 2, fill: "none", stroke: "currentColor", "stroke-width": 1.5 }],
-      ["path", { d: "M2.5 6.5h11M5.5 2v3M10.5 2v3", ...stroke(1.5) }],
-    ]),
-  horizon: () =>
-    svg([
-      ["path", { d: "M4 10.5a4 4 0 0 1 8 0", ...stroke(1.6) }],
-      ["path", { d: "M2 13h12M8 2.5v2M3.2 5.2l1.2 1.2M12.8 5.2l-1.2 1.2", ...stroke(1.6) }],
-    ]),
-  plus: () => svg([["path", { d: "M8 3v10M3 8h10", ...stroke(1.8) }]]),
+  check: () => icon("check", { size: "xs", weight: "bold" }),
+  flag: () => icon("flag", { size: "sm" }),
+  calendar: () => icon("calendar", { size: "xs" }),
+  prayer: () => icon("moon-star", { size: "xs" }),
+  plus: () => icon("plus", { size: "sm" }),
 };
 
 /** Button: variant primary (one per screen), secondary or quiet. */
@@ -82,8 +57,14 @@ export function DateChip({ text, tone = "default", full }) {
   );
 }
 
+/** PrayerChip: sand on sand-soft with the moon and star (moon.stars), as Chips.swift draws it. */
 export function PrayerChip(text) {
-  return h("span", { className: "zm-chip zm-chip-prayer" }, icons.horizon(), h("span", null, text));
+  return h("span", { className: "zm-chip zm-chip-prayer" }, icons.prayer(), h("span", null, text));
+}
+
+/** TimeChip: a task's clock time «٣:٠٠ م», quiet like the date chip (Chips.swift). */
+export function TimeChip(text) {
+  return h("span", { className: "zm-chip zm-chip-date zm-chip-time" }, h("span", null, text));
 }
 
 const PRIORITY_WORDS = { high: "أولوية عالية", medium: "أولوية متوسطة", low: "أولوية منخفضة" };
@@ -95,9 +76,10 @@ export function PriorityFlag(priority) {
 
 /**
  * TaskRow. The completion circle toggles; the title is a button that opens the task's details
- * (the reference renders it as text). At most three chips: date, prayer, project.
+ * (the reference renders it as text). At most three chips, as TaskRow.swift: the date, then the
+ * clock time or the prayer, then the project as plain text. `selected` is the task open beside it.
  */
-export function TaskRow({ title, note, done = false, priority, date, prayer, project, onToggle, onOpen }) {
+export function TaskRow({ title, note, done = false, priority, date, time, prayer, project, selected = false, onToggle, onOpen }) {
   const check = h(
     "button",
     {
@@ -112,15 +94,18 @@ export function TaskRow({ title, note, done = false, priority, date, prayer, pro
   const meta = [];
   if (date) meta.push(DateChip(date));
   if (prayer) meta.push(PrayerChip(prayer));
+  else if (time) meta.push(TimeChip(time));
   if (project) meta.push(h("span", { className: "zm-meta-text" }, project));
   return h(
     "div",
-    { className: `zm-task${done ? " zm-task-done" : ""}` },
+    { className: `zm-task${done ? " zm-task-done" : ""}${selected ? " zm-task-selected" : ""}` },
     check,
     h(
       "div",
       { className: "zm-task-body" },
-      onOpen ? h("button", { type: "button", className: "zm-task-title zm-task-open", onclick: onOpen }, title) : h("div", { className: "zm-task-title" }, title),
+      onOpen
+        ? h("button", { type: "button", className: "zm-task-title zm-task-open", "aria-current": selected ? "true" : null, onclick: onOpen }, title)
+        : h("div", { className: "zm-task-title" }, title),
       note ? h("div", { className: "zm-task-note" }, note) : null,
       meta.length ? h("div", { className: "zm-task-meta" }, meta) : null,
     ),
@@ -154,4 +139,38 @@ export function ProjectCard({ name, done = 0, total = 0, href, active = false })
       fill,
     ),
   );
+}
+
+/** Marks the row of the task open beside the list (TaskListItem.swift: brand-soft), in place. */
+export function setRowSelected(row, selected) {
+  row.classList.toggle("zm-task-selected", selected);
+  const open = row.querySelector(".zm-task-open");
+  if (!open) return;
+  if (selected) open.setAttribute("aria-current", "true");
+  else open.removeAttribute("aria-current");
+}
+
+/** ScreenHeader: the screen's own large title and a quiet line beneath (TaskListItem.swift). */
+export function ScreenHeader(title, subtitle, ...extra) {
+  return h(
+    "header",
+    { className: "view-header" },
+    h("h1", { className: "display view-title", tabindex: "-1" }, title),
+    subtitle ? h("p", { className: "caption muted view-subtitle" }, subtitle) : null,
+    ...extra,
+  );
+}
+
+/** A 44px toolbar button that shows only its icon; the label is for screen readers and the tooltip. */
+export function IconButton({ icon: name, label, className, ...rest }) {
+  return h(
+    "button",
+    { type: "button", className: ["icon-button", className].filter(Boolean).join(" "), "aria-label": label, title: label, ...rest },
+    icon(name),
+  );
+}
+
+/** A toolbar row above a screen's title: its buttons sit at the inline end, as the app's toolbar items. */
+export function ViewToolbar(...items) {
+  return h("div", { className: "view-toolbar" }, ...items);
 }

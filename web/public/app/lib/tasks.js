@@ -28,6 +28,23 @@ export function splitToday(tasks, today) {
   return { overdue, due };
 }
 
+/**
+ * Today's list as the app shows it (TodayView.swift): open top-level tasks due today or earlier,
+ * by date then time, all-day tasks of a day before its timed ones.
+ */
+export function todayList(tasks, today) {
+  return tasks
+    .filter((t) => !t.parentId && t.dueDate && t.dueDate <= today)
+    .map((task, index) => ({ task, index }))
+    .sort((a, b) => cmp(a.task.dueDate, b.task.dueDate) || cmp(a.task.dueTime ?? "", b.task.dueTime ?? "") || a.index - b.index)
+    .map(({ task }) => task);
+}
+
+const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Top-level tasks only: subtasks show inside their task, never as rows of their own. */
+export const topLevel = (tasks) => tasks.filter((t) => !t.parentId);
+
 /** «٧ من ١٢». */
 export function progressText(done, total) {
   return `${arabicNumber(done)} من ${arabicNumber(total)}`;

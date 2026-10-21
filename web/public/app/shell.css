@@ -1,0 +1,676 @@
+/* زمام على الويب: the app's frame, laid out by width as MainView.swift does.
+   - Compact (below 48rem, phones and narrow iPad windows): one column; the tab bar floats at the
+     bottom (اليوم، القادم، التقويم، المشاريع, and search apart); the add button floats above it at
+     the bottom inline end (the left in Arabic); a task opens on its own page, the tab bar kept.
+   - Regular (48rem up): the sidebar at the inline start (the right), the list beside it, each
+     scrolling on its own. An open task shows in an inspector at the inline end: over the list up
+     to 64rem, as a third column from 64rem.
+   Glass (a translucent, blurred surface) only on chrome that floats over content: the tab bar,
+   the add button, the task page's toolbar and the account menu, never on rows, cards or chips
+   (ZimamGlass.swift). The 48rem and 64rem breakpoints are also in shell.js (REGULAR).
+   Tokens only; logical properties only. */
+
+:root {
+  --sidebar-ideal: calc(var(--space-11) * 6); /* 264, ZimamLayout.sidebarIdeal */
+  --list-min: calc(var(--space-11) * 7); /* 308, ZimamLayout.listMin */
+  --inspector-min: var(--list-min);
+  --inspector-ideal: calc(var(--space-11) * 9); /* 396 */
+  --inspector-max: calc(var(--space-11) * 13.5); /* 594 */
+  --tab-height: calc(var(--space-11) + var(--space-3)); /* 56 */
+  --tabbar: calc(var(--tab-height) + var(--space-2));
+  --fab: calc(var(--space-11) + var(--space-2)); /* 52 */
+  --glass: color-mix(in srgb, var(--surface-raised) 72%, transparent);
+  --glass-edge: color-mix(in srgb, var(--line) 70%, transparent);
+  --glass-blur: saturate(180%) blur(var(--space-4));
+  /* Critically damped: settles without overshoot, as the app's default spring. */
+  --ease-settle: cubic-bezier(0.2, 0, 0, 1);
+  /* Which way "toward the inline end" is on the x axis: left in Arabic. */
+  --end-sign: 1;
+}
+
+:root[dir="rtl"] {
+  --end-sign: -1;
+}
+
+/* ——— Icons (lib/icons.js) ——— */
+
+.zm-ico-xs {
+  inline-size: calc(var(--space-3) + var(--space-1) / 2);
+  block-size: calc(var(--space-3) + var(--space-1) / 2);
+}
+
+.zm-ico-sm {
+  inline-size: var(--space-4);
+  block-size: var(--space-4);
+}
+
+.zm-ico-md {
+  inline-size: calc(var(--space-4) + var(--space-1));
+  block-size: calc(var(--space-4) + var(--space-1));
+}
+
+.zm-ico-lg {
+  inline-size: var(--space-6);
+  block-size: var(--space-6);
+}
+
+:root[dir="rtl"] .zm-ico-mirror {
+  transform: scaleX(-1);
+}
+
+[data-icon] {
+  display: inline-flex;
+  flex: none;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--space-11);
+  block-size: var(--space-11);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.icon-button:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.icon-button:active,
+.fab:active,
+.tab:active,
+.sidebar-row:active {
+  opacity: var(--opacity-pressed);
+}
+
+/* ——— Glass ——— */
+
+.tabbar-tabs,
+.tabbar-search,
+.pane-toolbar,
+.account-menu {
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-edge);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tabbar-tabs,
+  .tabbar-search,
+  .pane-toolbar,
+  .account-menu {
+    background: var(--surface-raised);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .tabbar-tabs,
+  .tabbar-search,
+  .pane-toolbar,
+  .account-menu {
+    background: var(--surface-raised);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-color: var(--line-strong);
+  }
+}
+
+/* ——— Frame ——— */
+
+.shell {
+  min-block-size: 100dvh;
+}
+
+.sidebar {
+  display: none;
+}
+
+.content {
+  position: relative;
+}
+
+/* The list column: the container the wide views (board, week, timeline) measure themselves by. */
+.app-main {
+  container: content / inline-size;
+  padding-block: var(--space-2) calc(var(--tabbar) + var(--fab) + var(--space-8) + env(safe-area-inset-bottom));
+}
+
+.app-main:focus {
+  outline: none;
+}
+
+#view,
+.app-legal {
+  inline-size: min(100% - 2 * var(--gutter), var(--page));
+  margin-inline: auto;
+}
+
+/* A toolbar row above the screen's title; its buttons sit at the inline end, as the app's. */
+.view-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  min-block-size: var(--space-11);
+  margin-block-end: var(--space-1);
+}
+
+.view-toolbar .zm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ——— Add button ——— */
+
+.fab {
+  position: fixed;
+  z-index: 3;
+  inset-inline-end: var(--space-4);
+  inset-block-end: calc(var(--tabbar) + var(--space-4) + env(safe-area-inset-bottom));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--fab);
+  block-size: var(--fab);
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--on-brand) 18%, var(--brand));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--brand) 92%, transparent);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  color: var(--on-brand);
+  cursor: pointer;
+}
+
+.fab:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ——— Tab bar (compact) ——— */
+
+.tabbar {
+  position: fixed;
+  z-index: 2;
+  inset-inline: 0;
+  inset-block-end: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding-inline: var(--space-4);
+  padding-block-end: max(var(--space-2), env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.tabbar-tabs,
+.tabbar-search {
+  pointer-events: auto;
+  border-radius: var(--radius-pill);
+}
+
+.tabbar-tabs {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: var(--space-1);
+  margin: 0;
+  list-style: none;
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-block-size: calc(var(--tab-height) - 2 * var(--space-1));
+  border-radius: var(--radius-pill);
+  color: var(--ink);
+  text-decoration: none;
+  transition: min-block-size var(--duration-complete) var(--ease-settle);
+}
+
+.tab-label {
+  max-block-size: calc(var(--space-4) + var(--space-1));
+  overflow: hidden;
+  transition: max-block-size var(--duration-complete) var(--ease-settle), opacity var(--duration-complete) ease;
+}
+
+.tab[aria-current="page"] {
+  color: var(--brand);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.tabbar-search {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--tab-height);
+  block-size: var(--tab-height);
+  color: var(--ink);
+}
+
+.tabbar-search[aria-current="page"] {
+  color: var(--brand);
+}
+
+/* Scrolling down shrinks the tab bar to its icons (tabBarMinimizeBehavior .onScrollDown). */
+.tabbar.is-minimized .tab-label {
+  max-block-size: 0;
+  opacity: 0;
+}
+
+.tabbar.is-minimized .tab {
+  min-block-size: var(--space-11);
+}
+
+.tabbar.is-minimized .tabbar-search {
+  inline-size: calc(var(--space-11) + var(--space-2));
+  block-size: calc(var(--space-11) + var(--space-2));
+}
+
+/* ——— Inspector (the open task) ——— */
+
+.inspector {
+  background: var(--surface);
+}
+
+.pane-toolbar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-block-size: calc(var(--space-11) + var(--space-2));
+  padding-inline: var(--space-2);
+  border-inline: 0;
+  border-block-start: 0;
+}
+
+.pane-title {
+  flex: 1;
+  min-inline-size: 0;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-pill);
+}
+
+.pane-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--gutter) var(--space-8);
+}
+
+.task-title {
+  overflow-wrap: anywhere;
+}
+
+/* The title takes focus when the task opens, so screen readers start there; it is not a control. */
+.task-title:focus,
+.task-title:focus-visible {
+  outline: none;
+}
+
+.summary-ask {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-inline: var(--space-1);
+}
+
+/* Phones: the close button is «رجوع»; on wide screens it is «إغلاق». */
+.shell[data-layout="compact"] .pane-close,
+.shell[data-layout="regular"] .pane-back {
+  display: none;
+}
+
+/* Phones with a task open: the task's page in place of the list, the tab bar kept. */
+.shell[data-layout="compact"][data-task] .content {
+  display: none;
+}
+
+.shell[data-layout="compact"] .inspector {
+  min-block-size: 100dvh;
+  padding-block-end: calc(var(--tabbar) + var(--space-8) + env(safe-area-inset-bottom));
+}
+
+/* Appears from the inline end, as a pushed page or an inspector does; with Reduce Motion, a fade. */
+.inspector:not([hidden]) {
+  transition: opacity var(--duration-complete) ease, translate var(--duration-complete) var(--ease-settle);
+}
+
+@starting-style {
+  .inspector:not([hidden]) {
+    opacity: 0;
+    translate: calc(var(--space-6) * var(--end-sign)) 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inspector:not([hidden]) {
+    transition: opacity var(--duration-complete) ease;
+    translate: none;
+  }
+
+  @starting-style {
+    .inspector:not([hidden]) {
+      translate: none;
+    }
+  }
+
+  .tab,
+  .tab-label {
+    transition: none;
+  }
+}
+
+/* ——— Account menu ——— */
+
+.account-button {
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--space-11);
+  block-size: var(--space-11);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  cursor: pointer;
+}
+
+/* AvatarView: the initial in brand-ink on brand-soft, with a line border. */
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--space-8);
+  block-size: var(--space-8);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+}
+
+.account-menu {
+  position: fixed;
+  inset: auto;
+  inset-block-start: var(--menu-top, var(--space-11));
+  inset-inline-end: var(--menu-end, var(--gutter));
+  min-inline-size: calc(var(--space-11) * 5);
+  margin: 0;
+  padding: var(--space-1);
+  border-radius: var(--radius-lg);
+  color: var(--ink);
+  box-shadow: var(--shadow-lift);
+}
+
+.account-name {
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink-muted);
+  border-block-end: 1px solid var(--line);
+  margin-block-end: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  list-style: none;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-block-size: var(--space-11);
+  padding-inline: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink);
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.menu-row:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.menu-row.danger {
+  color: var(--priority-high);
+}
+
+/* ——— Sidebar (regular) ——— */
+
+.sidebar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-inline: var(--space-2);
+  margin-block-end: var(--space-2);
+}
+
+.sidebar-title {
+  padding-inline: var(--space-2);
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-1) / 2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.sidebar-heading {
+  padding-inline: var(--space-3);
+  margin-block: var(--space-6) var(--space-1);
+}
+
+.sidebar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: var(--space-11);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.sidebar-row [data-icon] {
+  color: var(--ink-muted);
+}
+
+.sidebar-row:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+/* The selected row: brand-soft with brand-ink (design/README.md). */
+.sidebar-row[aria-current="page"] {
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+}
+
+.sidebar-row[aria-current="page"] [data-icon] {
+  color: var(--brand-ink);
+}
+
+.sidebar-label {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-count {
+  color: var(--ink-muted);
+}
+
+.sidebar-row[aria-current="page"] .sidebar-count {
+  color: var(--brand-ink);
+}
+
+/* A row a dragged task can drop on: outlined while the task is over it (SidebarView.swift). */
+.sidebar-row.is-target {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.sidebar-project {
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-sections {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-1) / 2);
+  padding: 0;
+  padding-inline-start: var(--space-6);
+  margin: 0;
+  list-style: none;
+}
+
+.disclosure {
+  color: var(--ink-muted);
+}
+
+.disclosure .zm-ico {
+  transition: rotate var(--duration-complete) var(--ease-settle);
+}
+
+.disclosure[aria-expanded="true"] .zm-ico {
+  rotate: calc(90deg * var(--end-sign));
+}
+
+.sidebar-empty {
+  padding: var(--space-2) var(--space-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .disclosure .zm-ico {
+    transition: none;
+  }
+}
+
+/* ——— Regular widths ——— */
+
+@media (min-width: 48rem) {
+  :root {
+    --gutter: var(--space-6);
+  }
+
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-ideal) minmax(0, 1fr);
+    grid-template-areas: "sidebar content";
+    block-size: 100dvh;
+    overflow: hidden;
+  }
+
+  .tabbar {
+    display: none;
+  }
+
+  .sidebar {
+    grid-area: sidebar;
+    display: block;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--space-2) var(--space-2) var(--space-8);
+    background: var(--surface-sunken);
+    border-inline-end: 1px solid var(--line);
+  }
+
+  .content {
+    grid-area: content;
+    min-block-size: 0;
+    min-inline-size: 0;
+  }
+
+  .app-main {
+    block-size: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-block: var(--space-4) calc(var(--fab) + var(--space-11));
+  }
+
+  .fab {
+    position: absolute;
+    inset-block-end: var(--space-4);
+    inset-inline-end: var(--space-6);
+  }
+
+  /* Over the list, at its inline end, until there is room for a third column. */
+  .inspector {
+    position: fixed;
+    z-index: 4;
+    inset-block: 0;
+    inset-inline-end: 0;
+    inline-size: min(var(--inspector-ideal), 100vw - var(--sidebar-ideal));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-inline-start: 1px solid var(--line);
+    box-shadow: var(--shadow-lift);
+  }
+
+  .pane-toolbar {
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border: 0;
+  }
+}
+
+@media (min-width: 64rem) {
+  .shell[data-task] {
+    grid-template-columns: var(--sidebar-ideal) minmax(var(--list-min), 1fr) clamp(var(--inspector-min), 32vw, var(--inspector-max));
+    grid-template-areas: "sidebar content inspector";
+  }
+
+  .inspector {
+    position: static;
+    grid-area: inspector;
+    inline-size: auto;
+    box-shadow: none;
+  }
+}
+
+/* A button with an icon and its word, such as «مشاركة». */
+.project-tools .zm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}

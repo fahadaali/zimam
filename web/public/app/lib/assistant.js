@@ -2,7 +2,7 @@
 // suggestion becomes, how it reads, and the Arabic sentence for each failure. The same wording as
 // AssistantProblem and AssistantViews in the Apple app. Pure functions, no DOM; tested in
 // test/assistant.test.mjs.
-import { dualDate, isIsoDate } from "./dates.js";
+import { dualDate, isIsoDate, timeLabel } from "./dates.js";
 import { arabicNumber } from "./numbers.js";
 import { prayerPhrase } from "./prayer.js";
 
@@ -35,13 +35,8 @@ export function suggestionToTask(s) {
   };
 }
 
-/** "14:30" → «٢:٣٠ م». */
-export function clockText(hhmm) {
-  const m = /^(\d{2}):(\d{2})$/.exec(hhmm ?? "");
-  if (!m) return null;
-  const date = new Date(Date.UTC(2026, 0, 1, Number(m[1]), Number(m[2])));
-  return new Intl.DateTimeFormat("ar-SA-u-nu-arab", { timeZone: "UTC", hour: "numeric", minute: "2-digit" }).format(date);
-}
+/** "14:30" → «٢:٣٠ م» (lib/dates.js). */
+export const clockText = timeLabel;
 
 /**
  * The suggestion card's lines, as label and value: [{ term: "العنوان", value }…]. Only what the

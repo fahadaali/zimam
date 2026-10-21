@@ -90,7 +90,7 @@ export function boardView({ project, sections, tasks }, ctx) {
   const draw = (focus) => {
     columns = boardColumns(sections, tasks);
     const shown = shownColumns(columns);
-    board.replaceChildren(...shown.map((column) => columnView(column)), editable ? addSectionControl() : null);
+    board.replaceChildren(...shown.map((column) => columnView(column)), ...(editable ? [addSectionControl()] : []));
     if (focus) board.querySelector(focus)?.focus();
   };
 

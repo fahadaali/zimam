@@ -1,8 +1,10 @@
-// زمام على الويب: sign in with Apple or Google, then Today, Upcoming, Projects and Search over the REST API.
-// Plain DOM and ES modules; views are chosen by the URL hash (#/today, #/projects/<id>, …).
+// زمام على الويب: sign in with Apple or Google, then the app's views over the REST API, in the frame
+// MainView.swift lays out by width (shell.js): a tab bar on phones, the sidebar and an inspector for
+// the open task on wide screens. Plain DOM and ES modules; views are chosen by the URL hash
+// (#/today, #/projects/<id>, …; lib/routes.js), and ?task=<id> is the task open beside them.
 import { api, apiBase, errorText, session, whenSignedOut } from "./lib/api.js";
-import { Button, ButtonLink, PrayerChip, ProjectCard, TaskRow, h, setRowDone } from "./lib/components.js";
-import { addDays, dayHeading, dualDate, dueChip, isIsoDate, localIsoDate, relativeDay, weekdayName } from "./lib/dates.js";
+import { ButtonLink, IconButton, ProjectCard, ScreenHeader, TaskRow, ViewToolbar, h, setRowDone, setRowSelected } from "./lib/components.js";
+import { addDays, dayHeading, dualDate, dueChip, isIsoDate, localIsoDate, relativeDay, timeLabel, weekdayName } from "./lib/dates.js";
 import {
   GOOGLE_CHANNEL,
   GOOGLE_MESSAGE_TYPE,
@@ -16,14 +18,16 @@ import {
   googleStateMatches,
   isGoogleMessage,
 } from "./lib/google.js";
+import { icon } from "./lib/icons.js";
 import { randomNonce, sha256Hex } from "./lib/nonce.js";
 import { arabicNumber, parseDigits } from "./lib/numbers.js";
+import { byManualOrder } from "./lib/order.js";
 import { prayerPhrase } from "./lib/prayer.js";
 import { createRealtime, realtimeUrl } from "./lib/realtime.js";
+import { parseRoute as parseHash, routeKey, withTask } from "./lib/routes.js";
 import { hasPendingImport, rememberPendingImport, viewImport } from "./import-view.js";
-import { showAttachments } from "./attachments-view.js";
 import { rememberPendingJoin, takePendingJoin, viewJoin } from "./invite-view.js";
-import { PRIORITY_WORDS, groupByDay, isOpen, priorityKey, progressText, splitToday, taskCount } from "./lib/tasks.js";
+import { groupByDay, isOpen, priorityKey, progressText, taskCount, todayList, topLevel } from "./lib/tasks.js";
 // Features in their own modules: the assistant, the board, the calendar and sharing.
 import { resetAddAssistant, setupAddAssistant, todaySummary, withAssistantExtras } from "./assistant-view.js";
 import { boardView, layoutOf, layoutToggle } from "./board-view.js";
@@ -31,11 +35,13 @@ import { calendarSelectedDay, viewCalendar } from "./calendar-view.js";
 import { boardApi } from "./lib/feature-api.js";
 import { canEdit } from "./lib/sharing.js";
 import { openShare } from "./share-view.js";
-import { showTaskExtras } from "./task-extras.js";
 // Start dates, the timeline (Gantt) and the priority matrix.
 import { addStartField } from "./duration-view.js";
 import { viewMatrix } from "./matrix-view.js";
 import { projectTimeline, viewTimeline } from "./timeline-view.js";
+// The frame and the open task.
+import { createShell } from "./shell.js";
+import { createTaskPane } from "./task-pane.js";
 
 const APPLE_CLIENT_ID = "app.zimam.ios.web";
 // Google OAuth web client ID (public). Empty hides the Google button. Keep it in the API's GOOGLE_CLIENT_IDS.
@@ -59,6 +65,7 @@ const els = {
   shell: $("shell"),
   view: $("view"),
   main: $("main"),
+  inspector: $("inspector"),
   appError: $("app-error"),
   announcer: $("announcer"),
   addButton: $("add-button"),
@@ -72,7 +79,16 @@ const state = {
   renderId: 0,
   /** When this tab last changed a task, so its own echo does not cut the leave animation short. */
   localChangeAt: 0,
+  /** The tasks drawn as rows, by id, so the open task and its row are the same object. */
+  taskIndex: new Map(),
+  /** The view on screen (lib/routes.js routeKey), so a change of the open task alone keeps it. */
+  shownKey: null,
 };
+
+/** The task open beside the list. `pushed`: opened on a phone, so «رجوع» is the browser's back. */
+const selection = { pushed: false, scrollY: 0, focusBack: null };
+
+const parseRoute = () => parseHash(location.hash);
 
 const primary = () => state.me?.settings?.calendar ?? "hijri";
 const projectName = (id) => state.projects.find((p) => p.id === id)?.name ?? null;
@@ -90,11 +106,15 @@ function featureContext() {
     showError,
     errorText,
     taskItem,
-    openTask: (task) => openTask(task, null),
+    openTask: (task) => selectTask(task),
     canEditTask: (task) => canEdit(roleFor(task)),
     render: () => render({ focus: false }),
-    refreshProjects,
+    refreshProjects: async () => {
+      await refreshProjects();
+      frame.refreshSidebar();
+    },
     markLocalChange: () => (state.localChangeAt = Date.now()),
+    onChanged: (task) => pane.refresh(task),
   };
 }
 
@@ -305,6 +325,7 @@ els.signout.addEventListener("click", async () => {
   session.clear();
   state.me = null;
   state.projects = [];
+  pane.hide();
   showSignIn();
 });
 
@@ -320,6 +341,7 @@ async function start() {
     els.loading.hidden = true;
     els.signin.hidden = true;
     els.shell.hidden = false;
+    els.view.replaceChildren(ScreenHeader("زمام"), emptyState("تعذّر تحميل حسابك."), retryButton());
     showError(error);
     return;
   }
@@ -331,8 +353,19 @@ async function start() {
   if (pendingJoin && parseRoute().name !== "join") history.replaceState(null, "", pendingJoin);
   // The same for an import provider's return, kept in this tab by rememberPendingImport().
   else if (hasPendingImport() && parseRoute().name !== "import") history.replaceState(null, "", `${location.pathname}${location.search}#/import`);
+  frame.refreshSidebar();
   render({ focus: false });
   live.start();
+}
+
+/** «إعادة المحاولة» when the account could not be read (other than a signed-out session). */
+function retryButton() {
+  const button = h("button", { type: "button", className: "zm-btn zm-btn-secondary" }, "إعادة المحاولة");
+  button.addEventListener("click", () => {
+    clearError();
+    start();
+  });
+  return button;
 }
 
 // ——— Realtime ———
@@ -350,11 +383,12 @@ function scheduleLiveRefresh() {
   liveTimer = setTimeout(liveRefresh, LIVE_DEBOUNCE);
 }
 
-/** Whether a reload now would get in the way: a dialog, a task leaving its list, or keyboard focus in the view. */
+/** Whether a reload now would get in the way: a dialog, a drag, a task leaving its list, or typing. */
 function busy() {
   if (document.querySelector("dialog[open]")) return true;
   if (document.body.classList.contains("is-dragging")) return true;
   if (Date.now() - state.localChangeAt < LEAVE_AFTER + FADE + 500) return true;
+  if (pane.isBusy()) return true;
   const active = document.activeElement;
   return !!active && els.view.contains(active) && active.matches("input, select, textarea, :focus-visible");
 }
@@ -370,44 +404,51 @@ async function liveRefresh() {
     return;
   }
   await refreshProjects();
+  frame.refreshSidebar();
+  refreshOpenTask();
   // The import view follows its job itself; re-rendering would reset the form mid-way. The invite
   // view is a single request and a button, so it stays as it is too.
   if (parseRoute().name === "import" || parseRoute().name === "join") return;
   render({ focus: false });
 }
 
-// ——— Routing ———
-
-function parseRoute() {
-  const hash = location.hash.replace(/^#\/?/, "");
-  const [path, search = ""] = hash.split("?");
-  const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
-  const params = new URLSearchParams(search);
-  if (parts[0] === "upcoming") return { name: "upcoming" };
-  if (parts[0] === "projects" && parts[1]) return { name: "project", id: parts[1] };
-  if (parts[0] === "projects") return { name: "projects" };
-  if (parts[0] === "inbox") return { name: "inbox" };
-  if (parts[0] === "search") return { name: "search", q: params.get("q") ?? "" };
-  if (parts[0] === "import") return { name: "import" };
-  if (parts[0] === "calendar") return { name: "calendar" };
-  if (parts[0] === "timeline") return { name: "timeline" };
-  if (parts[0] === "matrix") return { name: "matrix" };
-  if (parts[0] === "join") return { name: "join", code: parts[1] ?? "" };
-  return { name: "today" };
-}
-
-const NAV = { today: "today", upcoming: "upcoming", calendar: "calendar", projects: "projects", project: "projects", inbox: "projects", search: "search", import: "import", timeline: "timeline", matrix: "matrix" };
-
-function updateNav(route) {
-  $("nav-more-menu")?.hidePopover?.(); // «المزيد» on phones closes once a view is chosen
-  for (const link of document.querySelectorAll("a[data-route]")) {
-    if (link.dataset.route === NAV[route.name]) link.setAttribute("aria-current", "page");
-    else link.removeAttribute("aria-current");
+/** The open task, read again after a change elsewhere: redrawn only if it changed, kept if gone. */
+async function refreshOpenTask() {
+  const id = pane.currentId();
+  if (!id) return;
+  try {
+    const task = await api.task(id);
+    if (pane.currentId() !== id) return;
+    if (task.updatedAt !== state.taskIndex.get(id)?.updatedAt) {
+      state.taskIndex.set(id, task);
+      pane.refresh(task);
+    }
+  } catch (error) {
+    if (error.status === 404 && pane.currentId() === id) pane.showMissing();
   }
 }
 
+// ——— «مزامنة الآن» ———
+
+async function syncNow() {
+  live.stop();
+  await refreshProjects();
+  await Promise.all([frame.refreshSidebar(), render({ focus: false }), refreshOpenTask()]);
+  live.start();
+  announce("تمت المزامنة.");
+}
+
+// ——— Routing ———
+
 window.addEventListener("hashchange", () => {
-  if (!els.shell.hidden) render({ focus: true });
+  if (els.shell.hidden) return;
+  const route = parseRoute();
+  // Only the open task changed (a phone's task page, or back from it): keep the list as it is.
+  if (routeKey(route) === state.shownKey) {
+    syncTask(route.task ?? null, { focus: true });
+    return;
+  }
+  render({ focus: true });
 });
 
 const VIEWS = {
@@ -418,9 +459,9 @@ const VIEWS = {
   inbox: viewInbox,
   search: viewSearch,
   calendar: () => viewCalendar(featureContext()),
-  timeline: () => viewTimeline(featureContext()),
-  matrix: () => viewMatrix(featureContext()),
-  import: () => viewImport({ primary: primary(), today: state.today, me: state.me, announce, onImported: refreshProjects }),
+  timeline: () => withHeading(viewTimeline(featureContext())),
+  matrix: () => withHeading(viewMatrix(featureContext())),
+  import: () => viewImport({ primary: primary(), today: state.today, me: state.me, announce, onImported: featureContext().refreshProjects }),
   join: ({ code }) =>
     viewJoin({
       code,
@@ -429,47 +470,191 @@ const VIEWS = {
       announce,
       onJoined: async (projectId) => {
         await refreshProjects();
+        frame.refreshSidebar();
         location.hash = `#/projects/${encodeURIComponent(projectId)}`;
       },
     }),
 };
 
+/** On phones the timeline and the matrix open from «المشاريع», so they get its back link. */
+async function withHeading(content) {
+  return [backToProjects(), ...(await content)];
+}
+
 async function render({ focus = false } = {}) {
   const id = ++state.renderId;
   state.today = localIsoDate();
   const route = parseRoute();
-  updateNav(route);
+  frame.updateNav(route);
   clearError();
   let content;
   try {
     content = await VIEWS[route.name](route);
   } catch (error) {
     if (error.status === 401 || id !== state.renderId) return;
-    content = [h("h1", { className: "display view-title", tabindex: "-1" }, "زمام"), emptyState("تعذّر تحميل هذه الصفحة.")];
+    content = [ScreenHeader("زمام"), emptyState("تعذّر تحميل هذه الصفحة.")];
     showError(error);
   }
   if (id !== state.renderId) return; // a newer navigation won
+  state.shownKey = routeKey(route);
   els.view.replaceChildren(...content);
   const heading = els.view.querySelector("h1");
   document.title = `${heading?.textContent ?? "زمام"} | زمام`;
-  if (focus) heading?.focus();
+  if (focus && !route.task) heading?.focus();
+  markSelected(pane.currentId());
+  syncTask(route.task ?? null, { focus });
+}
+
+// ——— The open task ———
+
+const frame = createShell({
+  state,
+  announce,
+  showError,
+  refreshProjects,
+  render: () => render({ focus: false }),
+  onLayout: () => markSelected(pane.currentId()),
+  moveTask,
+  sync: syncNow,
+});
+
+const pane = createTaskPane({
+  primary,
+  today: () => state.today,
+  projectName,
+  roleFor,
+  featureContext,
+  toggle: (task) => toggleTask(task),
+  remove: removeTask,
+  close: closeTask,
+  announce,
+  errorText,
+  api,
+});
+
+/** A row asks to open its task: its own page on a phone, the inspector beside the list on wide screens. */
+function selectTask(task) {
+  state.taskIndex.set(task.id, state.taskIndex.get(task.id) ?? task);
+  if (frame.layout() === "compact") {
+    selection.pushed = true;
+    selection.scrollY = window.scrollY;
+    location.hash = withTask(location.hash, task.id); // hashchange → syncTask
+    return;
+  }
+  history.replaceState(null, "", withTask(location.hash, task.id));
+  syncTask(task.id, { focus: true });
+}
+
+/** Shows the task named in the URL, or closes the pane when there is none. */
+async function syncTask(id, { focus = false } = {}) {
+  if (!id) {
+    if (!els.inspector.hidden) hidePane();
+    return;
+  }
+  if (pane.isShown(id)) return;
+  let task = state.taskIndex.get(id);
+  if (!task) {
+    try {
+      task = await api.task(id);
+      state.taskIndex.set(id, task);
+    } catch (error) {
+      if (parseRoute().task !== id) return;
+      if (error.status === 404 || error.status === 403) pane.showMissing();
+      else if (error.status !== 401) showError(error);
+      return;
+    }
+    if (parseRoute().task !== id) return; // another task was chosen meanwhile
+  }
+  selection.focusBack = id;
+  pane.show(task, { focus });
+  markSelected(id);
+  if (frame.layout() === "compact") window.scrollTo(0, 0);
+}
+
+function hidePane() {
+  pane.hide();
+  markSelected(null);
+  if (frame.layout() === "compact") window.scrollTo(0, selection.scrollY);
+  const back = selection.focusBack;
+  selection.focusBack = null;
+  if (!back) return;
+  const row = findItem(back);
+  (row?.querySelector(".zm-task-open") ?? els.view.querySelector("h1"))?.focus({ preventScroll: true });
+}
+
+/** «رجوع» or «إغلاق»: back to the list, as the app pops the task or closes its inspector. */
+function closeTask({ restoreFocus = false } = {}) {
+  if (!restoreFocus) selection.focusBack = null;
+  if (selection.pushed) {
+    selection.pushed = false;
+    history.back(); // hashchange → syncTask(null)
+    return;
+  }
+  history.replaceState(null, "", withTask(location.hash, null));
+  hidePane();
+}
+
+function findItem(taskId) {
+  return [...els.view.querySelectorAll(".task-item[data-task-id]")].find((li) => li.dataset.taskId === taskId) ?? null;
+}
+
+function markSelected(taskId) {
+  for (const li of els.view.querySelectorAll(".task-item[data-task-id]")) {
+    const row = li.querySelector(".zm-task");
+    if (row) setRowSelected(row, li.dataset.taskId === taskId);
+  }
+}
+
+/** After «حذف المهمة»: the pane closes and the task's row leaves its list. */
+function removeTask(task) {
+  state.taskIndex.delete(task.id);
+  selection.focusBack = null;
+  closeTask();
+  const li = findItem(task.id);
+  if (li) removeItem(li);
+  else render({ focus: false }); // drawn as a bar (calendar, timeline): redraw without it
+  refreshProjects().then(() => frame.refreshSidebar());
+}
+
+/** A task dropped on «صندوق المهام», a project or a section in the sidebar. */
+async function moveTask(taskId, { projectId, sectionId, label }) {
+  const known = state.taskIndex.get(taskId);
+  if (known?.parentId) {
+    showError("المهمة الفرعية تبقى مع مهمتها. انقل المهمة الأصل.");
+    return;
+  }
+  if (known && (known.projectId ?? null) === projectId && (known.sectionId ?? null) === sectionId) return;
+  clearError();
+  state.localChangeAt = Date.now();
+  try {
+    const saved = await boardApi.patchTask(taskId, { projectId, sectionId });
+    if (known) Object.assign(known, saved);
+    announce(`نُقلت «${saved.title}» إلى ${label}.`);
+    pane.refresh(saved);
+    await refreshProjects();
+    frame.refreshSidebar();
+    render({ focus: false });
+  } catch (error) {
+    if (error.status !== 401) showError(error);
+  }
 }
 
 // ——— Shared pieces ———
 
-function viewHeader(title, subtitle, ...extra) {
+function emptyState(text) {
+  return h("p", { className: "callout empty" }, text);
+}
+
+/** «المشاريع» above a project, the timeline or the matrix on phones (the app pushes them from there). */
+function backToProjects() {
   return h(
-    "header",
-    { className: "view-header" },
-    h("h1", { className: "display view-title", tabindex: "-1" }, title),
-    subtitle ? h("p", { className: "callout muted" }, subtitle) : null,
-    ...extra,
+    "nav",
+    { className: "breadcrumb compact-only", "aria-label": "المسار" },
+    ButtonLink({ variant: "quiet", href: "#/projects", className: "back-link" }, icon("chevron-back", { size: "sm" }), "المشاريع"),
   );
 }
 
-function emptyState(text) {
-  return h("p", { className: "body muted empty" }, text);
-}
+const TASK_TYPE = "application/x-zimam-task";
 
 /**
  * A list of TaskRows. `showDate` adds the due-date chip; `leaveWhenDone` removes a task a second
@@ -482,43 +667,72 @@ function taskList(tasks, { showDate = true, showProject = true, leaveWhenDone = 
 }
 
 function taskItem(task, options) {
-  const li = h("li", { className: "task-item" });
+  const li = h("li", { className: "task-item", dataset: { taskId: task.id } });
+  state.taskIndex.set(task.id, task);
   const row = TaskRow({
     title: task.title,
     note: task.notes ? task.notes.split("\n")[0] : null,
     done: task.status === "done",
     priority: priorityKey(task.priority),
     date: options.showDate && task.dueDate ? dueChip(task.dueDate, { today: state.today, primary: primary() }) : null,
+    time: task.dueDate && !task.duePrayer ? timeLabel(task.dueTime) : null,
     prayer: prayerPhrase(task.duePrayer, task.duePrayerOffset),
     project: options.showProject && task.projectId ? projectName(task.projectId) : null,
-    onToggle: () => toggleTask(task, li, row, options),
-    onOpen: () => openTask(task, li),
+    selected: pane.currentId() === task.id,
+    onToggle: () => toggleTask(task, li),
+    onOpen: () => selectTask(task),
   });
+  li.task = task;
+  li.row = row;
+  li.leaveWhenDone = options.leaveWhenDone;
   li.append(row);
+  // Any top-level task can be dragged to «صندوق المهام» or a project in the sidebar; the board,
+  // calendar and matrix add their own drops on top of this.
+  if (!task.parentId && canEdit(roleFor(task))) {
+    li.draggable = true;
+    li.addEventListener("dragstart", (event) => {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData(TASK_TYPE, task.id);
+      if (!event.dataTransfer.getData("text/plain")) event.dataTransfer.setData("text/plain", task.title);
+      document.body.classList.add("is-dragging");
+    });
+    li.addEventListener("dragend", () => document.body.classList.remove("is-dragging"));
+  }
   return li;
 }
 
-async function toggleTask(task, li, row, { leaveWhenDone }) {
+/** Completes or reopens a task, from its circle or the pane's «إنجاز»; the row and the pane follow. */
+async function toggleTask(task, li = findItem(task.id)) {
   const done = isOpen(task);
   const previous = task.status;
-  task.status = done ? "done" : "todo";
-  setRowDone(row, done, task.title);
-  clearTimeout(li.leaveTimer);
-  li.classList.remove("is-leaving");
+  const copies = new Set([task, li?.task, state.taskIndex.get(task.id), pane.currentTask(task.id)].filter(Boolean));
+  const show = (status) => {
+    for (const copy of copies) copy.status = status;
+    if (li?.row) setRowDone(li.row, status === "done", task.title);
+    pane.setToggle(task);
+  };
+  show(done ? "done" : "todo");
+  if (li) {
+    clearTimeout(li.leaveTimer);
+    li.classList.remove("is-leaving");
+  }
   clearError();
   state.localChangeAt = Date.now();
 
   const call = done ? api.completeTask(task.id) : api.reopenTask(task.id);
-  if (done && leaveWhenDone) li.leaveTimer = setTimeout(() => leave(li, task), LEAVE_AFTER);
+  if (done && li?.leaveWhenDone) li.leaveTimer = setTimeout(() => leave(li, li.task), LEAVE_AFTER);
   try {
-    Object.assign(task, await call);
+    const saved = await call;
+    for (const copy of copies) Object.assign(copy, saved);
+    pane.refresh(saved);
     announce(done ? "أُنجزت المهمة." : "أُعيدت المهمة إلى المفتوحة.");
-    refreshProjects();
+    refreshProjects().then(() => frame.refreshSidebar());
   } catch (error) {
-    clearTimeout(li.leaveTimer);
-    li.classList.remove("is-leaving");
-    task.status = previous;
-    setRowDone(row, previous === "done", task.title);
+    if (li) {
+      clearTimeout(li.leaveTimer);
+      li.classList.remove("is-leaving");
+    }
+    show(previous);
     if (error.status !== 401) showError(error);
   }
 }
@@ -554,39 +768,24 @@ async function refreshProjects() {
 async function viewToday() {
   const today = state.today;
   const { tasks } = await api.tasks({ status: "open", dueTo: today });
-  const { overdue, due } = splitToday(tasks, today);
-  const out = [viewHeader("اليوم", `${weekdayName(today)}، ${dualDate(today, { primary: primary(), today })}`), todaySummary(featureContext())];
-  if (tasks.length === 0) {
-    out.push(emptyState("لا مهام اليوم. يومك لك."));
-    return out;
-  }
-  if (overdue.length) {
-    out.push(
-      h("section", { className: "list-section", "aria-labelledby": "overdue-title" },
-        h("h2", { className: "headline section-title", id: "overdue-title" }, "متأخرة ", h("span", { className: "caption muted" }, taskCount(overdue.length))),
-        taskList(overdue)),
-    );
-  }
-  if (due.length) {
-    const list = taskList(due, { showDate: false });
-    out.push(
-      overdue.length
-        ? h("section", { className: "list-section", "aria-labelledby": "due-title" },
-            h("h2", { className: "headline section-title", id: "due-title" }, "مهام اليوم ", h("span", { className: "caption muted" }, taskCount(due.length))),
-            list)
-        : list,
-    );
-  }
+  const list = todayList(tasks, today);
+  const out = [
+    ViewToolbar(frame.accountButton()),
+    ScreenHeader("اليوم", dualDate(today, { primary: primary(), today })),
+    // NextPrayerLine (the next prayer's countdown) goes here once the API gives the times.
+    todaySummary(featureContext()),
+  ];
+  out.push(list.length ? taskList(list, { label: "مهام اليوم" }) : emptyState("لا مهام اليوم. يومك لك."));
   return out;
 }
 
 async function viewUpcoming() {
   const tomorrow = addDays(state.today, 1);
   const { tasks } = await api.tasks({ status: "open", dueFrom: tomorrow });
-  const out = [viewHeader("القادم", null)];
-  const groups = groupByDay(tasks);
+  const out = [ScreenHeader("القادم")];
+  const groups = groupByDay(topLevel(tasks));
   if (groups.length === 0) {
-    out.push(emptyState("لا مهام قادمة. ما بعد اليوم صفحة بيضاء."));
+    out.push(emptyState("لا مهام قادمة."));
     return out;
   }
   for (const { date, tasks: dayTasks } of groups) {
@@ -605,9 +804,18 @@ async function viewUpcoming() {
 
 async function viewProjects() {
   ({ projects: state.projects } = await api.projects());
-  const projects = state.projects.filter((p) => p.kind === "project" && !p.archivedAt);
-  const out = [viewHeader("المشاريع", null)];
-  if (projects.length === 0) out.push(emptyState("لا مشاريع بعد. أنشئ مشروعك الأول من تطبيق زمام."));
+  const projects = state.projects.filter((p) => p.kind !== "folder" && !p.archivedAt);
+  const newProject = IconButton({ icon: "plus", label: "مشروع جديد", "aria-haspopup": "dialog", onclick: () => frame.openNewProject() });
+  const join = IconButton({ icon: "user-plus", label: "الانضمام بدعوة", "aria-haspopup": "dialog", onclick: () => frame.openJoin() });
+  const out = [ViewToolbar(join, newProject), ScreenHeader("المشاريع")];
+  // On phones the timeline and the matrix open from here (ProjectsView.swift); wide screens have them in the sidebar.
+  out.push(
+    h("ul", { className: "overview-rows compact-only", role: "list" },
+      overviewRow("#/timeline", "timeline", "المخطط الزمني"),
+      overviewRow("#/matrix", "matrix", "المصفوفة"),
+      overviewRow("#/inbox", "inbox", "صندوق المهام")),
+  );
+  if (projects.length === 0) out.push(emptyState("لا مشاريع بعد."));
   else {
     const grid = h("ul", { className: "project-grid", role: "list" });
     for (const p of projects) {
@@ -615,48 +823,78 @@ async function viewProjects() {
     }
     out.push(grid);
   }
-  out.push(h("p", { className: "inbox-link" }, ButtonLink({ variant: "quiet", href: "#/inbox" }, "مهام بلا مشروع")));
   return out;
 }
 
-async function projectTasksView(title, subtitle, projectId, project = null) {
-  const { tasks } = await api.tasks({ projectId });
-  const top = tasks.filter((t) => !t.parentId);
-  const open = top.filter(isOpen);
-  const done = top.filter((t) => !isOpen(t));
-  const back = ButtonLink({ variant: "quiet", href: "#/projects", className: "back-link" }, "المشاريع");
-  const out = [h("nav", { className: "breadcrumb", "aria-label": "المسار" }, back), viewHeader(title, subtitle, project ? projectTools(project) : null)];
-  if (project && layoutOf(project) === "kanban") {
-    const detail = await boardApi.project(project.id);
-    out.push(boardView({ project: { ...project, role: detail.role ?? project.role }, sections: detail.sections ?? [], tasks: top }, featureContext()));
+function overviewRow(href, iconName, label) {
+  return h("li", null, h("a", { className: "overview-row body", href }, icon(iconName), h("span", { className: "sidebar-label" }, label), icon("chevron-forward", { size: "sm" })));
+}
+
+/** Open tasks by section, as ProjectDetailView's list: those with no section first, then each section. */
+function sectionGroups(open, sections) {
+  const known = new Set(sections.map((s) => s.id));
+  const groups = [{ section: null, tasks: open.filter((t) => !t.sectionId || !known.has(t.sectionId)) }];
+  for (const section of [...sections].sort(byManualOrder)) groups.push({ section, tasks: open.filter((t) => t.sectionId === section.id) });
+  return groups.filter((g) => g.tasks.length);
+}
+
+async function projectTasksView({ title, subtitle, projectId, project = null, sectionId = null, empty }) {
+  const [{ tasks }, detail] = await Promise.all([api.tasks({ projectId }), project ? boardApi.project(project.id) : null]);
+  const sections = detail?.sections ?? [];
+  const top = topLevel(tasks);
+  const out = [backToProjects()];
+  if (project && !sectionId && layoutOf(project) === "kanban") {
+    out.push(ScreenHeader(title, subtitle, projectTools(project)));
+    out.push(boardView({ project: { ...project, role: detail.role ?? project.role }, sections, tasks: top }, featureContext()));
     return out;
   }
-  if (project && layoutOf(project) === "timeline") {
-    const detail = await boardApi.project(project.id);
-    out.push(projectTimeline({ project, sections: detail.sections ?? [], tasks: top }, featureContext()));
+  if (project && !sectionId && layoutOf(project) === "timeline") {
+    out.push(ScreenHeader(title, subtitle, projectTools(project)));
+    out.push(projectTimeline({ project, sections, tasks: top }, featureContext()));
     return out;
   }
-  out.push(open.length ? taskList(open, { showProject: false, label: "المهام المفتوحة" }) : emptyState("لا مهام مفتوحة هنا."));
+  const scoped = sectionId ? top.filter((t) => t.sectionId === sectionId) : top;
+  const open = scoped.filter(isOpen).sort(byManualOrder);
+  const done = scoped.filter((t) => !isOpen(t));
+  out.push(ScreenHeader(title, subtitle, project && !sectionId ? projectTools(project) : null));
+  if (open.length === 0) out.push(emptyState(empty));
+  for (const { section, tasks: groupTasks } of sectionId ? [{ section: null, tasks: open }] : sectionGroups(open, sections)) {
+    if (!section) {
+      out.push(taskList(groupTasks, { showProject: false, label: "المهام المفتوحة" }));
+      continue;
+    }
+    const titleId = `section-${section.id}`;
+    out.push(
+      h("section", { className: "list-section", "aria-labelledby": titleId },
+        h("h2", { className: "headline section-title", id: titleId }, section.name),
+        taskList(groupTasks, { showProject: false, label: section.name })),
+    );
+  }
   if (done.length) {
     out.push(
       h("details", { className: "done-section" },
-        h("summary", { className: "headline" }, "المنجزة ", h("span", { className: "caption muted" }, taskCount(done.length))),
+        h("summary", { className: "headline muted" }, "المنجزة ", h("span", { className: "caption muted" }, taskCount(done.length))),
         taskList(done, { showProject: false, leaveWhenDone: false, label: "المهام المنجزة" })),
     );
   }
   return out;
 }
 
-async function viewProject({ id }) {
+async function viewProject({ id, section }) {
   let project = state.projects.find((p) => p.id === id);
   if (!project) project = await api.project(id);
+  if (section) {
+    const detail = await boardApi.project(id);
+    const found = (detail.sections ?? []).find((s) => s.id === section);
+    return projectTasksView({ title: found?.name ?? "قسم", subtitle: project.name, projectId: id, project, sectionId: section, empty: "لا مهام مفتوحة في هذا القسم." });
+  }
   const counts = project.taskCount != null ? progressText(project.doneCount ?? 0, project.taskCount) : null;
-  return projectTasksView(project.name, counts, id, project);
+  return projectTasksView({ title: project.name, subtitle: counts, projectId: id, project, empty: "لا مهام مفتوحة في هذا المشروع." });
 }
 
-/** List or board, and «مشاركة», under a project's title. */
+/** List, board or timeline, and «مشاركة», under a project's title. */
 function projectTools(project) {
-  const share = Button({ variant: "secondary", "aria-haspopup": "dialog" }, "مشاركة");
+  const share = h("button", { type: "button", className: "zm-btn zm-btn-secondary", "aria-haspopup": "dialog" }, icon("users", { size: "sm" }), "مشاركة");
   share.addEventListener("click", () =>
     openShare(project, {
       ...featureContext(),
@@ -669,7 +907,7 @@ function projectTools(project) {
 }
 
 async function viewInbox() {
-  return projectTasksView("مهام بلا مشروع", "مهامك التي لا تتبع مشروعاً.", "inbox");
+  return projectTasksView({ title: "صندوق المهام", subtitle: "المهام التي لا مشروع لها.", projectId: "inbox", empty: "لا مهام بلا مشروع." });
 }
 
 async function viewSearch({ q }) {
@@ -679,6 +917,7 @@ async function viewSearch({ q }) {
     name: "q",
     type: "search",
     value: q,
+    placeholder: "ابحث في المهام",
     enterkeyhint: "search",
     autocomplete: "off",
     spellcheck: "false",
@@ -695,100 +934,35 @@ async function viewSearch({ q }) {
         location.hash = value ? `#/search?q=${encodeURIComponent(value)}` : "#/search";
       },
     },
-    h("label", { className: "headline", for: "search-input" }, "ابحث في المهام والملاحظات"),
-    h("div", { className: "search-row" }, input, Button({ variant: "secondary", type: "submit" }, "بحث")),
+    h("label", { className: "visually-hidden", for: "search-input" }, "ابحث في المهام"),
+    h("div", { className: "search-row" }, h("span", { className: "search-icon", "aria-hidden": "true" }, icon("search")), input),
   );
-  const out = [viewHeader("البحث", null), h("search", null, form)];
+  const out = [ScreenHeader("البحث"), h("search", null, form)];
   if (!q.trim()) {
-    out.push(emptyState("اكتب كلمة من عنوان المهمة أو ملاحظتها."));
+    out.push(emptyState("ابحث في عناوين المهام وملاحظاتها ووسومها."));
     return out;
   }
   const { tasks } = await api.tasks({ q: q.trim() });
-  const count = tasks.length === 0 ? "لا نتائج" : tasks.length === 1 ? "نتيجة واحدة" : `${arabicNumber(tasks.length)} نتائج`;
-  out.push(h("p", { className: "callout muted result-count", role: "status" }, count));
-  if (tasks.length) out.push(taskList(tasks, { leaveWhenDone: false, label: "نتائج البحث" }));
-  else out.push(emptyState(`لم نجد مهمة فيها «${q.trim()}».`));
+  const found = topLevel(tasks);
+  const count = found.length === 0 ? "لا نتائج." : found.length === 1 ? "نتيجة واحدة" : `${arabicNumber(found.length)} نتائج`;
+  out.push(h("p", { className: "caption muted result-count", role: "status" }, count));
+  if (found.length) out.push(taskList(found, { leaveWhenDone: false, label: "نتائج البحث" }));
   return out;
 }
 
-// ——— Task details and deletion ———
-
-const taskDialog = {
-  el: $("task-dialog"),
-  title: $("task-dialog-title"),
-  details: $("task-details"),
-  error: $("task-error"),
-  actions: $("task-actions"),
-  confirm: $("task-confirm"),
-  task: null,
-  li: null,
-};
-
-// Light dismiss where `closedby` is not supported yet (Safari).
-if (!("closedBy" in HTMLDialogElement.prototype)) {
-  taskDialog.el.addEventListener("click", (event) => {
-    if (event.target !== taskDialog.el) return;
-    const r = taskDialog.el.getBoundingClientRect();
-    const inside = r.top <= event.clientY && event.clientY <= r.bottom && r.left <= event.clientX && event.clientX <= r.right;
-    if (!inside) taskDialog.el.close();
-  });
-}
-
-function detail(term, ...value) {
-  return [h("dt", { className: "caption muted" }, term), h("dd", { className: "body" }, ...value)];
-}
-
-function openTask(task, li) {
-  taskDialog.task = task;
-  taskDialog.li = li;
-  taskDialog.title.textContent = task.title;
-  taskDialog.error.textContent = "";
-  taskDialog.actions.hidden = false;
-  taskDialog.confirm.hidden = true;
-  const rows = [];
-  if (task.dueDate) {
-    const word = relativeDay(task.dueDate, state.today);
-    const full = dualDate(task.dueDate, { primary: primary(), today: state.today });
-    rows.push(...detail("الموعد", word ? `${word}، ${full}` : `${weekdayName(task.dueDate)}، ${full}`));
+// ⌘F / Ctrl+F: «بحث», as on the Mac. The browser's own find stays on the search screen itself.
+document.addEventListener("keydown", (event) => {
+  if (event.key.toLowerCase() !== "f" || !(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return;
+  if (els.shell.hidden || document.querySelector("dialog[open]")) return;
+  if (parseRoute().name === "search") {
+    const input = $("search-input");
+    if (document.activeElement === input) return;
+    event.preventDefault();
+    input?.focus();
+    return;
   }
-  const prayer = prayerPhrase(task.duePrayer, task.duePrayerOffset);
-  if (prayer) rows.push(...detail("مع الصلاة", PrayerChip(prayer)));
-  if (task.projectId) rows.push(...detail("المشروع", projectName(task.projectId) ?? "مشروع مشترك"));
-  rows.push(...detail("الأولوية", PRIORITY_WORDS[task.priority] ?? PRIORITY_WORDS[0]));
-  rows.push(...detail("الحالة", isOpen(task) ? "مفتوحة" : "منجزة"));
-  if (task.notes) rows.push(...detail("الملاحظات", h("span", { className: "notes" }, task.notes)));
-  taskDialog.details.replaceChildren(...rows);
-  showAttachments($("task-attachments"), task, { announce });
-  taskDialog.el.showModal();
-  showTaskExtras(task, { ...featureContext(), role: roleFor(task) });
-}
-
-$("task-close").addEventListener("click", () => taskDialog.el.close());
-$("task-delete").addEventListener("click", () => {
-  taskDialog.actions.hidden = true;
-  taskDialog.confirm.hidden = false;
-  $("task-delete-cancel").focus();
-});
-$("task-delete-cancel").addEventListener("click", () => {
-  taskDialog.confirm.hidden = true;
-  taskDialog.actions.hidden = false;
-  $("task-delete").focus();
-});
-$("task-delete-confirm").addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  button.disabled = true;
-  try {
-    await api.deleteTask(taskDialog.task.id);
-    taskDialog.el.close();
-    announce("حُذفت المهمة.");
-    if (taskDialog.li) removeItem(taskDialog.li);
-    else render({ focus: false }); // opened from a bar (calendar, timeline): redraw without it
-    refreshProjects();
-  } catch (error) {
-    if (error.status !== 401) taskDialog.error.textContent = errorText(error);
-  } finally {
-    button.disabled = false;
-  }
+  event.preventDefault();
+  location.hash = "#/search";
 });
 
 // ——— Add a task ———
@@ -832,7 +1006,7 @@ function readOffset() {
 function updateDatePreview() {
   const value = addDialog.date.value;
   if (!isIsoDate(value)) {
-    addDialog.datePreview.textContent = "بلا تاريخ";
+    addDialog.datePreview.textContent = "بلا موعد";
     return;
   }
   const word = relativeDay(value, state.today);
@@ -844,18 +1018,26 @@ function updatePrayerPreview() {
   const prayer = addDialog.prayer.value;
   addDialog.offset.hidden = !prayer;
   const offset = readOffset();
-  addDialog.prayerPreview.textContent = prayer ? prayerPhrase(prayer, Number.isNaN(offset) ? 0 : offset) : "";
+  addDialog.prayerPreview.replaceChildren(...(prayer ? [icon("moon-star", { size: "xs" }), prayerPhrase(prayer, Number.isNaN(offset) ? 0 : offset)] : []));
 }
 
 function fillProjects() {
-  const writable = state.projects.filter((p) => p.kind === "project" && !p.archivedAt && (p.role === "owner" || p.role === "editor"));
+  const writable = state.projects.filter((p) => p.kind !== "folder" && !p.archivedAt && canEdit(p.role ?? "owner"));
   addDialog.project.replaceChildren(
-    h("option", { value: "" }, "بلا مشروع"),
+    h("option", { value: "" }, "صندوق المهام"),
     ...writable.map((p) => h("option", { value: p.id }, p.name)),
   );
   const route = parseRoute();
   const preferred = route.name === "project" ? route.id : "";
   addDialog.project.value = writable.some((p) => p.id === preferred) ? preferred : "";
+}
+
+/** Where a new task lands by default, as MainView.swift decides it: today, tomorrow, the shown day, or none. */
+function defaultDue(route) {
+  if (route.name === "today") return state.today;
+  if (route.name === "upcoming") return addDays(state.today, 1);
+  if (route.name === "calendar" && isIsoDate(calendarSelectedDay())) return calendarSelectedDay();
+  return "";
 }
 
 function openAdd() {
@@ -865,9 +1047,7 @@ function openAdd() {
   addDialog.minutesError.textContent = "";
   addDialog.title.removeAttribute("aria-invalid");
   addDialog.minutes.removeAttribute("aria-invalid");
-  const route = parseRoute();
-  addDialog.date.value = route.name === "upcoming" ? addDays(state.today, 1) : route.name === "project" || route.name === "inbox" ? "" : state.today;
-  if (route.name === "calendar" && isIsoDate(calendarSelectedDay())) addDialog.date.value = calendarSelectedDay();
+  addDialog.date.value = defaultDue(parseRoute());
   resetAddAssistant();
   addStart.reset();
   fillProjects();
@@ -894,6 +1074,14 @@ addDialog.title.addEventListener("input", () => {
   addDialog.title.removeAttribute("aria-invalid");
 });
 
+// ⌘N is the browser's new window; Alt+N (Option+N) adds a task, as «مهمة جديدة» does on the Mac.
+document.addEventListener("keydown", (event) => {
+  if (event.code !== "KeyN" || !event.altKey || event.metaKey || event.ctrlKey) return;
+  if (els.shell.hidden || document.querySelector("dialog[open]")) return;
+  event.preventDefault();
+  openAdd();
+});
+
 function invalid(input, message, target) {
   target.textContent = message;
   input.setAttribute("aria-invalid", "true");
@@ -911,6 +1099,8 @@ addDialog.form.addEventListener("submit", async (event) => {
   if (!addStart.check()) return;
 
   const priority = Number(addDialog.form.elements.priority.value) || 0;
+  const route = parseRoute();
+  const projectId = addDialog.project.value || null;
   const body = withAssistantExtras({
     title,
     dueDate: isIsoDate(addDialog.date.value) ? addDialog.date.value : null,
@@ -918,7 +1108,9 @@ addDialog.form.addEventListener("submit", async (event) => {
     duePrayer: prayer,
     duePrayerOffset: prayer ? offset : null,
     priority,
-    projectId: addDialog.project.value || null,
+    projectId,
+    // Added from a section's list: into that section.
+    sectionId: route.name === "project" && route.section && projectId === route.id ? route.section : null,
   });
   addDialog.submit.disabled = true;
   try {
@@ -926,6 +1118,7 @@ addDialog.form.addEventListener("submit", async (event) => {
     addDialog.el.close();
     announce("أُضيفت المهمة.");
     await refreshProjects();
+    frame.refreshSidebar();
     render({ focus: false });
   } catch (error) {
     if (error.status !== 401) addDialog.error.textContent = errorText(error);

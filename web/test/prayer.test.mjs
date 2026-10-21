@@ -11,17 +11,17 @@ test("before a prayer is a negative offset", () => {
   assert.equal(prayerPhrase("maghrib", -10), "قبل المغرب بـ١٠ د");
 });
 
-test("no offset reads as plain after", () => {
-  assert.equal(prayerPhrase("isha", 0), "بعد العشاء");
-  assert.equal(prayerPhrase("dhuhr", null), "بعد الظهر");
-  assert.equal(prayerPhrase("dhuhr", undefined), "بعد الظهر");
+test("no offset reads «عند», as in the app", () => {
+  assert.equal(prayerPhrase("isha", 0), "عند العشاء");
+  assert.equal(prayerPhrase("dhuhr", null), "عند الظهر");
+  assert.equal(prayerPhrase("dhuhr", undefined), "عند الظهر");
 });
 
 test("hours read naturally", () => {
   assert.equal(prayerPhrase("maghrib", 60), "بعد المغرب بساعة");
   assert.equal(prayerPhrase("fajr", -120), "قبل الفجر بساعتين");
-  assert.equal(durationPhrase(180), "٣ س");
-  assert.equal(durationPhrase(90), "١ س و٣٠ د");
+  assert.equal(durationPhrase(180), "بـ٣ س");
+  assert.equal(prayerPhrase("asr", 90), "بعد العصر بـ٩٠ د");
 });
 
 test("no prayer, no phrase; never a middle dot", () => {

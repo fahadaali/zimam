@@ -4,6 +4,7 @@
 // «إضافة», «تعديل» (fills the form) and «تجاهل».
 // Plain DOM through h() and textContent; nothing here parses HTML.
 import { Button, h } from "./lib/components.js";
+import { icon } from "./lib/icons.js";
 import { assistantErrorText, breakdownText, isoWithOffset, suggestionLines, suggestionToTask } from "./lib/assistant.js";
 import { assistantApi, boardApi } from "./lib/feature-api.js";
 import { after, byManualOrder } from "./lib/order.js";
@@ -187,9 +188,11 @@ export function todaySummary(ctx) {
       box.replaceChildren(AISuggestion({ label: "ملخص اليوم" }, kept.text, [hide]));
       return;
     }
-    const ask = Button({ variant: "secondary" }, "ملخص اليوم");
+    // DaySummaryRow: a quiet button, so «إضافة مهمة» stays the screen's one primary action.
+    const ask = Button({ variant: "quiet", className: "summary-ask" }, icon("summary", { size: "sm" }), "ملخص اليوم");
     ask.addEventListener("click", () => load(ask));
-    box.replaceChildren(ask, kept?.error ? h("p", { className: "callout assist-error", role: "alert" }, kept.error) : null);
+    // replaceChildren() writes a null as the text "null", so only real nodes go in.
+    box.replaceChildren(...[ask, kept?.error ? h("p", { className: "callout assist-error", role: "alert" }, kept.error) : null].filter(Boolean));
   };
   const load = async (ask) => {
     const kept = summaries.get(ctx.today);

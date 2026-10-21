@@ -56,3 +56,19 @@ test("nonce: random, URL-safe, hashed as the API expects", async () => {
   assert.notEqual(a, randomNonce());
   assert.equal(await sha256Hex("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 });
+
+test("today's list: due today or earlier, top-level, by date then time", async () => {
+  const { todayList } = await import("../public/app/lib/tasks.js");
+  const list = todayList(
+    [
+      { id: "b", dueDate: "2026-10-20", dueTime: "15:00" },
+      { id: "a", dueDate: "2026-10-20", dueTime: null },
+      { id: "c", dueDate: "2026-10-18" },
+      { id: "d", dueDate: "2026-10-21" },
+      { id: "e", dueDate: "2026-10-20", parentId: "a" },
+      { id: "f", dueDate: "2026-10-20", dueTime: "09:30" },
+    ],
+    "2026-10-20",
+  );
+  assert.deepEqual(list.map((t) => t.id), ["c", "a", "f", "b"]);
+});

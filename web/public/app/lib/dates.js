@@ -12,6 +12,7 @@ const hijriFmt = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-arab", 
 const hijriYearFmt = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-arab", opts({ year: "numeric" }));
 const gregorianFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-arab", opts());
 const gregorianYearFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-arab", opts({ year: "numeric" }));
+const clockFmt = new Intl.DateTimeFormat("ar-SA-u-nu-arab", { timeZone: "UTC", hour: "numeric", minute: "2-digit" });
 const weekdayFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-arab", { timeZone: "UTC", weekday: "long" });
 
 /** "2026-10-13" → a Date at 12:00 UTC that day. Throws on anything else. */
@@ -106,4 +107,11 @@ export function dayHeading(iso, { today, primary = "hijri" }) {
   if (word === "اليوم" || word === "غداً") return { title: word, subtitle: `${weekdayName(iso)}، ${full}` };
   if (word) return { title: word, subtitle: full };
   return { title: full, subtitle: weekdayName(iso) };
+}
+
+/** A task's clock time, "14:30" → «٢:٣٠ م» (the app's TimeChip); null for anything else. */
+export function timeLabel(hhmm) {
+  const m = /^(\d{2}):(\d{2})$/.exec(hhmm ?? "");
+  if (!m) return null;
+  return clockFmt.format(new Date(Date.UTC(2026, 0, 1, Number(m[1]), Number(m[2]))));
 }
