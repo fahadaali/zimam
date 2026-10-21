@@ -97,6 +97,15 @@ declare global {
       /** Secrets: the ClickUp OAuth app. */
       CLICKUP_CLIENT_ID?: string;
       CLICKUP_CLIENT_SECRET?: string;
+      /** Secrets: the Atlassian OAuth 2.0 (3LO) app for Jira. Planner uses MS_CLIENT_ID and MS_CLIENT_SECRET. */
+      JIRA_CLIENT_ID?: string;
+      JIRA_CLIENT_SECRET?: string;
+      /** Secrets: the Linear OAuth app. */
+      LINEAR_CLIENT_ID?: string;
+      LINEAR_CLIENT_SECRET?: string;
+      /** Secrets: the monday.com app. */
+      MONDAY_CLIENT_ID?: string;
+      MONDAY_CLIENT_SECRET?: string;
     }
   }
 }

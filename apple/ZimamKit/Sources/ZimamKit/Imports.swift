@@ -26,7 +26,7 @@ public struct ImportSource: Decodable, Equatable, Hashable, Identifiable, Sendab
 
     /// Stable id: "todoist-oauth", "todoist-csv", "todoist-api", "ticktick-csv", "google-tasks-api",
     /// "google-tasks", "csv", "google-calendar", "microsoft-todo", "notion", "trello", "asana", "clickup",
-    /// "ticktick-api".
+    /// "planner", "jira", "linear", "monday", "ticktick-api".
     public let id: String
     /// The provider's name as the server gives it ("Todoist", "TickTick").
     public let label: String
@@ -491,6 +491,10 @@ public enum ImportText {
         case "trello": return "اللوحات والبطاقات"
         case "asana": return "المشاريع والأقسام والمهام"
         case "clickup": return "المساحات والقوائم والمهام"
+        case "planner": return "الخطط وأعمدتها ومهامها"
+        case "jira": return "المشاريع والمهام"
+        case "linear": return "الفرق والمهام"
+        case "monday": return "اللوحات والمجموعات والعناصر"
         case "ticktick-api": return "القوائم والمهام المفتوحة مباشرة"
         case AppleRemindersImport.sourceId: return "من هذا الجهاز مباشرة"
         default: return ""
@@ -534,6 +538,10 @@ public enum ImportText {
         case "trello": return "Trello"
         case "asana": return "Asana"
         case "clickup": return "ClickUp"
+        case "planner": return "Microsoft Planner"
+        case "jira": return "Jira"
+        case "linear": return "Linear"
+        case "monday": return "monday.com"
         case "ticktick-api": return "TickTick"
         default: return nil
         }
@@ -590,6 +598,10 @@ public enum ImportText {
         case "trello": return "Trello"
         case "asana": return "Asana"
         case "clickup": return "ClickUp"
+        case "planner": return "Microsoft Planner"
+        case "jira": return "Jira"
+        case "linear": return "Linear"
+        case "monday": return "monday.com"
         case "ticktick-api": return "TickTick: الربط بالحساب"
         case AppleRemindersImport.sourceId: return "تذكيرات أبل"
         default: return label
@@ -625,6 +637,14 @@ public enum ImportText {
             return "تنتقل إلى Asana لتأذن لزمام بالقراءة، ثم تعود هنا. تُنقل المشاريع غير المؤرشفة بأقسامها ومهامها والمهام الفرعية والمواعيد والمنجزة."
         case "clickup":
             return "تنتقل إلى ClickUp لتأذن لزمام وتختار مساحات العمل، ثم تعود هنا. تصير كل مساحة مجلداً، وكل قائمة مشروعاً، وحالاتها المفتوحة أعمدة، وتُنقل المهام الفرعية والمواعيد والأولوية والوسوم والمنجزة. يقرأ زمام فقط ولا يغيّر شيئاً في ClickUp."
+        case "planner":
+            return "تنتقل إلى Microsoft لتأذن لزمام بقراءة مهامك، ثم تعود هنا. تصير كل خطة لوحة كانبان وأعمدتها أقساماً، وتُنقل المواعيد والأولوية والمنجزة. يحتاج حساب عمل أو دراسة، لأن Planner غير متاح في الحسابات الشخصية."
+        case "jira":
+            return "تنتقل إلى Atlassian لتأذن لزمام بقراءة Jira وتختار موقعك، ثم تعود هنا. يصير كل مشروع لوحة كانبان وحالاته المفتوحة أعمدة، وتُنقل المهام والفرعية والأولوية والمواعيد والتسميات والوصف والمنجزة."
+        case "linear":
+            return "تنتقل إلى Linear لتأذن لزمام بالقراءة، ثم تعود هنا. يصير كل فريق لوحة كانبان وحالاته المفتوحة أعمدة، وتُنقل المهام والفرعية والأولوية والمواعيد والتسميات والمنجزة، ويصير مشروع Linear وسماً. المهام الملغاة لا تُنقل."
+        case "monday":
+            return "تنتقل إلى monday.com لتأذن لزمام بقراءة لوحاتك، ثم تعود هنا. تصير كل لوحة مشروعاً ومجموعاتها أقساماً، وكل عنصر مهمة وعناصره الفرعية مهاماً فرعية، ويُقرأ التاريخ والحالة والأولوية والوسوم من أعمدتها."
         case "ticktick-api":
             return "تنتقل إلى TickTick لتأذن لزمام بقراءة مهامك، ثم تعود هنا. تُنقل القوائم وأعمدة الكانبان والمهام المفتوحة والتكرار والتذكيرات. وللمهام المنجزة استعمل ملف النسخة الاحتياطية."
         case AppleRemindersImport.sourceId:

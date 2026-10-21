@@ -3,7 +3,7 @@
 Cloudflare Worker يخدم التطبيق والموقع: الحسابات، والمزامنة، والمهام المشتركة، والاستيراد، وطلبات المساعد الذكي، وإشعارات APNs.
 
 - قاعدة البيانات: D1، والمزامنة اللحظية للمهام المشتركة: Durable Objects.
-- الاستيراد من Todoist وGoogle Tasks وGoogle Calendar وTickTick وMicrosoft To Do وNotion وTrello وAsana وClickUp: Queues، بمحوّل منفصل لكل مصدر.
+- الاستيراد من Todoist وGoogle Tasks وGoogle Calendar وTickTick وMicrosoft To Do وNotion وTrello وAsana وClickUp وMicrosoft Planner وJira وLinear وmonday.com: Queues، بمحوّل منفصل لكل مصدر.
 - المساعد الذكي: عبر Cloudflare AI Gateway إلى كلود أو DeepSeek.
 - مرفقات المهام: R2 (المخزن `zimam-attachments`، ويُنشأ قبل النشر).
 - الأسرار عبر `wrangler secret put` فقط، ونسخة محلية في `.dev.vars` (مستثناة من المستودع).

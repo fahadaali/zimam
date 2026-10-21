@@ -4,8 +4,12 @@ import { clickup } from "./clickup";
 import { genericCsv } from "./generic-csv";
 import { googleCalendar } from "./google-calendar";
 import { googleTasks, googleTasksApi } from "./google-tasks";
+import { jira } from "./jira";
+import { linear } from "./linear";
 import { microsoftTodo } from "./microsoft-todo";
+import { monday } from "./monday";
 import { notion } from "./notion";
+import { planner } from "./planner";
 import { tickTickCsv } from "./ticktick";
 import { tickTickApi } from "./ticktick-api";
 import { todoistApi, todoistCsv, todoistOAuth } from "./todoist";
@@ -30,6 +34,10 @@ export const SOURCES: Record<SourceId, Source> = {
   trello,
   asana,
   clickup,
+  planner,
+  jira,
+  linear,
+  monday,
   "ticktick-api": tickTickApi,
 };
 

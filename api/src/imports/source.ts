@@ -30,7 +30,11 @@ export type OAuthSourceId =
   | "ticktick-api"
   | "todoist-oauth"
   | "google-tasks-api"
-  | "clickup";
+  | "clickup"
+  | "planner"
+  | "jira"
+  | "linear"
+  | "monday";
 
 export interface ParseContext {
   /** The user's `settings.timeZone`: dates without a zone are read in it. */
