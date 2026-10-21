@@ -79,6 +79,7 @@ npm run db:migrate:local
 | `GET /v1/tasks` | تصفية بـ `projectId` (أو `inbox`) و`status` (أو `open`) و`dueFrom` و`dueTo` و`q` و`assignee=me` |
 | `POST /v1/tasks`، `GET`, `PATCH`, `DELETE /v1/tasks/:id` | المهمة |
 | `POST /v1/tasks/:id/complete` | إنجاز مهمة |
+| `GET /v1/tasks/:id/reminders` | تذكيرات المستخدم نفسه على مهمة يراها، من الأقدم `{ reminders }` (التذكيرات شخصية، فلا يرى تذكيرات غيره في المشروع المشترك). تُكتب عبر `POST /v1/sync` كباقي الكيانات |
 | `GET /v1/projects/:id/members` | الأعضاء `{ members: [{ userId, name, role, addedAt }] }`، لكل عضو |
 | `PATCH /v1/projects/:id/members/:userId` | `{ role: "editor" \| "viewer" }`، للمالك، ولا يتغيّر دور المالك |
 | `DELETE /v1/projects/:id/members/:userId` | المالك يزيل عضواً، أو العضو يغادر. المالك لا يغادر (`owner_cannot_leave`) |

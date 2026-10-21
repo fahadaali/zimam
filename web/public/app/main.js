@@ -4,7 +4,7 @@
 // (#/today, #/projects/<id>, …; lib/routes.js), and ?task=<id> is the task open beside them.
 import { api, apiBase, errorText, session, whenSignedOut } from "./lib/api.js";
 import { ButtonLink, IconButton, ProjectCard, ScreenHeader, TaskRow, ViewToolbar, h, setRowDone, setRowSelected } from "./lib/components.js";
-import { addDays, dayHeading, dualDate, dueChip, isIsoDate, localIsoDate, relativeDay, timeLabel, weekdayName } from "./lib/dates.js";
+import { addDays, dayDiff, dayHeading, dualDate, dueChip, isIsoDate, localIsoDate, relativeDay, timeLabel, weekdayName } from "./lib/dates.js";
 import {
   GOOGLE_CHANNEL,
   GOOGLE_MESSAGE_TYPE,
@@ -20,7 +20,7 @@ import {
 } from "./lib/google.js";
 import { icon } from "./lib/icons.js";
 import { randomNonce, sha256Hex } from "./lib/nonce.js";
-import { arabicNumber, parseDigits } from "./lib/numbers.js";
+import { arabicNumber } from "./lib/numbers.js";
 import { byManualOrder } from "./lib/order.js";
 import { prayerPhrase } from "./lib/prayer.js";
 import { createRealtime, realtimeUrl } from "./lib/realtime.js";
@@ -29,10 +29,12 @@ import { hasPendingImport, rememberPendingImport, viewImport } from "./import-vi
 import { rememberPendingJoin, takePendingJoin, viewJoin } from "./invite-view.js";
 import { groupByDay, isOpen, priorityKey, progressText, taskCount, todayList, topLevel } from "./lib/tasks.js";
 // Features in their own modules: the assistant, the board, the calendar and sharing.
-import { resetAddAssistant, setupAddAssistant, todaySummary, withAssistantExtras } from "./assistant-view.js";
+import { resetAddAssistant, setupAddAssistant, todaySummary } from "./assistant-view.js";
 import { boardView, layoutOf, layoutToggle } from "./board-view.js";
 import { calendarSelectedDay, viewCalendar } from "./calendar-view.js";
-import { boardApi } from "./lib/feature-api.js";
+import { boardApi, remindersApi } from "./lib/feature-api.js";
+import { nextOccurrence } from "./lib/recurrence.js";
+import { newReminder } from "./lib/reminders.js";
 import { canEdit } from "./lib/sharing.js";
 import { openShare } from "./share-view.js";
 // Start dates, the timeline (Gantt) and the priority matrix.
@@ -42,6 +44,7 @@ import { projectTimeline, viewTimeline } from "./timeline-view.js";
 // The frame and the open task.
 import { createShell } from "./shell.js";
 import { createTaskPane } from "./task-pane.js";
+import { swipeToDelete } from "./swipe.js";
 
 const APPLE_CLIENT_ID = "app.zimam.ios.web";
 // Google OAuth web client ID (public). Empty hides the Google button. Keep it in the API's GOOGLE_CLIENT_IDS.
@@ -523,6 +526,10 @@ const pane = createTaskPane({
   today: () => state.today,
   projectName,
   roleFor,
+  canEdit: (task) => canEdit(roleFor(task)),
+  writableProjects,
+  save: saveTask,
+  markLocalChange: () => (state.localChangeAt = Date.now()),
   featureContext,
   toggle: (task) => toggleTask(task),
   remove: removeTask,
@@ -605,6 +612,32 @@ function markSelected(taskId) {
   }
 }
 
+/** Projects a task can be added to or moved into: the person's own and those they edit. */
+function writableProjects() {
+  return state.projects.filter((p) => p.kind !== "folder" && !p.archivedAt && canEdit(p.role ?? "owner"));
+}
+
+let viewRefreshTimer;
+/** Redraws the list a moment after an edit in the pane, so a burst of edits redraws it once. */
+function refreshViewSoon() {
+  clearTimeout(viewRefreshTimer);
+  viewRefreshTimer = setTimeout(() => {
+    render({ focus: false });
+    frame.refreshSidebar();
+  }, 400);
+}
+
+/** A field changed in the open task's editor: saved, then the pane and the list follow. */
+async function saveTask(task, fields) {
+  state.localChangeAt = Date.now();
+  const saved = await api.patchTask(task.id, fields);
+  for (const copy of new Set([task, state.taskIndex.get(task.id), pane.currentTask(task.id)].filter(Boolean))) Object.assign(copy, saved);
+  pane.refresh(saved);
+  if ("projectId" in fields) refreshProjects();
+  refreshViewSoon();
+  return saved;
+}
+
 /** After «حذف المهمة»: the pane closes and the task's row leaves its list. */
 function removeTask(task) {
   state.taskIndex.delete(task.id);
@@ -662,7 +695,7 @@ const TASK_TYPE = "application/x-zimam-task";
  */
 function taskList(tasks, { showDate = true, showProject = true, leaveWhenDone = true, label } = {}) {
   const list = h("ul", { className: "task-list", role: "list", "aria-label": label });
-  for (const task of tasks) list.append(taskItem(task, { showDate, showProject, leaveWhenDone }));
+  for (const task of tasks) list.append(taskItem(task, { showDate, showProject, leaveWhenDone, swipe: true }));
   return list;
 }
 
@@ -698,7 +731,27 @@ function taskItem(task, options) {
     });
     li.addEventListener("dragend", () => document.body.classList.remove("is-dragging"));
   }
+  // In lists on phones, a swipe toward the inline end shows «حذف» (swipe.js).
+  if (options.swipe && canEdit(roleFor(task))) {
+    swipeToDelete(li, { isCompact: () => frame.layout() === "compact", onDelete: () => deleteFromRow(task, li), label: task.title });
+  }
   return li;
+}
+
+/** «حذف» on a swiped row: deleted at once, as the app's swipe action does. */
+async function deleteFromRow(task, li) {
+  clearError();
+  try {
+    state.localChangeAt = Date.now();
+    await api.deleteTask(task.id);
+    announce("حُذفت المهمة.");
+    state.taskIndex.delete(task.id);
+    if (pane.currentId() === task.id) closeTask();
+    removeItem(li);
+    refreshProjects().then(() => frame.refreshSidebar());
+  } catch (error) {
+    if (error.status !== 401) showError(error);
+  }
 }
 
 /** Completes or reopens a task, from its circle or the pane's «إنجاز»; the row and the pane follow. */
@@ -726,6 +779,7 @@ async function toggleTask(task, li = findItem(task.id)) {
     for (const copy of copies) Object.assign(copy, saved);
     pane.refresh(saved);
     announce(done ? "أُنجزت المهمة." : "أُعيدت المهمة إلى المفتوحة.");
+    if (done && saved.recurrence) addNextOccurrence(saved);
     refreshProjects().then(() => frame.refreshSidebar());
   } catch (error) {
     if (li) {
@@ -736,6 +790,56 @@ async function toggleTask(task, li = findItem(task.id)) {
     if (error.status !== 401) showError(error);
   }
 }
+
+/**
+ * Completing a repeating task adds its next occurrence as a new task, with the same reminders,
+ * as Store.addNextOccurrence does; the completed one stays done. An open copy on that day with
+ * the same title is the next occurrence already (added by another device).
+ */
+async function addNextOccurrence(task) {
+  const next = nextOccurrence(task.recurrence, task.dueDate ?? state.today, state.today);
+  if (!next) return;
+  try {
+    const { tasks } = await api.tasks({ status: "open", dueFrom: next.day, dueTo: next.day, projectId: task.projectId ?? "inbox" });
+    if (tasks.some((t) => t.id !== task.id && t.title === task.title && (t.parentId ?? null) === (task.parentId ?? null))) return;
+    const span = task.startDate && task.dueDate ? dayDiff(task.startDate, task.dueDate) : 0;
+    const copy = await api.createTask({
+      title: task.title,
+      notes: task.notes,
+      tags: task.tags,
+      priority: task.priority,
+      projectId: task.projectId,
+      sectionId: task.sectionId,
+      parentId: task.parentId,
+      dueDate: next.day,
+      ...(span > 0 ? { startDate: addDays(next.day, -span) } : {}),
+      dueTime: task.dueTime,
+      duePrayer: task.duePrayer,
+      duePrayerOffset: task.duePrayerOffset,
+      recurrence: next.recurrence,
+      assigneeId: task.assigneeId,
+      sortOrder: task.sortOrder,
+    });
+    const { reminders } = await remindersApi.list(task.id);
+    const shift = task.dueDate ? dayDiff(task.dueDate, next.day) : 0;
+    const copies = reminders
+      .filter((r) => r.kind !== "time" || shiftIso(r.at, shift))
+      .map((r) => ({ op: "upsert", entity: "reminder", data: newReminder(copy.id, { kind: r.kind, at: r.kind === "time" ? shiftIso(r.at, shift) : r.at, prayer: r.prayer, offsetMinutes: r.offsetMinutes, location: r.location }) }));
+    if (copies.length) await remindersApi.save(copies);
+    announce(`أُضيف موعدها القادم: ${dateLabelFor(next.day)}.`);
+    refreshViewSoon();
+  } catch (error) {
+    if (error.status !== 401) showError(error);
+  }
+}
+
+/** An ISO time moved by whole days, its clock time and offset kept; null if it cannot be read. */
+function shiftIso(at, days) {
+  const m = /^(\d{4}-\d{2}-\d{2})(T.*)$/.exec(at ?? "");
+  return m ? `${addDays(m[1], days)}${m[2]}` : null;
+}
+
+const dateLabelFor = (iso) => relativeDay(iso, state.today) ?? dualDate(iso, { primary: primary(), today: state.today });
 
 function leave(li, task) {
   if (isOpen(task) || !li.isConnected) return;
@@ -967,17 +1071,27 @@ document.addEventListener("keydown", (event) => {
 
 // ——— Add a task ———
 
+// «مهمة جديدة» as AddTaskView.swift: the title (and «اقتراح بالمساعد», assistant-view.js), notes and
+// tags; «الموعد»: none, today, tomorrow or another date, with an optional start date; «الوقت»: all
+// day, a clock time or around a prayer; the priority and the project. A task with a time gets an
+// «عند الموعد» reminder, as ensureAtTimeReminder does.
 const addDialog = {
   el: $("add-dialog"),
   form: $("add-form"),
   title: $("add-title-input"),
   titleError: $("add-title-error"),
+  notes: $("add-notes"),
+  tags: $("add-tags"),
   date: $("add-date"),
+  dateRow: $("add-date-row"),
   datePreview: $("add-date-preview"),
+  startRow: $("add-start-row"),
+  timeRow: $("add-time-row"),
+  time: $("add-time"),
+  timeNote: $("add-time-note"),
   prayer: $("add-prayer"),
-  offset: $("prayer-offset"),
-  minutes: $("add-minutes"),
-  minutesError: $("add-minutes-error"),
+  offsetBox: $("prayer-offset"),
+  offset: $("add-offset"),
   prayerPreview: $("prayer-preview"),
   project: $("add-project"),
   error: $("add-error"),
@@ -990,39 +1104,50 @@ const addStart = addStartField(
   () => ({ primary: primary(), today: state.today }),
 );
 
-function readMinutes() {
-  const text = addDialog.minutes.value.trim();
-  if (text === "") return 0;
-  const n = parseDigits(text);
-  return Number.isInteger(n) && n >= 0 && n <= 720 ? n : NaN;
+const radio = (name) => addDialog.form.elements[name];
+
+/** Which «الموعد» choice a date is: none, today, tomorrow or another date. */
+function dueChoice(iso) {
+  if (!isIsoDate(iso)) return "none";
+  if (iso === state.today) return "today";
+  if (iso === addDays(state.today, 1)) return "tomorrow";
+  return "other";
 }
 
-function readOffset() {
-  const minutes = readMinutes();
-  const before = addDialog.form.elements.relation.value === "before";
-  return before ? -minutes : minutes;
-}
-
-function updateDatePreview() {
+/** The rows that follow the choices: the date field, the start date, the clock or the prayer. */
+function updateAddForm() {
   const value = addDialog.date.value;
-  if (!isIsoDate(value)) {
-    addDialog.datePreview.textContent = "بلا موعد";
-    return;
+  const choice = radio("due").value;
+  addDialog.dateRow.hidden = choice !== "other";
+  addDialog.startRow.hidden = !isIsoDate(value);
+  if (!isIsoDate(value)) addDialog.datePreview.textContent = "بلا موعد";
+  else {
+    const word = relativeDay(value, state.today);
+    const full = dualDate(value, { primary: primary(), today: state.today });
+    addDialog.datePreview.textContent = word ? `${word}، ${full}` : `${weekdayName(value)}، ${full}`;
   }
-  const word = relativeDay(value, state.today);
-  const full = dualDate(value, { primary: primary(), today: state.today });
-  addDialog.datePreview.textContent = word ? `${word}، ${full}` : `${weekdayName(value)}، ${full}`;
+  const mode = radio("timeMode").value;
+  addDialog.timeRow.hidden = mode !== "clock";
+  addDialog.time.disabled = !isIsoDate(value);
+  addDialog.timeNote.hidden = isIsoDate(value);
+  addDialog.offsetBox.hidden = mode !== "prayer";
+  const offset = Number(addDialog.offset.value) || 0;
+  $("add-offset-minus").disabled = offset <= -120;
+  $("add-offset-plus").disabled = offset >= 120;
+  addDialog.prayerPreview.replaceChildren(icon("moon-star", { size: "xs" }), prayerPhrase(addDialog.prayer.value || "asr", offset));
 }
 
-function updatePrayerPreview() {
-  const prayer = addDialog.prayer.value;
-  addDialog.offset.hidden = !prayer;
-  const offset = readOffset();
-  addDialog.prayerPreview.replaceChildren(...(prayer ? [icon("moon-star", { size: "xs" }), prayerPhrase(prayer, Number.isNaN(offset) ? 0 : offset)] : []));
+function setDue(choice) {
+  radio("due").value = choice;
+  if (choice === "none") addDialog.date.value = "";
+  else if (choice === "today") addDialog.date.value = state.today;
+  else if (choice === "tomorrow") addDialog.date.value = addDays(state.today, 1);
+  else if (!isIsoDate(addDialog.date.value)) addDialog.date.value = addDays(state.today, 2);
+  updateAddForm();
 }
 
 function fillProjects() {
-  const writable = state.projects.filter((p) => p.kind !== "folder" && !p.archivedAt && canEdit(p.role ?? "owner"));
+  const writable = writableProjects();
   addDialog.project.replaceChildren(
     h("option", { value: "" }, "صندوق المهام"),
     ...writable.map((p) => h("option", { value: p.id }, p.name)),
@@ -1044,34 +1169,57 @@ function openAdd() {
   addDialog.form.reset();
   addDialog.error.textContent = "";
   addDialog.titleError.textContent = "";
-  addDialog.minutesError.textContent = "";
   addDialog.title.removeAttribute("aria-invalid");
-  addDialog.minutes.removeAttribute("aria-invalid");
+  addDialog.offset.value = "0";
   addDialog.date.value = defaultDue(parseRoute());
+  radio("due").value = dueChoice(addDialog.date.value);
   resetAddAssistant();
   addStart.reset();
   fillProjects();
-  updateDatePreview();
-  updatePrayerPreview();
+  updateAddForm();
   addDialog.el.showModal();
   addDialog.title.focus();
 }
 
 els.addButton.addEventListener("click", openAdd);
 $("add-cancel").addEventListener("click", () => addDialog.el.close());
-addDialog.date.addEventListener("input", updateDatePreview);
-addDialog.prayer.addEventListener("change", updatePrayerPreview);
 addDialog.form.addEventListener("change", (event) => {
-  if (event.target.name === "relation") updatePrayerPreview();
+  if (event.target.name === "due") setDue(event.target.value);
+  else updateAddForm();
 });
-addDialog.minutes.addEventListener("input", () => {
-  addDialog.minutesError.textContent = "";
-  addDialog.minutes.removeAttribute("aria-invalid");
-  updatePrayerPreview();
+addDialog.date.addEventListener("input", () => {
+  radio("due").value = dueChoice(addDialog.date.value) === "none" ? "none" : "other";
+  updateAddForm();
 });
+for (const [id, step] of [["add-offset-minus", -5], ["add-offset-plus", 5]]) {
+  $(id).addEventListener("click", () => {
+    addDialog.offset.value = String(Math.max(-120, Math.min(120, (Number(addDialog.offset.value) || 0) + step)));
+    updateAddForm();
+  });
+}
 addDialog.title.addEventListener("input", () => {
   addDialog.titleError.textContent = "";
   addDialog.title.removeAttribute("aria-invalid");
+});
+
+// «تعديل» on the assistant's suggestion: its fields into the form (assistant-view.js).
+addDialog.form.addEventListener("zimam:fill", ({ detail: task }) => {
+  addDialog.title.value = task.title ?? "";
+  addDialog.notes.value = task.notes ?? "";
+  addDialog.tags.value = (task.tags ?? []).join("، ");
+  addDialog.date.value = task.dueDate ?? "";
+  radio("due").value = dueChoice(addDialog.date.value);
+  if (task.duePrayer) {
+    radio("timeMode").value = "prayer";
+    addDialog.prayer.value = task.duePrayer;
+    addDialog.offset.value = String(task.duePrayerOffset ?? 0);
+  } else if (task.dueTime && task.dueDate) {
+    radio("timeMode").value = "clock";
+    addDialog.time.value = task.dueTime;
+  } else radio("timeMode").value = "allDay";
+  radio("priority").value = String(task.priority ?? 0);
+  if (task.projectId && [...addDialog.project.options].some((o) => o.value === task.projectId)) addDialog.project.value = task.projectId;
+  updateAddForm();
 });
 
 // ⌘N is the browser's new window; Alt+N (Option+N) adds a task, as «مهمة جديدة» does on the Mac.
@@ -1093,28 +1241,34 @@ addDialog.form.addEventListener("submit", async (event) => {
   addDialog.error.textContent = "";
   const title = addDialog.title.value.trim();
   if (!title) return invalid(addDialog.title, "اكتب عنوان المهمة.", addDialog.titleError);
-  const prayer = addDialog.prayer.value || null;
-  const offset = readOffset();
-  if (prayer && Number.isNaN(offset)) return invalid(addDialog.minutes, "اكتب عدد الدقائق من ٠ إلى ٧٢٠.", addDialog.minutesError);
   if (!addStart.check()) return;
 
-  const priority = Number(addDialog.form.elements.priority.value) || 0;
+  const dueDate = isIsoDate(addDialog.date.value) ? addDialog.date.value : null;
+  const mode = radio("timeMode").value;
+  const dueTime = mode === "clock" && dueDate && /^\d{2}:\d{2}$/.test(addDialog.time.value) ? addDialog.time.value : null;
+  const prayer = mode === "prayer" ? addDialog.prayer.value || "asr" : null;
   const route = parseRoute();
   const projectId = addDialog.project.value || null;
-  const body = withAssistantExtras({
+  const body = {
     title,
-    dueDate: isIsoDate(addDialog.date.value) ? addDialog.date.value : null,
+    notes: addDialog.notes.value.trim() ? addDialog.notes.value : null,
+    tags: [...new Set(addDialog.tags.value.split(/[,،]/).map((t) => t.trim()).filter(Boolean))].slice(0, 30),
+    dueDate,
     ...addStart.fields(), // `startDate` only when one is set
+    dueTime,
     duePrayer: prayer,
-    duePrayerOffset: prayer ? offset : null,
-    priority,
+    duePrayerOffset: prayer ? Number(addDialog.offset.value) || 0 : null,
+    priority: Number(radio("priority").value) || 0,
     projectId,
     // Added from a section's list: into that section.
     sectionId: route.name === "project" && route.section && projectId === route.id ? route.section : null,
-  });
+  };
   addDialog.submit.disabled = true;
   try {
-    await api.createTask(body);
+    state.localChangeAt = Date.now();
+    const task = await api.createTask(body);
+    // A task with a time reminds at it, as the app adds «عند الموعد» (ensureAtTimeReminder).
+    if (dueTime || prayer) await remindersApi.add(newReminder(task.id, { kind: "relative", offsetMinutes: 0 })).catch(() => {});
     addDialog.el.close();
     announce("أُضيفت المهمة.");
     await refreshProjects();

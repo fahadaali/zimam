@@ -8,13 +8,15 @@ import { icon } from "./lib/icons.js";
 import { dualDate, relativeDay, timeLabel, weekdayName } from "./lib/dates.js";
 import { prayerPhrase } from "./lib/prayer.js";
 import { PRIORITY_WORDS, isOpen } from "./lib/tasks.js";
+import { remindersSection, taskEditor } from "./task-editor.js";
 import { showTaskExtras } from "./task-extras.js";
 
 const $ = (id) => document.getElementById(id);
 
 /**
- * `ctx` (from main.js): { primary(), today(), projectName(id), roleFor(task), featureContext(),
- * toggle(task), remove(task), close({ restoreFocus }), announce, errorText, api }.
+ * `ctx` (from main.js): { primary(), today(), projectName(id), roleFor(task), canEdit(task),
+ * writableProjects(), save(task, fields) → Promise<task>, featureContext(), toggle(task),
+ * remove(task), close({ restoreFocus }), announce, errorText, markLocalChange, api }.
  */
 export function createTaskPane(ctx) {
   const els = {
@@ -23,6 +25,7 @@ export function createTaskPane(ctx) {
     title: $("task-title"),
     missing: $("task-missing"),
     details: $("task-details"),
+    editor: $("task-editor"),
     extras: $("task-extras"),
     attachments: $("task-attachments"),
     error: $("task-error"),
@@ -32,15 +35,60 @@ export function createTaskPane(ctx) {
     toggleLabel: $("task-toggle-label"),
   };
   let current = null;
+  /** The «التذكيرات» section of the task shown, read once and kept across redraws. */
+  let reminders = null;
 
   function detail(term, ...value) {
     return [h("dt", { className: "caption muted" }, term), h("dd", { className: "body" }, ...value)];
   }
 
+  /** The editor for those who can change the task, the details as text for the rest. */
   function fill(task) {
+    els.title.textContent = task.title;
+    els.missing.hidden = true;
+    els.error.textContent = "";
+    els.actions.hidden = !ctx.canEdit(task);
+    els.confirm.hidden = true;
+    setToggle(task);
+    if (!ctx.canEdit(task)) {
+      els.title.classList.remove("visually-hidden");
+      fillDetails(task);
+      els.editor.replaceChildren(reminders.node);
+      return;
+    }
+    // The title is the editor's first field; the heading stays for screen readers to land on.
+    els.title.classList.add("visually-hidden");
+    els.details.replaceChildren();
+    // A redraw while a field has focus gives it back, with what was being typed in it.
+    const active = document.activeElement;
+    const key = els.editor.contains(active) ? active.dataset.key : null;
+    const typing = key && (active.tagName === "TEXTAREA" || (active.tagName === "INPUT" && /^(text|search)$/.test(active.type)));
+    const draft = typing ? { value: active.value, start: active.selectionStart, end: active.selectionEnd } : null;
+    const editorCtx = {
+      primary: ctx.primary(),
+      today: ctx.today(),
+      projects: ctx.writableProjects(),
+      projectName: ctx.projectName,
+      save: (fields) => ctx.save(task, fields),
+      isCurrent: () => current?.id === task.id,
+      announce: ctx.announce,
+      errorText: ctx.errorText,
+    };
+    els.editor.replaceChildren(taskEditor(task, editorCtx, reminders.node));
+    reminders.redraw();
+    if (!key) return;
+    const again = els.editor.querySelector(`[data-key="${CSS.escape(key)}"]`);
+    if (!again) return;
+    if (draft) {
+      again.value = draft.value;
+      again.setSelectionRange?.(draft.start, draft.end);
+    }
+    again.focus({ preventScroll: true });
+  }
+
+  function fillDetails(task) {
     const today = ctx.today();
     const primary = ctx.primary();
-    els.title.textContent = task.title;
     els.missing.hidden = true;
     els.error.textContent = "";
     els.actions.hidden = false;
@@ -59,14 +107,13 @@ export function createTaskPane(ctx) {
     if (task.tags?.length) rows.push(...detail("الوسوم", task.tags.join("، ")));
     if (task.notes) rows.push(...detail("ملاحظات", h("span", { className: "notes" }, task.notes)));
     els.details.replaceChildren(...rows);
-    setToggle(task);
   }
 
   function setToggle(task) {
     const done = !isOpen(task);
     els.toggleLabel.textContent = done ? "إلغاء الإنجاز" : "إنجاز";
     els.toggle.firstElementChild.replaceChildren(icon(done ? "undo" : "check"));
-    els.toggle.hidden = false;
+    els.toggle.hidden = !ctx.canEdit(task);
   }
 
   function open() {
@@ -77,6 +124,13 @@ export function createTaskPane(ctx) {
   /** Shows `task`; `focus` moves the keyboard to its title (a person opened it, not a reload). */
   function show(task, { focus = true } = {}) {
     current = task;
+    reminders = remindersSection(task.id, () => current ?? task, {
+      primary: ctx.primary(),
+      isCurrent: () => current?.id === task.id,
+      announce: ctx.announce,
+      errorText: ctx.errorText,
+      markLocalChange: ctx.markLocalChange,
+    });
     fill(task);
     els.extras.hidden = false;
     els.attachments.hidden = false;
@@ -93,6 +147,7 @@ export function createTaskPane(ctx) {
     els.title.textContent = "";
     els.missing.hidden = false;
     els.details.replaceChildren();
+    els.editor.replaceChildren();
     els.extras.replaceChildren();
     els.attachments.replaceChildren();
     els.actions.hidden = true;
@@ -106,6 +161,7 @@ export function createTaskPane(ctx) {
     els.pane.hidden = true;
     delete els.shell.dataset.task;
     els.extras.replaceChildren();
+    els.editor.replaceChildren();
   }
 
   /** The same task, newer: redraws the details and the toolbar, keeping extras and attachments. */

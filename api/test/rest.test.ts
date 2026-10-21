@@ -24,6 +24,29 @@ describe("Tasks API", () => {
     expect((await call("GET", `/v1/tasks/${id}`, { token })).status).toBe(404);
   });
 
+  it("lists a task's reminders for their owner only", async () => {
+    const owner = await signIn();
+    const editor = await signIn();
+    const project = await call("POST", "/v1/projects", { token: owner.token, body: { name: "مشترك" } });
+    await addMember(project.body.id, editor.userId, "editor");
+    const task = await call("POST", "/v1/tasks", { token: owner.token, body: { title: "اجتماع", projectId: project.body.id, dueDate: "2026-10-15", dueTime: "10:00" } });
+    const taskId = task.body.id;
+    const mine = crypto.randomUUID();
+    const theirs = crypto.randomUUID();
+    const sync = (token: string, data: Record<string, unknown>) =>
+      call("POST", "/v1/sync", { token, body: { mutations: [{ op: "upsert", entity: "reminder", data: { taskId, updatedAt: Date.now(), ...data } }] } });
+    expect((await sync(owner.token, { id: mine, kind: "relative", offsetMinutes: -15 })).body.results[0].status).toBe("applied");
+    expect((await sync(editor.token, { id: theirs, kind: "prayer", prayer: "asr", offsetMinutes: 0 })).body.results[0].status).toBe("applied");
+
+    const list = await call("GET", `/v1/tasks/${taskId}/reminders`, { token: owner.token });
+    expect(list.status).toBe(200);
+    expect(list.body.reminders.map((r: { id: string; kind: string; offsetMinutes: number }) => [r.id, r.kind, r.offsetMinutes])).toEqual([[mine, "relative", -15]]);
+    expect((await call("GET", `/v1/tasks/${taskId}/reminders`, { token: editor.token })).body.reminders.map((r: { id: string }) => r.id)).toEqual([theirs]);
+
+    const stranger = await signIn();
+    expect((await call("GET", `/v1/tasks/${taskId}/reminders`, { token: stranger.token })).status).toBe(404);
+  });
+
   it("validates input", async () => {
     const { token } = await signIn();
     expect((await call("POST", "/v1/tasks", { token, body: { title: "" } })).status).toBe(400);
