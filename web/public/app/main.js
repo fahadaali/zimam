@@ -47,6 +47,7 @@ import { createTaskPane } from "./task-pane.js";
 import { swipeToDelete } from "./swipe.js";
 import { createPrayers } from "./prayer-view.js";
 import { openSettings } from "./settings-view.js";
+import { showTaskMenu } from "./move-sheet.js";
 
 const APPLE_CLIENT_ID = "app.zimam.ios.web";
 // Google OAuth web client ID (public). Empty hides the Google button. Keep it in the API's GOOGLE_CLIENT_IDS.
@@ -778,6 +779,13 @@ function taskItem(task, options) {
       document.body.classList.add("is-dragging");
     });
     li.addEventListener("dragend", () => document.body.classList.remove("is-dragging"));
+    // «نقل إلى مشروع…» from a context menu: right-click, the Menu key or Shift+F10 (TaskListItem.swift).
+    li.addEventListener("contextmenu", (event) => {
+      if (event.target.closest?.("input, textarea, select, [contenteditable]")) return;
+      event.preventDefault();
+      const returnFocus = event.target.closest?.("button") ?? li.querySelector(".zm-task-open");
+      showTaskMenu(event, task, { projects: () => state.projects, move: moveTask, returnFocus });
+    });
   }
   // In lists on phones, a swipe toward the inline end shows «حذف» (swipe.js).
   if (options.swipe && canEdit(roleFor(task))) {

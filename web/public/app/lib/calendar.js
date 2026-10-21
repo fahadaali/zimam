@@ -175,6 +175,27 @@ export function tasksByDay(tasks) {
   return out;
 }
 
+/** Titles shown in a wide month cell (DayTitles in CalendarComponents.swift); the rest are counted. */
+export const DAY_TITLES = 2;
+/** Dots drawn in a narrow month cell (TaskDots); past this the cell shows the count instead. */
+export const DAY_DOTS = 3;
+
+/** A wide cell's chips: the first titles (prayer-anchored ones in sand) and how many are left. */
+export function dayTitles(tasks, shown = DAY_TITLES) {
+  const list = tasks ?? [];
+  return {
+    titles: list.slice(0, shown).map((task) => ({ id: task.id, title: task.title, prayer: !!task.duePrayer })),
+    more: Math.max(0, list.length - shown),
+  };
+}
+
+/** A narrow cell's marks: a dot per task (sand at a prayer) up to `max`, else only the count. */
+export function dayDots(tasks, max = DAY_DOTS) {
+  const list = tasks ?? [];
+  if (list.length > max) return { dots: [], count: list.length };
+  return { dots: list.map((task) => ({ prayer: !!task.duePrayer })), count: null };
+}
+
 /** The new day for a keyboard move inside the grid (RTL: the right arrow goes back a day). */
 export function keyMove(iso, key, { kind, weekStart = 0, rtl = true }) {
   switch (key) {

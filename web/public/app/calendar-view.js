@@ -1,6 +1,7 @@
 // #/calendar, as in the Apple app (CalendarView.swift): a month or a week in Hijri (Umm al-Qura)
 // or Gregorian, each day with the other calendar's day under it and dots for its open tasks; the
-// selected day's tasks under the month; «اليوم» to come back. A task dragged onto another day moves
+// selected day's tasks under the month (on a wide column the cells show the first titles, as
+// DayTitles); «اليوم» to come back. A task dragged onto another day moves
 // there keeping its time or prayer anchor (only `dueDate` changes); «نقل إلى…» does the same from
 // the keyboard with a date field. Arrow keys move through the month grid (right is back a day in
 // Arabic), Page Up and Page Down through months.
@@ -13,7 +14,7 @@
 import { Button, h } from "./lib/components.js";
 import { addDays, dayHeading, dualDate, isIsoDate, relativeDay, weekdayName } from "./lib/dates.js";
 import { boardApi } from "./lib/feature-api.js";
-import { addMonths, keyMove, monthDays, monthTitle, rangeTitle, weekDays, weekdayHeaders } from "./lib/calendar.js";
+import { addMonths, dayDots, dayTitles, keyMove, monthDays, monthTitle, rangeTitle, weekDays, weekdayHeaders } from "./lib/calendar.js";
 import { arabicNumber } from "./lib/numbers.js";
 import { isMultiDay, rowBars, shiftTo, singleDayByDay, spanText, taskSpan, tasksByOccupiedDay } from "./lib/spans.js";
 import { taskCount } from "./lib/tasks.js";
@@ -167,9 +168,25 @@ export async function viewCalendar(ctx) {
     const selected = cell.day === view.selected;
     const isToday = cell.day === ctx.today;
     const label = `${weekdayName(cell.day)}، ${dualDate(cell.day, { primary: kind(), today: ctx.today })}، ${tasks.length ? taskCount(tasks.length) : "بلا مهام"}`;
-    // Dots for one-day tasks; spanning ones are the bars under the week.
+    // One-day tasks as dots, or as their first titles where the column is wide (features.css);
+    // spanning ones are the bars under the week. Both are hidden: the label reads the count.
     const single = data.single[cell.day] ?? [];
-    const dots = h("span", { className: "cal-dots", "aria-hidden": "true" }, single.slice(0, 3).map(() => h("span", { className: "cal-dot" })), single.length > 3 ? h("span", { className: "cal-more" }, "+") : null);
+    const marks = dayDots(single);
+    const dots = h(
+      "span",
+      { className: "cal-dots", "aria-hidden": "true" },
+      marks.dots.map((dot) => h("span", { className: `cal-dot${dot.prayer ? " is-prayer" : ""}` })),
+      marks.count != null ? h("span", { className: "cal-more caption" }, arabicNumber(marks.count)) : null,
+    );
+    const chips = dayTitles(single);
+    const titles = chips.titles.length
+      ? h(
+          "span",
+          { className: "cal-titles", "aria-hidden": "true" },
+          chips.titles.map((chip) => h("span", { className: `cal-title caption${chip.prayer ? " is-prayer" : ""}` }, chip.title)),
+          chips.more ? h("span", { className: "cal-title-more caption" }, `+${arabicNumber(chips.more)}`) : null,
+        )
+      : null;
     const button = h(
       "button",
       {
@@ -184,6 +201,7 @@ export async function viewCalendar(ctx) {
       h("span", { className: "cal-primary", "aria-hidden": "true" }, arabicNumber(cell.primaryDay)),
       h("span", { className: "cal-secondary caption", "aria-hidden": "true" }, arabicNumber(cell.secondaryDay)),
       dots,
+      titles,
     );
     button.addEventListener("click", () => select(cell.day));
     dropDay(button, cell.day);
