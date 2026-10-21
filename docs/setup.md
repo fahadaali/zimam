@@ -373,7 +373,7 @@ https://api.zimam.work/v1/subscriptions/apple/notifications
 
 ## الاستيراد بإذن OAuth
 
-يستورد زمام من Todoist وGoogle Tasks وGoogle Calendar وMicrosoft To Do وNotion وTrello وAsana وClickUp وTickTick بإذن يمنحه المستخدم في صفحة المزوّد نفسه، دون ملف ولا رمز يُنسخ. يجري الخادم التدفق كله (التفاصيل في `api/DEVELOPMENT.md`، «الاستيراد بإذن OAuth»)، فيحتاج كل مزوّد تطبيقاً تسجّله أنت مرة واحدة، ثم أسراره في كلاودفلير.
+يستورد زمام من Todoist وGoogle Tasks وGoogle Calendar وMicrosoft To Do وNotion وTrello وAsana وClickUp وMicrosoft Planner وJira وLinear وmonday.com وTickTick بإذن يمنحه المستخدم في صفحة المزوّد نفسه، دون ملف ولا رمز يُنسخ. يجري الخادم التدفق كله (التفاصيل في `api/DEVELOPMENT.md`، «الاستيراد بإذن OAuth»)، فيحتاج كل مزوّد تطبيقاً تسجّله أنت مرة واحدة، ثم أسراره في كلاودفلير.
 
 - **ما دامت أسرار مصدر غير مضبوطة** يظهر في التطبيق والموقع رمادياً مكتوباً تحته «غير متاح الآن»، ولا يتعطل شيء آخر. فاضبط المصادر واحداً واحداً متى شئت.
 - **رابط العودة (Redirect URI)** لكل مصدر هو `https://api.zimam.work/v1/imports/oauth/<source>/callback`، حرفياً، بلا شرطة في آخره. `<source>` معرّف المصدر في الجدول.
@@ -387,6 +387,10 @@ https://api.zimam.work/v1/subscriptions/apple/notifications
 | Google Tasks | `google-tasks-api` | السر نفسه `GOOGLE_CLIENT_SECRET`، فلا سر جديد |
 | Todoist | `todoist-oauth` | `TODOIST_CLIENT_ID`، `TODOIST_CLIENT_SECRET` |
 | ClickUp | `clickup` | `CLICKUP_CLIENT_ID`، `CLICKUP_CLIENT_SECRET` |
+| Microsoft Planner | `planner` | سرّا Microsoft To Do نفسهما: `MS_CLIENT_ID`، `MS_CLIENT_SECRET` |
+| Jira | `jira` | `JIRA_CLIENT_ID`، `JIRA_CLIENT_SECRET` |
+| Linear | `linear` | `LINEAR_CLIENT_ID`، `LINEAR_CLIENT_SECRET` |
+| monday.com | `monday` | `MONDAY_CLIENT_ID`، `MONDAY_CLIENT_SECRET` |
 | Microsoft To Do | `microsoft-todo` | `MS_CLIENT_ID`، `MS_CLIENT_SECRET` |
 | Notion | `notion` | `NOTION_CLIENT_ID`، `NOTION_CLIENT_SECRET` |
 | Trello | `trello` | `TRELLO_API_KEY` |
@@ -525,6 +529,59 @@ npx wrangler secret put CLICKUP_CLIENT_SECRET
 ```
 
 ClickUp بلا نطاقات (scopes): الإذن يشمل الكتابة، وزمام لا يستعمله إلا للقراءة ولا يحفظ رمزه. يختار المستخدم في صفحة ClickUp مساحات العمل التي يأذن بها.
+
+### ١٠. Microsoft Planner
+
+يستعمل تطبيق Microsoft To Do نفسه (القسم ٢) وسرّيه، فلا سر جديد. Planner في حسابات العمل والدراسة وحدها.
+
+1. [entra.microsoft.com](https://entra.microsoft.com) ← **App registrations** ← `زمام` ← **Authentication** ← **Web** ← **Add URI**:
+   `https://api.zimam.work/v1/imports/oauth/planner/callback` ثم **Save**.
+2. **API permissions:** `Tasks.Read` موجودة من To Do، وهي تغطي Planner.
+3. **Supported account types** يجب أن يشمل حسابات المؤسسات («Accounts in any organizational directory…»). وبعض المؤسسات تشترط موافقة مديرها على التطبيقات الخارجية.
+
+### ١١. Jira
+
+1. افتح [developer.atlassian.com/console/myapps](https://developer.atlassian.com/console/myapps) ← **Create** ← **OAuth 2.0 integration**، الاسم `زمام`، ووافق على الشروط ثم **Create**.
+2. **Permissions** ← **Jira API** ← **Add** ثم **Configure** ← **Edit Scopes** في الصلاحيات الكلاسيكية (Classic scopes): اختر `read:jira-work` وحدها ثم **Save**.
+3. **Authorization** ← **OAuth 2.0 (3LO)** ← **Add**، و**Callback URL**:
+   `https://api.zimam.work/v1/imports/oauth/jira/callback` ثم **Save changes**.
+4. **Settings:** انسخ **Client ID** و**Secret**:
+
+```sh
+cd api
+npx wrangler secret put JIRA_CLIENT_ID
+npx wrangler secret put JIRA_CLIENT_SECRET
+```
+
+5. ليستعمله غيرك: **Distribution** ← **Edit** ← **Sharing**، مع رابط سياسة الخصوصية `https://zimam.work/privacy/` وبيانات المورّد. وإلا فيعمل لحسابك وحدك.
+
+### ١٢. Linear
+
+1. في Linear: **Settings** ← **API** ← **OAuth applications** ← **New OAuth application** (أو [linear.app/settings/api/applications/new](https://linear.app/settings/api/applications/new)).
+2. **Application name:** `زمام`، و**Developer name:** اسمك، و**Developer URL:** `https://zimam.work`، و**Callback URLs:** `https://api.zimam.work/v1/imports/oauth/linear/callback`.
+3. فعّل **Public** ليستعمله أي فريق في Linear، ثم **Create**.
+4. انسخ **Client ID** و**Client Secret**:
+
+```sh
+cd api
+npx wrangler secret put LINEAR_CLIENT_ID
+npx wrangler secret put LINEAR_CLIENT_SECRET
+```
+
+### ١٣. monday.com
+
+1. في monday.com: صورتك ← **Developers** ← **Build app** (أو [monday.com/developers/apps](https://monday.com/developers/apps))، الاسم `زمام`.
+2. **OAuth & Permissions** ← **Scopes:** اختر `boards:read` وحدها، ثم **Redirect URLs** ← أضف:
+   `https://api.zimam.work/v1/imports/oauth/monday/callback` ثم **Save**.
+3. **Basic Information:** انسخ **Client ID** و**Client Secret**:
+
+```sh
+cd api
+npx wrangler secret put MONDAY_CLIENT_ID
+npx wrangler secret put MONDAY_CLIENT_SECRET
+```
+
+4. ليستعمله غيرك: **Distribute** أو رابط التثبيت (Share)، وإلا فيعمل لحسابك وحده.
 
 ### التجربة
 
