@@ -21,7 +21,15 @@ export type SourceId =
   | OAuthSourceId;
 
 /** Sources whose token comes from an OAuth flow (`src/imports/oauth.ts`). */
-export type OAuthSourceId = "google-calendar" | "microsoft-todo" | "notion" | "trello" | "asana" | "ticktick-api";
+export type OAuthSourceId =
+  | "google-calendar"
+  | "microsoft-todo"
+  | "notion"
+  | "trello"
+  | "asana"
+  | "ticktick-api"
+  | "todoist-oauth"
+  | "google-tasks-api";
 
 export interface ParseContext {
   /** The user's `settings.timeZone`: dates without a zone are read in it. */

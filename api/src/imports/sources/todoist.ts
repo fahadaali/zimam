@@ -14,7 +14,8 @@ import {
   TransientImportError,
   Warnings,
 } from "../model";
-import { derivedKey, type FileSource, nativeKey, Occurrences, type ParseContext, type TokenSource } from "../source";
+import { derivedKey, type FileSource, type LoadContext, nativeKey, Occurrences, type ParseContext, type TokenSource } from "../source";
+import { tokenRejected } from "./provider-http";
 
 /** Todoist p1 (4, red) is Zimam's high (3); p4 (1) is none. The CSV uses the API's numbers. */
 export function todoistPriority(value: unknown): number {
@@ -331,8 +332,8 @@ const TOKEN_REJECTED = new ImportError(
   "رفض Todoist رمز الوصول. انسخ الرمز من Todoist: «الإعدادات ← التكاملات ← المطوّر»، ثم أعد المحاولة.",
 );
 
-/** Every item of a list endpoint, following `next_cursor` pages when the API pages. */
-async function getAll<T>(path: string, token: string, fetcher: typeof fetch): Promise<T[]> {
+/** Every item of a list endpoint, following `next_cursor` pages when the API pages. `rejected` is the job's message for a refused token. */
+async function getAll<T>(path: string, token: string, fetcher: typeof fetch, rejected: ImportError): Promise<T[]> {
   const out: T[] = [];
   let cursor: string | null = null;
   for (let page = 0; page < 200; page++) {
@@ -344,7 +345,7 @@ async function getAll<T>(path: string, token: string, fetcher: typeof fetch): Pr
     } catch {
       throw new TransientImportError(`Todoist ${path}: network error`);
     }
-    if (response.status === 401 || response.status === 403) throw TOKEN_REJECTED;
+    if (response.status === 401 || response.status === 403) throw rejected;
     if (response.status === 429 || response.status >= 500) {
       const retryAfter = Number(response.headers.get("Retry-After"));
       throw new TransientImportError(`Todoist ${path}: HTTP ${response.status}`, Number.isFinite(retryAfter) ? retryAfter : undefined);
@@ -368,17 +369,29 @@ async function getAll<T>(path: string, token: string, fetcher: typeof fetch): Pr
   return out;
 }
 
+/** Projects, sections and open tasks, read with a pasted token or one from Todoist's OAuth flow. */
+async function loadTodoist(token: string, ctx: LoadContext, rejected: ImportError): Promise<ImportBundle> {
+  const [projects, sections, tasks] = await Promise.all([
+    getAll<TodoistProject>("projects", token, ctx.fetch, rejected),
+    getAll<TodoistSection>("sections", token, ctx.fetch, rejected),
+    getAll<TodoistTask>("tasks", token, ctx.fetch, rejected),
+  ]);
+  return mapTodoist({ projects, sections, tasks }, ctx);
+}
+
 export const todoistApi: TokenSource = {
   id: "todoist-api",
   label: "Todoist",
   refSource: "todoist",
   input: "token",
-  async load(token, ctx) {
-    const [projects, sections, tasks] = await Promise.all([
-      getAll<TodoistProject>("projects", token, ctx.fetch),
-      getAll<TodoistSection>("sections", token, ctx.fetch),
-      getAll<TodoistTask>("tasks", token, ctx.fetch),
-    ]);
-    return mapTodoist({ projects, sections, tasks }, ctx);
-  },
+  load: (token, ctx) => loadTodoist(token, ctx, TOKEN_REJECTED),
+};
+
+/** The same import, with the token from Todoist's OAuth flow (`data:read`) instead of a pasted one. */
+export const todoistOAuth: TokenSource = {
+  id: "todoist-oauth",
+  label: "Todoist",
+  refSource: "todoist",
+  input: "oauth",
+  load: (token, ctx) => loadTodoist(token, ctx, tokenRejected("Todoist")),
 };

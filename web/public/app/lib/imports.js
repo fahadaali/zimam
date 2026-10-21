@@ -16,6 +16,12 @@ export const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 export const TODOIST_TOKEN_URL = "https://app.todoist.com/app/settings/integrations/developer";
 
 const SOURCES = {
+  "todoist-oauth": {
+    title: "Todoist: الربط بالحساب",
+    subtitle: "كل المشاريع بإذن من حسابك",
+    howTo:
+      "تنتقل إلى Todoist لتأذن لزمام بقراءة مهامك، ثم تعود هنا. تُنقل المشاريع والأقسام والمهام المفتوحة كلها، دون نسخ أي رمز.",
+  },
   "todoist-csv": {
     title: "Todoist: ملف مشروع",
     subtitle: "ملف CSV من «تصدير كقالب»",
@@ -32,6 +38,12 @@ const SOURCES = {
     title: "TickTick",
     subtitle: "ملف النسخة الاحتياطية CSV",
     howTo: "في TickTick افتح «الإعدادات» ثم «الحساب» ثم «النسخ الاحتياطي»، ونزّل ملف CSV. تُنقل القوائم والمهام والمنجزة والتكرار والتذكيرات.",
+  },
+  "google-tasks-api": {
+    title: "Google Tasks: الربط بالحساب",
+    subtitle: "القوائم والمهام بحساب Google",
+    howTo:
+      "تنتقل إلى Google لتأذن لزمام بقراءة مهامك، ثم تعود هنا. تصير كل قائمة مشروعاً، وتُنقل المهام الفرعية والمواعيد والمنجزة. لا يتغيّر شيء في Google Tasks.",
   },
   "google-tasks": {
     title: "Google Tasks",
@@ -158,6 +170,8 @@ export function readStoredPending(text, now = Date.now()) {
 }
 
 const PROVIDER_NAMES = {
+  "todoist-oauth": "Todoist",
+  "google-tasks-api": "Google Tasks",
   "google-calendar": "Google Calendar",
   "microsoft-todo": "Microsoft To Do",
   notion: "Notion",

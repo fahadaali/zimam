@@ -51,6 +51,8 @@ struct ImportsTests {
         #expect(ImportText.connect(ImportSource(id: "notion", label: "Notion", input: .oauth)) == "الربط بـ Notion")
         #expect(ImportText.oauthMessage("denied").hasPrefix("لم يكتمل الإذن"))
         #expect(ImportText.title(forSource: "ticktick-api", label: "TickTick") == "TickTick: الربط بالحساب")
+        #expect(ImportText.title(forSource: "todoist-oauth", label: "Todoist") == "Todoist: الربط بالحساب")
+        #expect(ImportText.title(forSource: "google-tasks-api", label: "Google Tasks") == "Google Tasks: الربط بالحساب")
     }
 
     @Test func asksBeforeImportingIntoTheSignedInAccount() {
@@ -58,6 +60,7 @@ struct ImportsTests {
         #expect(account == "فهد، fahad@example.com")
         #expect(ImportText.accountLabel(name: " ", email: nil) == nil)
         #expect(ImportText.confirmQuestion(source: "notion", account: account) == "استيراد بيانات Notion إلى حسابك فهد، fahad@example.com؟")
+        #expect(ImportText.confirmQuestion(source: "google-tasks-api", account: "a@b.c") == "استيراد بيانات Google Tasks إلى حسابك a@b.c؟")
         #expect(ImportText.confirmQuestion(source: nil, account: nil) == "استيراد البيانات إلى حسابك؟")
         #expect(ImportText.confirmMessage(for: APIError(status: 404, code: "not_found", message: "")).contains("لا يخص حسابك"))
         #expect(ImportText.confirmMessage(for: APIError(status: 410, code: "expired", message: "")).contains("استُعمل من قبل"))

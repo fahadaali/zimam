@@ -24,8 +24,8 @@ public struct ImportSource: Decodable, Equatable, Hashable, Identifiable, Sendab
         case file, token, oauth, unsupported
     }
 
-    /// Stable id: "todoist-csv", "todoist-api", "ticktick-csv", "google-tasks", "csv",
-    /// "google-calendar", "microsoft-todo", "notion", "trello", "asana", "ticktick-api".
+    /// Stable id: "todoist-oauth", "todoist-csv", "todoist-api", "ticktick-csv", "google-tasks-api",
+    /// "google-tasks", "csv", "google-calendar", "microsoft-todo", "notion", "trello", "asana", "ticktick-api".
     public let id: String
     /// The provider's name as the server gives it ("Todoist", "TickTick").
     public let label: String
@@ -477,9 +477,11 @@ public enum ImportText {
     /// A few words under the source's name in the list.
     public static func subtitle(forSource id: String) -> String {
         switch id {
+        case "todoist-oauth": return "كل المشاريع بإذن من حسابك"
         case "todoist-csv": return "ملف CSV من «تصدير كقالب»"
         case "todoist-api": return "رمز API، فتُنقل المشاريع كلها"
         case "ticktick-csv": return "ملف النسخة الاحتياطية CSV"
+        case "google-tasks-api": return "القوائم والمهام بحساب Google"
         case "google-tasks": return "ملف Tasks.json من Google Takeout"
         case "csv": return "أي جدول بصيغة CSV"
         case "google-calendar": return "أحداث تقاويمك مهاماً"
@@ -522,6 +524,8 @@ public enum ImportText {
     /// The provider's name in the confirmation, from the source id the callback carried.
     public static func providerName(forSource id: String?) -> String? {
         switch id ?? "" {
+        case "todoist-oauth": return "Todoist"
+        case "google-tasks-api": return "Google Tasks"
         case "google-calendar": return "Google Calendar"
         case "microsoft-todo": return "Microsoft To Do"
         case "notion": return "Notion"
@@ -570,9 +574,11 @@ public enum ImportText {
     /// The import screen's name for a source, with what it brings over.
     public static func title(forSource id: String, label: String) -> String {
         switch id {
+        case "todoist-oauth": return "Todoist: الربط بالحساب"
         case "todoist-csv": return "Todoist: ملف مشروع"
         case "todoist-api": return "Todoist: كل المشاريع"
         case "ticktick-csv": return "TickTick"
+        case "google-tasks-api": return "Google Tasks: الربط بالحساب"
         case "google-tasks": return "Google Tasks"
         case "csv": return "ملف CSV"
         case "google-calendar": return "Google Calendar"
@@ -589,12 +595,16 @@ public enum ImportText {
     /// How to get the export out of the other app, in a sentence or two.
     public static func howTo(source id: String) -> String {
         switch id {
+        case "todoist-oauth":
+            return "تنتقل إلى Todoist لتأذن لزمام بقراءة مهامك، ثم تعود هنا. تُنقل المشاريع والأقسام والمهام المفتوحة كلها، دون نسخ أي رمز."
         case "todoist-csv":
             return "في Todoist افتح المشروع، ثم من قائمته اختر «قوالب» ثم «تصدير كقالب»، واحفظ ملف CSV. كل ملف يصير مشروعاً في زمام. المهام المنجزة ليست في هذا التصدير."
         case "todoist-api":
             return "انسخ رمز API الشخصي من Todoist: «الإعدادات» ثم «التكاملات» ثم «المطوّر»، والصقه هنا. تُنقل المشاريع والأقسام والمهام المفتوحة كلها. يُرسل الرمز مرة واحدة ولا يُحفظ."
         case "ticktick-csv":
             return "في TickTick افتح «الإعدادات» ثم «الحساب» ثم «النسخ الاحتياطي»، ونزّل ملف CSV. تُنقل القوائم والمهام والمنجزة والتكرار والتذكيرات."
+        case "google-tasks-api":
+            return "تنتقل إلى Google لتأذن لزمام بقراءة مهامك، ثم تعود هنا. تصير كل قائمة مشروعاً، وتُنقل المهام الفرعية والمواعيد والمنجزة. لا يتغيّر شيء في Google Tasks."
         case "google-tasks":
             return "من Google Takeout (takeout.google.com) اختر «Tasks» وحده ثم صدّر، وفك ضغط الملف واختر Tasks.json. كل قائمة تصير مشروعاً."
         case "csv":

@@ -7,6 +7,7 @@ import type { ImportDeps, ImportMessage } from "../src/imports/jobs";
 import { PENDING_TTL_MS, STATE_TTL_MS } from "../src/imports/oauth";
 import { TRELLO_PAGE_SCRIPT } from "../src/routes/import-oauth";
 import { handleImportBatch, IMPORT_QUEUE } from "../src/imports/queue";
+import todoistApiJson from "./fixtures/imports/todoist-api.json?raw";
 import { fakeAi, signIn, testAppleKeys, testGoogleKeys } from "./helpers";
 
 // MARK: Fakes
@@ -42,6 +43,8 @@ const SECRETS = {
   ASANA_CLIENT_SECRET: "asana-secret",
   TICKTICK_CLIENT_ID: "ticktick-client",
   TICKTICK_CLIENT_SECRET: "ticktick-secret",
+  TODOIST_CLIENT_ID: "todoist-client",
+  TODOIST_CLIENT_SECRET: "todoist-secret",
 };
 const WEB = "https://zimam.work";
 
@@ -160,6 +163,8 @@ describe("OAuth imports", () => {
     const without = await app.fetch(new Request("https://api.zimam.test/v1/imports/sources", { headers: { Authorization: `Bearer ${token}` } }), env);
     const listed = (await json(without)).sources as { id: string; input: string; available: boolean }[];
     expect(listed.filter((s) => s.input === "oauth").map((s) => [s.id, s.available])).toEqual([
+      ["todoist-oauth", false],
+      ["google-tasks-api", false],
       ["google-calendar", false],
       ["microsoft-todo", false],
       ["notion", false],
@@ -203,6 +208,98 @@ describe("OAuth imports", () => {
     expect(ms.searchParams.get("scope")).toBe("Tasks.Read offline_access");
     expect(ms.searchParams.has("code_challenge")).toBe(true);
     expect((await start(token, "ticktick-api")).url.searchParams.get("scope")).toBe("tasks:read");
+  });
+
+  it("imports Todoist through its flow: data:read without PKCE, the secret in the form", async () => {
+    const { token, userId } = await signIn();
+    const { url } = await start(token, "todoist-oauth");
+    expect(url.origin + url.pathname).toBe("https://todoist.com/oauth/authorize");
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({
+      client_id: "todoist-client",
+      redirect_uri: "https://api.zimam.test/v1/imports/oauth/todoist-oauth/callback",
+      scope: "data:read",
+    });
+    expect(url.searchParams.has("code_challenge")).toBe(false);
+
+    const todoistData = JSON.parse(todoistApiJson) as Record<string, unknown[]>;
+    provider = (u, init) => {
+      if (u.href === "https://todoist.com/oauth/access_token") {
+        const form = new URLSearchParams(String(init?.body));
+        const ok = form.get("code") === "good-code" && form.get("client_id") === "todoist-client" && form.get("client_secret") === "todoist-secret";
+        return ok ? Response.json({ access_token: "todoist-oauth-token-123", token_type: "Bearer" }) : Response.json({ error: "bad_code" }, { status: 400 });
+      }
+      if (new Headers(init?.headers).get("Authorization") !== "Bearer todoist-oauth-token-123") return new Response("", { status: 401 });
+      return Response.json(todoistData[u.pathname.replace("/rest/v2/", "")] ?? []);
+    };
+    const callback = await request("GET", `/v1/imports/oauth/todoist-oauth/callback?code=good-code&state=${url.searchParams.get("state")}`);
+    const confirmed = await confirm(token, pendingOf(callback.headers.get("Location")!));
+    expect(confirmed.status).toBe(202);
+    const { job } = await json(confirmed);
+    expect(sent).toEqual([{ jobId: job.id, cursor: 0, token: "todoist-oauth-token-123" }]);
+
+    await deliverAll();
+    // The same import as a pasted token: 3 projects, 2 sections, 4 tasks.
+    const done = await json(await request("GET", `/v1/imports/${job.id}`, { token }));
+    expect(done.job).toMatchObject({ status: "done", source: "todoist-oauth", counts: { created: 9, failed: 0 } });
+    expect(await env.DB.prepare(`SELECT due_time FROM tasks WHERE owner_id = ? AND title = ?`).bind(userId, "ورد الصباح").first("due_time")).toBe("05:30");
+    expect(await storedFor(userId)).not.toContain("todoist-oauth-token");
+  });
+
+  it("imports Google Tasks through its flow, every page, completed and hidden tasks included", async () => {
+    const { token, userId } = await signIn();
+    const { url } = await start(token, "google-tasks-api");
+    expect(url.origin + url.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
+    expect(url.searchParams.get("scope")).toBe("https://www.googleapis.com/auth/tasks.readonly");
+    expect(url.searchParams.get("redirect_uri")).toBe("https://api.zimam.test/v1/imports/oauth/google-tasks-api/callback");
+    const challenge = url.searchParams.get("code_challenge")!;
+    expect(challenge).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    provider = async (u, init) => {
+      if (u.href === "https://oauth2.googleapis.com/token") {
+        const form = new URLSearchParams(String(init?.body));
+        const verifier = form.get("code_verifier") ?? "";
+        const ok =
+          form.get("code") === "good-code" &&
+          form.get("client_secret") === "google-secret" &&
+          base64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))) === challenge;
+        return ok ? Response.json({ access_token: "ya29.tasks-token" }) : Response.json({ error: "invalid_grant" }, { status: 400 });
+      }
+      if (new Headers(init?.headers).get("Authorization") !== "Bearer ya29.tasks-token") return new Response("", { status: 401 });
+      if (u.pathname === "/tasks/v1/users/@me/lists") {
+        return u.searchParams.get("pageToken") === "p2"
+          ? Response.json({ items: [{ id: "L2", title: "العمل" }] })
+          : Response.json({ items: [{ id: "L1", title: "البيت" }], nextPageToken: "p2" });
+      }
+      if (u.pathname === "/tasks/v1/lists/L1/tasks") {
+        if (u.searchParams.get("showCompleted") !== "true" || u.searchParams.get("showHidden") !== "true") return Response.json({ items: [] });
+        return Response.json({
+          items: [
+            { id: "t1", title: "شراء الخبز", status: "needsAction", due: "2026-10-25T00:00:00.000Z", position: "00000000000000000001" },
+            { id: "t2", title: "دفع الفاتورة", status: "completed", completed: "2026-10-19T08:00:00.000Z", hidden: true, position: "00000000000000000000" },
+            { id: "t3", title: "الحليب", status: "needsAction", parent: "t1", position: "00000000000000000000" },
+          ],
+        });
+      }
+      if (u.pathname === "/tasks/v1/lists/L2/tasks") return Response.json({});
+      return new Response("unknown", { status: 404 });
+    };
+    const callback = await request("GET", `/v1/imports/oauth/google-tasks-api/callback?code=good-code&state=${url.searchParams.get("state")}`);
+    const confirmed = await confirm(token, pendingOf(callback.headers.get("Location")!));
+    expect(confirmed.status).toBe(202);
+    const { job } = await json(confirmed);
+    expect(sent).toEqual([{ jobId: job.id, cursor: 0, token: "ya29.tasks-token" }]);
+
+    await deliverAll();
+    const done = await json(await request("GET", `/v1/imports/${job.id}`, { token }));
+    expect(done.job).toMatchObject({ status: "done", source: "google-tasks-api", counts: { created: 5, failed: 0 } });
+    const projects = await env.DB.prepare(`SELECT name FROM projects WHERE owner_id = ? ORDER BY name`).bind(userId).all();
+    expect(projects.results.map((p) => p.name)).toEqual(["البيت", "العمل"]);
+    const byTitle = async (title: string) =>
+      env.DB.prepare(`SELECT * FROM tasks WHERE owner_id = ? AND title = ?`).bind(userId, title).first<Record<string, any>>();
+    const bread = await byTitle("شراء الخبز");
+    expect(bread).toMatchObject({ due_date: "2026-10-25", due_time: null, status: "todo" });
+    expect(await byTitle("دفع الفاتورة")).toMatchObject({ status: "done" });
+    expect(await byTitle("الحليب")).toMatchObject({ parent_id: bread!.id });
   });
 
   it("refuses unknown sources and return targets, and needs a session", async () => {
