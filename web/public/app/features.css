@@ -563,10 +563,73 @@ body.is-dragging .zm-task-open {
   background: var(--brand-ink);
 }
 
+.cal-dot.is-prayer,
+.cal-day[aria-pressed="true"] .cal-dot.is-prayer {
+  background: var(--sand);
+}
+
+/* More than three: the count instead of the dots (TaskDots). */
 .cal-more {
-  font-size: inherit;
   line-height: 1;
   color: var(--ink-muted);
+}
+
+.cal-day[aria-pressed="true"] .cal-more {
+  color: var(--brand-ink);
+}
+
+/* The first titles in small chips, then «+n» (DayTitles); only on a wide column, below. */
+.cal-titles {
+  display: none;
+}
+
+@container content (min-width: 40rem) {
+  .cal-day {
+    min-block-size: calc(var(--space-11) * 2);
+    padding-inline: calc(var(--space-1) / 2);
+  }
+
+  .cal-day .cal-dots {
+    display: none;
+  }
+
+  .cal-titles {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--space-1) / 2);
+    inline-size: 100%;
+    min-inline-size: 0;
+    margin-block-start: var(--space-1);
+  }
+
+  .cal-title {
+    display: block;
+    min-inline-size: 0;
+    padding-inline: calc(var(--space-1) / 2);
+    border-radius: var(--radius-sm);
+    background: var(--surface-sunken);
+    color: var(--ink);
+    text-align: start;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* A prayer-anchored task: sand on sand-soft, as the prayer chip. */
+  .cal-title.is-prayer {
+    background: var(--sand-soft);
+    color: var(--sand);
+  }
+
+  .cal-title-more {
+    color: var(--ink-muted);
+    text-align: start;
+  }
+
+  /* The selected day keeps its chips as they are, on the brand-soft fill; the count follows its ink. */
+  .cal-day[aria-pressed="true"] .cal-title-more {
+    color: var(--brand-ink);
+  }
 }
 
 .week {

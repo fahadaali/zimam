@@ -578,3 +578,83 @@
 .settings-sheet .sheet-bar {
   background: var(--surface);
 }
+
+/* ——— «نقل إلى مشروع…» (move-sheet.js, MoveToProjectSheet.swift) ——— */
+
+/* Grouped like the other sheets: the place rows in cards on the page colour. */
+.move-sheet,
+.move-sheet .sheet-bar {
+  background: var(--surface);
+}
+
+.move-task {
+  padding-inline: var(--space-4);
+  overflow-wrap: anywhere;
+}
+
+.move-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.move-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.move-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  inline-size: 100%;
+  min-block-size: var(--space-11);
+  padding-block: var(--space-2);
+  padding-inline: var(--space-4);
+  border: 0;
+  background: var(--surface-raised);
+  color: var(--ink);
+  text-align: start;
+  cursor: pointer;
+}
+
+.move-row:hover {
+  background: color-mix(in srgb, var(--ink) 6%, var(--surface-raised));
+}
+
+.move-row:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* A section sits under its project, indented. */
+.move-row.is-section {
+  padding-inline-start: calc(var(--space-4) + var(--space-6));
+}
+
+.move-row > .zm-ico:first-child {
+  flex: none;
+  color: var(--ink-muted);
+}
+
+.move-name {
+  flex: 1;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The task's current place: a brand check at the inline end. */
+.move-row[aria-current="true"] > .zm-ico:last-child {
+  flex: none;
+  color: var(--brand);
+}
+
+.move-empty {
+  padding-inline: var(--space-4);
+}
+
+/* The row's context menu sits at the pointer (move-sheet.js sets --menu-top and --menu-end). */
+.task-menu {
+  max-inline-size: calc(100vw - 2 * var(--space-2));
+}

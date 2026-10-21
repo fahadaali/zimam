@@ -3,6 +3,8 @@ import { test } from "node:test";
 import {
   addMonths,
   calendarParts,
+  dayDots,
+  dayTitles,
   keyMove,
   leadingPadding,
   minuteOfDay,
@@ -151,4 +153,30 @@ test("tasks by day leave out subtasks and undated tasks", () => {
   ]);
   assert.deepEqual(Object.keys(byDay).sort(), ["2026-10-15", "2026-10-16"]);
   assert.deepEqual(byDay["2026-10-15"].map((t) => t.id), ["a"]);
+});
+
+test("a wide month cell shows two titles, prayer ones in sand, then the rest counted", () => {
+  const tasks = [
+    { id: "a", title: "صلة الرحم", duePrayer: "maghrib" },
+    { id: "b", title: "مراجعة العقد" },
+    { id: "c", title: "شراء الخبز" },
+    { id: "d", title: "الاتصال بأحمد" },
+  ];
+  assert.deepEqual(dayTitles(tasks), {
+    titles: [
+      { id: "a", title: "صلة الرحم", prayer: true },
+      { id: "b", title: "مراجعة العقد", prayer: false },
+    ],
+    more: 2,
+  });
+  assert.deepEqual(dayTitles(tasks.slice(1, 2)), { titles: [{ id: "b", title: "مراجعة العقد", prayer: false }], more: 0 });
+  assert.deepEqual(dayTitles([]), { titles: [], more: 0 });
+});
+
+test("a narrow month cell shows up to three dots, then the count instead", () => {
+  const task = (prayer) => ({ title: "x", duePrayer: prayer ? "asr" : null });
+  assert.deepEqual(dayDots([task(true), task(false)]), { dots: [{ prayer: true }, { prayer: false }], count: null });
+  assert.deepEqual(dayDots([task(), task(), task()]).dots.length, 3);
+  assert.deepEqual(dayDots([task(), task(), task(), task()]), { dots: [], count: 4 });
+  assert.deepEqual(dayDots(undefined), { dots: [], count: null });
 });
