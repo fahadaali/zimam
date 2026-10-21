@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addMember, call, signIn } from "./helpers";
+import { addMember, call, push, signIn, uuid } from "./helpers";
 
 describe("Tasks API", () => {
   it("creates, reads, updates, completes and deletes an inbox task", async () => {
@@ -104,6 +104,39 @@ describe("Projects API", () => {
 
     const list = await call("GET", "/v1/projects", { token });
     expect(list.body.projects).toEqual([expect.objectContaining({ id, name: "البيت", role: "owner", taskCount: 2, doneCount: 1 })]);
+  });
+
+  it("lists each project's sections in order, and no one else's", async () => {
+    const { token } = await signIn();
+    const other = await signIn();
+    const project = (await call("POST", "/v1/projects", { token, body: { name: "العمل", view: "kanban" } })).body.id;
+    const empty = (await call("POST", "/v1/projects", { token, body: { name: "فارغ" } })).body.id;
+    const folder = (await call("POST", "/v1/projects", { token, body: { name: "مجلد", kind: "folder" } })).body.id;
+    const foreign = (await call("POST", "/v1/projects", { token: other.token, body: { name: "غريب" } })).body.id;
+    const [later, first, gone] = [uuid(), uuid(), uuid()];
+    const section = (id: string, projectId: string, name: string, sortOrder: number) => ({
+      op: "upsert",
+      entity: "section",
+      data: { id, projectId, name, sortOrder, updatedAt: 1 },
+    });
+    await push(token, [
+      section(later, project, "قيد العمل", 2),
+      section(first, project, "للعمل", 1),
+      section(gone, project, "محذوف", 3),
+    ]);
+    await push(token, [{ op: "delete", entity: "section", id: gone, updatedAt: 2 }]);
+    await push(other.token, [section(uuid(), foreign, "عمود", 1)]);
+
+    const list = (await call("GET", "/v1/projects", { token })).body.projects as {
+      id: string;
+      sections: { id: string; projectId: string; name: string }[];
+    }[];
+    const byId = new Map(list.map((p) => [p.id, p]));
+    expect(byId.get(project)!.sections.map((s) => s.id)).toEqual([first, later]);
+    expect(byId.get(project)!.sections[0]).toMatchObject({ projectId: project, name: "للعمل", sortOrder: 1 });
+    expect(byId.get(empty)!.sections).toEqual([]);
+    expect(byId.get(folder)!.sections).toEqual([]);
+    expect(byId.has(foreign)).toBe(false);
   });
 
   it("lets editors add tasks, stops viewers and outsiders", async () => {

@@ -74,9 +74,9 @@ npm run db:migrate:local
 | `POST /v1/auth/google` | `{ idToken, nonce?, name?, device? }` يرجع `{ token, user }` كذلك، و503 `google_unavailable` إن كان `GOOGLE_CLIENT_IDS` فارغاً (انظر «تسجيل الدخول») |
 | `POST /v1/auth/logout` | ينهي الجلسة |
 | `GET`, `PATCH`, `DELETE /v1/me` | الحساب والإعدادات (`calendar`، `prayerMethod`، `weekStart`، `timeZone`، `location`)، والحذف يمسح بيانات المستخدم (انظر «حذف الحساب») ويرجع 204 |
-| `GET`, `POST /v1/projects` | المشاريع مع عدد المهام والمنجز منها |
+| `GET`, `POST /v1/projects` | المشاريع مع عدد المهام والمنجز منها، ولكل مشروع أعمدته `sections` مرتبة كما في صفحته (مصفوفة فارغة للمجلد وللمشروع بلا أعمدة)، تأتي كلها في استعلام واحد |
 | `GET`, `PATCH`, `DELETE /v1/projects/:id` | المشروع وأعمدته |
-| `GET /v1/tasks` | تصفية بـ `projectId` (أو `inbox`) و`status` (أو `open`) و`dueFrom` و`dueTo` و`q` و`assignee=me` |
+| `GET /v1/tasks` | تصفية بـ `projectId` (أو `inbox`) و`status` (أو `open`) و`dueFrom` و`dueTo` و`q` و`assignee=me`. صفحات بـ `limit` (١٠٠ افتراضياً، و٥٠٠ أقصى) و`offset`، والترتيب ثابت بين الصفحات (آخره `id`)؛ صفحة أقصر من `limit` هي الأخيرة |
 | `POST /v1/tasks`، `GET`, `PATCH`, `DELETE /v1/tasks/:id` | المهمة |
 | `POST /v1/tasks/:id/complete` | إنجاز مهمة |
 | `GET /v1/prayers?from&to` | أوقات الصلاة في موقع المستخدم المحفوظ بطريقته ومذهب العصر: `{ timeZone, method, asrMadhab, location, days: [{ date, times: { fajr, sunrise, dhuhr, asr, maghrib, isha: { time: "HH:mm", at } } }] }`، و`at` بالميلي ثانية. الافتراضي اليوم بتوقيت المستخدم، وأقصاه ٣١ يوماً. بلا موقع محفوظ تكون `days` فارغة. لواجهة الويب؛ التطبيقات تحسبها على الجهاز |

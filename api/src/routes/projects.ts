@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { listProjects } from "../data/queries";
+import { listProjectsWithSections } from "../data/queries";
 import { projectOut, type Row, sectionOut } from "../data/rows";
 import type { AppEnv } from "../types";
 import { createResource, deleteResource, loadVisible, updateResource } from "./resources";
@@ -7,11 +7,20 @@ import { fail } from "../http";
 
 export const projects = new Hono<AppEnv>();
 
-/** Projects and folders the user belongs to, with top-level task counts for the project card. */
+/**
+ * Projects and folders the user belongs to, with top-level task counts for the project card and
+ * each project's sections (empty for a folder or a project without any).
+ */
 projects.get("/", async (c) => {
-  const rows = await listProjects(c.env.DB, c.var.userId);
+  const { projects: rows, sections } = await listProjectsWithSections(c.env.DB, c.var.userId);
   return c.json({
-    projects: rows.map((r) => ({ ...projectOut(r), role: r.role, taskCount: r.total, doneCount: r.done })),
+    projects: rows.map((r) => ({
+      ...projectOut(r),
+      role: r.role,
+      taskCount: r.total,
+      doneCount: r.done,
+      sections: (sections.get(r.id as string) ?? []).map(sectionOut),
+    })),
   });
 });
 

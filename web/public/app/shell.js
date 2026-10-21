@@ -188,8 +188,18 @@ export function createShell(ctx) {
     renderProjects();
   }
 
+  /**
+   * The project list carries each project's sections; a server older than that field leaves it out,
+   * so only those projects are read one by one, a few at a time.
+   */
   async function fetchSections() {
-    const queue = ctx.state.projects.filter((p) => p.kind !== "folder" && !p.archivedAt).map((p) => p.id);
+    const queue = [];
+    for (const project of ctx.state.projects) {
+      if (project.kind === "folder" || project.archivedAt) continue;
+      if (Array.isArray(project.sections)) sections.set(project.id, project.sections);
+      else queue.push(project.id);
+    }
+    if (queue.length === 0) return;
     const worker = async () => {
       while (queue.length) {
         const id = queue.shift();

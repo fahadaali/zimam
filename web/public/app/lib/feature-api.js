@@ -1,7 +1,7 @@
 // REST calls for the assistant, sharing, the board and the calendar (api/DEVELOPMENT.md). Kept out
 // of api.js so the features stay in their own modules. Sections have no REST route: they are written
 // through POST /v1/sync like the app does, each as one mutation with its own result.
-import { ApiError, request } from "./api.js";
+import { allTasks, ApiError, request } from "./api.js";
 
 const id = encodeURIComponent;
 
@@ -30,11 +30,7 @@ export const boardApi = {
   patchTask: (taskId, fields) => request("PATCH", `/v1/tasks/${id(taskId)}`, fields),
   completeTask: (taskId) => request("POST", `/v1/tasks/${id(taskId)}/complete`),
   createTask: (task) => request("POST", "/v1/tasks", task),
-  tasks: (params) => {
-    const search = new URLSearchParams({ limit: "500" });
-    for (const [key, value] of Object.entries(params)) if (value != null && value !== "") search.set(key, value);
-    return request("GET", `/v1/tasks?${search}`);
-  },
+  tasks: (params) => allTasks(params),
   /** Section upserts and deletes through sync; throws the first mutation that was not applied. */
   async sections(mutations) {
     if (mutations.length === 0) return;

@@ -42,7 +42,7 @@ export async function listTasks(db: D1Database, userId: string, q: TaskQuery): P
   const { results } = await db
     .prepare(
       `SELECT t.* FROM tasks t WHERE ${where.join(" AND ")}
-       ORDER BY t.due_date IS NULL, t.due_date, t.due_time IS NULL, t.due_time, t.sort_order, t.created_at
+       ORDER BY t.due_date IS NULL, t.due_date, t.due_time IS NULL, t.due_time, t.sort_order, t.created_at, t.id
        LIMIT ${bind(q.limit)} OFFSET ${bind(q.offset)}`,
     )
     .bind(...params)
@@ -52,7 +52,42 @@ export async function listTasks(db: D1Database, userId: string, q: TaskQuery): P
 
 /** Projects and folders the user belongs to, with their role and top-level task counts. */
 export async function listProjects(db: D1Database, userId: string): Promise<Row[]> {
-  const { results } = await db
+  const { results } = await projectsStatement(db, userId).all<Row>();
+  return results;
+}
+
+/**
+ * The project list with each project's live sections, in one round trip: the sections of every
+ * project the user belongs to come from one query, ordered as a project page orders them.
+ */
+export async function listProjectsWithSections(
+  db: D1Database,
+  userId: string,
+): Promise<{ projects: Row[]; sections: Map<string, Row[]> }> {
+  const [projects, sections] = await db.batch<Row>([
+    projectsStatement(db, userId),
+    db
+      .prepare(
+        `SELECT s.* FROM sections s
+         JOIN project_members m ON m.project_id = s.project_id AND m.user_id = ?
+         JOIN projects p ON p.id = s.project_id
+         WHERE p.deleted_at IS NULL AND s.deleted_at IS NULL
+         ORDER BY s.project_id, s.sort_order, s.created_at`,
+      )
+      .bind(userId),
+  ]);
+  const byProject = new Map<string, Row[]>();
+  for (const row of sections!.results) {
+    const key = row.project_id as string;
+    const list = byProject.get(key);
+    if (list) list.push(row);
+    else byProject.set(key, [row]);
+  }
+  return { projects: projects!.results, sections: byProject };
+}
+
+function projectsStatement(db: D1Database, userId: string) {
+  return db
     .prepare(
       `SELECT p.*, m.role,
          (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.parent_id IS NULL AND t.deleted_at IS NULL) AS total,
@@ -61,7 +96,5 @@ export async function listProjects(db: D1Database, userId: string): Promise<Row[
        FROM projects p JOIN project_members m ON m.project_id = p.id AND m.user_id = ?
        WHERE p.deleted_at IS NULL ORDER BY p.sort_order, p.created_at`,
     )
-    .bind(userId)
-    .all<Row>();
-  return results;
+    .bind(userId);
 }

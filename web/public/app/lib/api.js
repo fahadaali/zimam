@@ -135,6 +135,28 @@ const query = (params) => {
   return text ? `?${text}` : "";
 };
 
+/** The largest page GET /v1/tasks answers, and how many pages a list reads before it stops. */
+export const TASK_PAGE_SIZE = 500;
+export const TASK_PAGE_LIMIT = 20;
+
+/**
+ * Reads a paged list to its end: asks `fetchPage(offset)` for `{ tasks }` pages while a page comes
+ * back full, up to `maxPages`, and returns `{ tasks }` with every page joined in order.
+ */
+export async function fetchAllPages(fetchPage, { pageSize = TASK_PAGE_SIZE, maxPages = TASK_PAGE_LIMIT } = {}) {
+  const tasks = [];
+  for (let page = 0; page < maxPages; page += 1) {
+    const { tasks: batch = [] } = (await fetchPage(page * pageSize)) ?? {};
+    tasks.push(...batch);
+    if (batch.length < pageSize) break;
+  }
+  return { tasks };
+}
+
+/** Every task matching `params`, read from GET /v1/tasks a full page at a time. */
+export const allTasks = (params = {}) =>
+  fetchAllPages((offset) => request("GET", `/v1/tasks${query({ ...params, limit: TASK_PAGE_SIZE, offset })}`));
+
 export const api = {
   /** `authorizationCode` and `redirectUri` let the API keep Apple's refresh token, revoked when the account is deleted. */
   signIn: (identityToken, nonce, { authorizationCode, redirectUri } = {}) =>
@@ -148,7 +170,7 @@ export const api = {
   project: (id) => request("GET", `/v1/projects/${encodeURIComponent(id)}`),
   createProject: (name) => request("POST", "/v1/projects", { name }),
   task: (id) => request("GET", `/v1/tasks/${encodeURIComponent(id)}`),
-  tasks: (params = {}) => request("GET", `/v1/tasks${query({ limit: 500, ...params })}`),
+  tasks: (params = {}) => allTasks(params),
   createTask: (task) => request("POST", "/v1/tasks", task),
   completeTask: (id) => request("POST", `/v1/tasks/${encodeURIComponent(id)}/complete`),
   patchTask: (id, fields) => request("PATCH", `/v1/tasks/${encodeURIComponent(id)}`, fields),
