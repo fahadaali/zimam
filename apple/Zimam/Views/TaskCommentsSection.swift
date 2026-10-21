@@ -66,7 +66,8 @@ struct TaskCommentsSection: View {
             Group {
                 if online {
                     HStack(alignment: .bottom, spacing: ZimamSpacing.space2) {
-                        TextField("أضف تعليقاً", text: $draft, axis: .vertical)
+                        TextField(hint: "أضف تعليقاً", text: $draft, axis: .vertical)
+                            .labelsHidden()
                             .lineLimit(1...5)
                         Button("إرسال", action: send)
                             .buttonStyle(.zimamQuiet)

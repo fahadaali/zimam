@@ -129,7 +129,8 @@ struct ImportSourceView: View {
 
     private var tokenSection: some View {
         Section {
-            SecureField("رمز API من Todoist", text: $token)
+            SecureField(hint: "رمز API من Todoist", text: $token)
+                .labelsHidden()
                 .autocorrectionDisabled()
                 #if os(iOS)
                 .textInputAutocapitalization(.never)

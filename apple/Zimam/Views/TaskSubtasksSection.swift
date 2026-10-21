@@ -19,7 +19,8 @@ struct TaskSubtasksSection: View {
                 TaskSubtaskRow(task: subtask, store: store)
             }
             HStack(spacing: ZimamSpacing.space2) {
-                TextField("مهمة فرعية جديدة", text: $newTitle)
+                TextField(hint: "مهمة فرعية جديدة", text: $newTitle)
+                    .labelsHidden()
                     .onSubmit(add)
                 Button("إضافة", action: add)
                     .buttonStyle(.zimamQuiet)

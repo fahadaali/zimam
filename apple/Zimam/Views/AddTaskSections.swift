@@ -25,7 +25,8 @@ struct AddTaskTitleSection: View {
 
     var body: some View {
         Section {
-            TextField("عنوان المهمة", text: $title)
+            TextField(hint: "عنوان المهمة", text: $title)
+                .labelsHidden()
                 .focused(titleFocused)
                 .onSubmit(onSubmit)
             AddTaskDictationControl(dictation: dictation, assistantIsLoading: assistantIsLoading, onToggle: onToggleDictation)
@@ -35,9 +36,11 @@ struct AddTaskTitleSection: View {
                     .disabled(trimmedTitle.isEmpty || assistantIsLoading)
             }
             if fromAssistant {
-                TextField("ملاحظات", text: $notes, axis: .vertical)
+                TextField(hint: "ملاحظات", text: $notes, axis: .vertical)
+                    .labelsHidden()
                     .lineLimit(1...4)
-                TextField("الوسوم، مفصولة بفاصلة", text: $tagsText)
+                TextField(hint: "الوسوم، مفصولة بفاصلة", text: $tagsText)
+                    .labelsHidden()
             }
         } footer: {
             Text(NetworkMonitor.shared.isOnline

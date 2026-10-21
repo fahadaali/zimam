@@ -27,6 +27,7 @@ struct MacSettingsView: View {
         .font(ZimamType.body)
         .foregroundStyle(ZimamColor.ink)
         .tint(ZimamColor.brand)
+        .formStyle(.grouped)
     }
 }
 #endif

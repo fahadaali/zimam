@@ -235,7 +235,8 @@ private struct PlaceNameSection: View {
 
     var body: some View {
         Section {
-            TextField("اسم المكان، مثل البيت أو العمل", text: $name)
+            TextField(hint: "اسم المكان، مثل البيت أو العمل", text: $name)
+                .labelsHidden()
         } header: {
             Text("الاسم")
         } footer: {
