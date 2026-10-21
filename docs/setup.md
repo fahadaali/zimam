@@ -373,7 +373,7 @@ https://api.zimam.work/v1/subscriptions/apple/notifications
 
 ## الاستيراد بإذن OAuth
 
-يستورد زمام من Todoist وGoogle Tasks وGoogle Calendar وMicrosoft To Do وNotion وTrello وAsana وTickTick بإذن يمنحه المستخدم في صفحة المزوّد نفسه، دون ملف ولا رمز يُنسخ. يجري الخادم التدفق كله (التفاصيل في `api/DEVELOPMENT.md`، «الاستيراد بإذن OAuth»)، فيحتاج كل مزوّد تطبيقاً تسجّله أنت مرة واحدة، ثم أسراره في كلاودفلير.
+يستورد زمام من Todoist وGoogle Tasks وGoogle Calendar وMicrosoft To Do وNotion وTrello وAsana وClickUp وTickTick بإذن يمنحه المستخدم في صفحة المزوّد نفسه، دون ملف ولا رمز يُنسخ. يجري الخادم التدفق كله (التفاصيل في `api/DEVELOPMENT.md`، «الاستيراد بإذن OAuth»)، فيحتاج كل مزوّد تطبيقاً تسجّله أنت مرة واحدة، ثم أسراره في كلاودفلير.
 
 - **ما دامت أسرار مصدر غير مضبوطة** يظهر في التطبيق والموقع رمادياً مكتوباً تحته «غير متاح الآن»، ولا يتعطل شيء آخر. فاضبط المصادر واحداً واحداً متى شئت.
 - **رابط العودة (Redirect URI)** لكل مصدر هو `https://api.zimam.work/v1/imports/oauth/<source>/callback`، حرفياً، بلا شرطة في آخره. `<source>` معرّف المصدر في الجدول.
@@ -386,6 +386,7 @@ https://api.zimam.work/v1/subscriptions/apple/notifications
 | Google Calendar | `google-calendar` | `GOOGLE_CLIENT_SECRET` (والمعرّف `GOOGLE_WEB_CLIENT_ID` في `wrangler.jsonc`، ليس سراً) |
 | Google Tasks | `google-tasks-api` | السر نفسه `GOOGLE_CLIENT_SECRET`، فلا سر جديد |
 | Todoist | `todoist-oauth` | `TODOIST_CLIENT_ID`، `TODOIST_CLIENT_SECRET` |
+| ClickUp | `clickup` | `CLICKUP_CLIENT_ID`، `CLICKUP_CLIENT_SECRET` |
 | Microsoft To Do | `microsoft-todo` | `MS_CLIENT_ID`، `MS_CLIENT_SECRET` |
 | Notion | `notion` | `NOTION_CLIENT_ID`، `NOTION_CLIENT_SECRET` |
 | Trello | `trello` | `TRELLO_API_KEY` |
@@ -508,6 +509,22 @@ npx wrangler secret put TODOIST_CLIENT_SECRET
 ```
 
 يطلب زمام `data:read` وحده، فيقرأ ولا يكتب شيئاً في Todoist.
+
+### ٩. ClickUp
+
+يلزم أن تكون مالك مساحة العمل في ClickUp أو مديرها.
+
+1. في ClickUp: صورتك ← **Settings** ← **Apps** (تحت مساحة العمل) ← **API** ← **Create an App**.
+2. **App Name:** `زمام`، و**Redirect URL(s):** النطاق `api.zimam.work`، ثم **Create App**. يرجع ClickUp إلى `https://api.zimam.work/v1/imports/oauth/clickup/callback`، ويتحقق أن نطاقه مسجّل هنا.
+3. انسخ **Client ID** و**Client Secret**:
+
+```sh
+cd api
+npx wrangler secret put CLICKUP_CLIENT_ID
+npx wrangler secret put CLICKUP_CLIENT_SECRET
+```
+
+ClickUp بلا نطاقات (scopes): الإذن يشمل الكتابة، وزمام لا يستعمله إلا للقراءة ولا يحفظ رمزه. يختار المستخدم في صفحة ClickUp مساحات العمل التي يأذن بها.
 
 ### التجربة
 
