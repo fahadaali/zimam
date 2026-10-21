@@ -188,6 +188,7 @@ test("OAuth return: asks which account receives the data before confirming", () 
   assert.equal(confirmQuestion("ticktick-api", "a@b.c"), "استيراد بيانات TickTick إلى حسابك a@b.c؟");
   assert.equal(confirmQuestion("todoist-oauth", "a@b.c"), "استيراد بيانات Todoist إلى حسابك a@b.c؟");
   assert.equal(confirmQuestion("google-tasks-api", "a@b.c"), "استيراد بيانات Google Tasks إلى حسابك a@b.c؟");
+  assert.equal(confirmQuestion("clickup", "a@b.c"), "استيراد بيانات ClickUp إلى حسابك a@b.c؟");
   assert.equal(confirmQuestion(null, null), "استيراد البيانات إلى حسابك؟");
   assert.match(CONFIRM_NOTE, /«إلغاء»/);
 

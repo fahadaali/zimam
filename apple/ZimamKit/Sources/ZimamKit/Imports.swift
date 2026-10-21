@@ -25,7 +25,8 @@ public struct ImportSource: Decodable, Equatable, Hashable, Identifiable, Sendab
     }
 
     /// Stable id: "todoist-oauth", "todoist-csv", "todoist-api", "ticktick-csv", "google-tasks-api",
-    /// "google-tasks", "csv", "google-calendar", "microsoft-todo", "notion", "trello", "asana", "ticktick-api".
+    /// "google-tasks", "csv", "google-calendar", "microsoft-todo", "notion", "trello", "asana", "clickup",
+    /// "ticktick-api".
     public let id: String
     /// The provider's name as the server gives it ("Todoist", "TickTick").
     public let label: String
@@ -489,6 +490,7 @@ public enum ImportText {
         case "notion": return "قاعدة بيانات مهام"
         case "trello": return "اللوحات والبطاقات"
         case "asana": return "المشاريع والأقسام والمهام"
+        case "clickup": return "المساحات والقوائم والمهام"
         case "ticktick-api": return "القوائم والمهام المفتوحة مباشرة"
         case AppleRemindersImport.sourceId: return "من هذا الجهاز مباشرة"
         default: return ""
@@ -531,6 +533,7 @@ public enum ImportText {
         case "notion": return "Notion"
         case "trello": return "Trello"
         case "asana": return "Asana"
+        case "clickup": return "ClickUp"
         case "ticktick-api": return "TickTick"
         default: return nil
         }
@@ -586,6 +589,7 @@ public enum ImportText {
         case "notion": return "Notion"
         case "trello": return "Trello"
         case "asana": return "Asana"
+        case "clickup": return "ClickUp"
         case "ticktick-api": return "TickTick: الربط بالحساب"
         case AppleRemindersImport.sourceId: return "تذكيرات أبل"
         default: return label
@@ -619,6 +623,8 @@ public enum ImportText {
             return "تنتقل إلى Trello لتأذن لزمام بالقراءة، ثم تعود هنا. تصير كل لوحة مشروع كانبان، وقوائمها أعمدة، وبطاقاتها مهام بمواعيدها وتسمياتها وقوائم التحقق."
         case "asana":
             return "تنتقل إلى Asana لتأذن لزمام بالقراءة، ثم تعود هنا. تُنقل المشاريع غير المؤرشفة بأقسامها ومهامها والمهام الفرعية والمواعيد والمنجزة."
+        case "clickup":
+            return "تنتقل إلى ClickUp لتأذن لزمام وتختار مساحات العمل، ثم تعود هنا. تصير كل مساحة مجلداً، وكل قائمة مشروعاً، وحالاتها المفتوحة أعمدة، وتُنقل المهام الفرعية والمواعيد والأولوية والوسوم والمنجزة. يقرأ زمام فقط ولا يغيّر شيئاً في ClickUp."
         case "ticktick-api":
             return "تنتقل إلى TickTick لتأذن لزمام بقراءة مهامك، ثم تعود هنا. تُنقل القوائم وأعمدة الكانبان والمهام المفتوحة والتكرار والتذكيرات. وللمهام المنجزة استعمل ملف النسخة الاحتياطية."
         case AppleRemindersImport.sourceId:

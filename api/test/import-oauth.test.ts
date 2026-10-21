@@ -45,6 +45,8 @@ const SECRETS = {
   TICKTICK_CLIENT_SECRET: "ticktick-secret",
   TODOIST_CLIENT_ID: "todoist-client",
   TODOIST_CLIENT_SECRET: "todoist-secret",
+  CLICKUP_CLIENT_ID: "clickup-client",
+  CLICKUP_CLIENT_SECRET: "clickup-secret",
 };
 const WEB = "https://zimam.work";
 
@@ -170,6 +172,7 @@ describe("OAuth imports", () => {
       ["notion", false],
       ["trello", false],
       ["asana", false],
+      ["clickup", false],
       ["ticktick-api", false],
     ]);
     expect(listed.filter((s) => s.input !== "oauth").every((s) => s.available)).toBe(true);
@@ -300,6 +303,49 @@ describe("OAuth imports", () => {
     expect(bread).toMatchObject({ due_date: "2026-10-25", due_time: null, status: "todo" });
     expect(await byTitle("دفع الفاتورة")).toMatchObject({ status: "done" });
     expect(await byTitle("الحليب")).toMatchObject({ parent_id: bread!.id });
+  });
+
+  it("imports ClickUp through its flow: no scope, the raw token in Authorization, every page", async () => {
+    const { token, userId } = await signIn();
+    const { url } = await start(token, "clickup");
+    expect(url.origin + url.pathname).toBe("https://app.clickup.com/api");
+    expect(url.searchParams.get("client_id")).toBe("clickup-client");
+    expect(url.searchParams.get("redirect_uri")).toBe("https://api.zimam.test/v1/imports/oauth/clickup/callback");
+    expect(url.searchParams.has("scope")).toBe(false);
+    expect(url.searchParams.has("code_challenge")).toBe(false);
+
+    const todo = { status: "to do", type: "open", orderindex: 0 };
+    provider = (u, init) => {
+      if (u.href === "https://api.clickup.com/api/v2/oauth/token") {
+        const form = new URLSearchParams(String(init?.body));
+        const ok = form.get("code") === "good-code" && form.get("client_id") === "clickup-client" && form.get("client_secret") === "clickup-secret";
+        return ok ? Response.json({ access_token: "12345678_clickup-token" }) : Response.json({ err: "Code not found" }, { status: 400 });
+      }
+      if (new Headers(init?.headers).get("Authorization") !== "12345678_clickup-token") return new Response("", { status: 401 });
+      const path = u.pathname.replace("/api/v2", "");
+      if (path === "/team") return Response.json({ teams: [{ id: "T1", name: "فريقي" }] });
+      if (path === "/team/T1/space") return Response.json({ spaces: [{ id: "S9", name: "العمل" }] });
+      if (path === "/space/S9/folder") return Response.json({ folders: [] });
+      if (path === "/space/S9/list") return Response.json({ lists: [{ id: "L9", name: "مهامي" }] });
+      if (path === "/list/L9/task") {
+        if (u.searchParams.get("include_closed") !== "true" || u.searchParams.get("subtasks") !== "true") return Response.json({ tasks: [], last_page: true });
+        return u.searchParams.get("page") === "0"
+          ? Response.json({ tasks: [{ id: "a", name: "الأولى", status: todo }, { id: "b", name: "الثانية", status: todo }], last_page: false })
+          : Response.json({ tasks: [{ id: "c", name: "الثالثة", status: todo }], last_page: true });
+      }
+      return new Response("unknown", { status: 404 });
+    };
+    const callback = await request("GET", `/v1/imports/oauth/clickup/callback?code=good-code&state=${url.searchParams.get("state")}`);
+    const confirmed = await confirm(token, pendingOf(callback.headers.get("Location")!));
+    expect(confirmed.status).toBe(202);
+    const { job } = await json(confirmed);
+
+    await deliverAll();
+    // The space's folder, the list's project and its one column, and three tasks across two pages.
+    const done = await json(await request("GET", `/v1/imports/${job.id}`, { token }));
+    expect(done.job).toMatchObject({ status: "done", source: "clickup", counts: { created: 6, failed: 0 } });
+    const titles = await env.DB.prepare(`SELECT title FROM tasks WHERE owner_id = ? ORDER BY title`).bind(userId).all();
+    expect(titles.results.map((t) => t.title)).toEqual(["الأولى", "الثالثة", "الثانية"]);
   });
 
   it("refuses unknown sources and return targets, and needs a session", async () => {

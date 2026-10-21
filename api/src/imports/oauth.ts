@@ -146,6 +146,17 @@ export const PROVIDERS: Record<OAuthSourceId, OAuthProvider> = {
     body: "form",
     credentials: (env) => ({ clientId: env.TODOIST_CLIENT_ID, clientSecret: env.TODOIST_CLIENT_SECRET }),
   },
+  clickup: {
+    flow: "code",
+    authorizeUrl: "https://app.clickup.com/api",
+    tokenUrl: "https://api.clickup.com/api/v2/oauth/token",
+    // ClickUp has no scopes: the user picks the workspaces on its page.
+    scope: null,
+    pkce: false,
+    clientAuth: "body",
+    body: "form",
+    credentials: (env) => ({ clientId: env.CLICKUP_CLIENT_ID, clientSecret: env.CLICKUP_CLIENT_SECRET }),
+  },
   "google-tasks-api": {
     flow: "code",
     authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",

@@ -4,6 +4,7 @@ import type { ImportedTask } from "../src/imports/model";
 import { zimamRule } from "../src/imports/recurrence";
 import { derivedKey } from "../src/imports/source";
 import { type AsanaData, mapAsana } from "../src/imports/sources/asana";
+import { type ClickUpData, mapClickUp } from "../src/imports/sources/clickup";
 import { type GoogleCalendarData, isChosenCalendar, mapGoogleCalendar } from "../src/imports/sources/google-calendar";
 import { mapMicrosoftTodo, type MicrosoftTodoData, todoRecurrence } from "../src/imports/sources/microsoft-todo";
 import { mapNotion, type NotionData, notionMapping } from "../src/imports/sources/notion";
@@ -11,6 +12,7 @@ import { htmlToText } from "../src/imports/sources/provider-http";
 import { mapTickTickApi, type TickTickData } from "../src/imports/sources/ticktick-api";
 import { mapTrello, parseTrelloCredential, type TrelloData, trelloCredential } from "../src/imports/sources/trello";
 import asanaJson from "./fixtures/imports/asana.json?raw";
+import clickUpJson from "./fixtures/imports/clickup.json?raw";
 import googleCalendarJson from "./fixtures/imports/google-calendar.json?raw";
 import microsoftTodoJson from "./fixtures/imports/microsoft-todo.json?raw";
 import notionJson from "./fixtures/imports/notion.json?raw";
@@ -269,6 +271,50 @@ describe("Asana", () => {
     expect(bundle.tasks.filter((t) => t.title === "قراءة كتاب")).toHaveLength(1);
     expect(byTitle(bundle.tasks, "قراءة كتاب").projectKey).toBe("project:1201");
     expect(bundle.warnings).toEqual(["مهام بلا عنوان تُركت: ١", "عناصر مؤرشفة أو في سلة المحذوفات تُركت: ١"]);
+  });
+});
+
+describe("ClickUp", () => {
+  const bundle = mapClickUp(JSON.parse(clickUpJson) as ClickUpData, RIYADH);
+
+  it("maps spaces and visible folders to folders, and lists to projects inside them", () => {
+    expect(bundle.projects.map((p) => [p.name, p.kind, p.parentKey, p.view])).toEqual([
+      ["العمل", "folder", null, "list"],
+      ["التسويق", "folder", "space:S1", "list"],
+      ["الحملات", "project", "folder:F1", "kanban"],
+      // A hidden folder holds the space's folderless lists: they go straight in the space.
+      ["مهام سريعة", "project", "space:S1", "list"],
+      ["البيت", "folder", null, "list"],
+      ["البيت", "project", "space:S2", "list"],
+    ]);
+    // Open statuses, in ClickUp's order, are the columns; done and closed ones are not.
+    expect(bundle.sections.filter((s) => s.projectKey === "list:L1").map((s) => s.name)).toEqual(["to do", "in progress"]);
+  });
+
+  it("maps due days and times, start days, priority, tags, completion and subtasks", () => {
+    expect(byTitle(bundle.tasks, "خطة الحملة")).toMatchObject({
+      projectKey: "list:L1",
+      sectionKey: "status:L1:to do",
+      dueDate: "2026-10-22",
+      dueTime: "09:00",
+      startDate: "2026-10-20",
+      priority: 3,
+      tags: ["تسويق"],
+      notes: "الأهداف والجمهور",
+      done: false,
+    });
+    // Without due_date_time the due date is a day.
+    expect(byTitle(bundle.tasks, "تصميم الإعلان")).toMatchObject({ dueDate: "2026-10-25", dueTime: null, priority: 2, sectionKey: "status:L1:in progress" });
+    expect(byTitle(bundle.tasks, "اعتماد الميزانية")).toMatchObject({ done: true, sectionKey: null, completedAt: Date.parse("2026-10-18T11:30:00+03:00") });
+    expect(byTitle(bundle.tasks, "النص الإعلاني")).toMatchObject({ parentKey: "task:t1", priority: 1 });
+    expect(byTitle(bundle.tasks, "اتصال بالمورد")).toMatchObject({ projectKey: "list:L2", priority: 0 });
+  });
+
+  it("imports a task in two lists once, and skips archived and untitled ones", () => {
+    expect(bundle.tasks.filter((t) => t.title === "خطة الحملة")).toHaveLength(1);
+    expect(bundle.projects.some((p) => p.name === "قديم")).toBe(false);
+    expect(bundle.tasks.some((t) => t.title === "فكرة قديمة")).toBe(false);
+    expect(bundle.warnings).toEqual(["عناصر مؤرشفة أو في سلة المحذوفات تُركت: ٢", "مهام بلا عنوان تُركت: ١"]);
   });
 });
 

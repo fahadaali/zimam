@@ -61,6 +61,7 @@ struct ImportsTests {
         #expect(ImportText.accountLabel(name: " ", email: nil) == nil)
         #expect(ImportText.confirmQuestion(source: "notion", account: account) == "استيراد بيانات Notion إلى حسابك فهد، fahad@example.com؟")
         #expect(ImportText.confirmQuestion(source: "google-tasks-api", account: "a@b.c") == "استيراد بيانات Google Tasks إلى حسابك a@b.c؟")
+        #expect(ImportText.confirmQuestion(source: "clickup", account: "a@b.c") == "استيراد بيانات ClickUp إلى حسابك a@b.c؟")
         #expect(ImportText.confirmQuestion(source: nil, account: nil) == "استيراد البيانات إلى حسابك؟")
         #expect(ImportText.confirmMessage(for: APIError(status: 404, code: "not_found", message: "")).contains("لا يخص حسابك"))
         #expect(ImportText.confirmMessage(for: APIError(status: 410, code: "expired", message: "")).contains("استُعمل من قبل"))
