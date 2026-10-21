@@ -117,7 +117,46 @@ private struct ProjectActionsModifier: ViewModifier {
     }
 }
 
+/// Swiping a project's row, as on a task: the leading edge (the right in Arabic) holds «تسمية»,
+/// the trailing edge «حذف» then «أرشفة», each as the role allows. A full swipe does nothing on its
+/// own, as deleting asks first.
+private struct ProjectSwipeActions: ViewModifier {
+    let project: ProjectItem
+    @Binding var action: ProjectAction?
+
+    @Environment(\.modelContext) private var context
+    @Environment(SyncEngine.self) private var sync
+    @Environment(SessionStore.self) private var session
+
+    func body(content: Content) -> some View {
+        let can = projectPermissions(project, me: session.user?.id)
+        content
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if can.canDelete {
+                    Button("حذف", systemImage: "trash", role: .destructive) { action = .delete(project.id) }
+                }
+                if can.canArchive {
+                    Button("أرشفة", systemImage: "archivebox") {
+                        Store(context: context, sync: sync).setArchived(project, true)
+                    }
+                    .tint(ZimamColor.inkMuted)
+                }
+            }
+            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                if can.canRename {
+                    Button("تسمية", systemImage: "pencil") { action = .rename(project.id) }
+                        .tint(ZimamColor.brand)
+                }
+            }
+    }
+}
+
 extension View {
+    /// The project's swipe actions; `.projectActions` answers the rename and delete they ask for.
+    func projectSwipeActions(_ project: ProjectItem, action: Binding<ProjectAction?>) -> some View {
+        modifier(ProjectSwipeActions(project: project, action: action))
+    }
+
     /// Shows what a «خيارات المشروع» menu asked for. `onDeleted` closes a screen of the deleted project.
     func projectActions(_ action: Binding<ProjectAction?>, onDeleted: (() -> Void)? = nil) -> some View {
         modifier(ProjectActionsModifier(action: action, onDeleted: onDeleted))

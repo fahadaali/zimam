@@ -158,6 +158,7 @@ struct SidebarView: View {
                     ProjectOptionsItems(project: project, action: $action)
                 }
             }
+            .projectSwipeActions(project, action: $action)
     }
 
     // MARK: Dropping tasks

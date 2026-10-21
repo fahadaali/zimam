@@ -59,6 +59,7 @@ struct ProjectsView: View {
                             ProjectOptionsItems(project: project, action: $action)
                         }
                     }
+                    .projectSwipeActions(project, action: $action)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 }
