@@ -17,8 +17,11 @@ struct MoveToProjectSheet: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Query private var matches: [TaskItem]
-    @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete && $0.kindRaw == "project" && $0.archivedAt == nil }, sort: [SortDescriptor(\ProjectItem.sortOrder)])
-    private var projects: [ProjectItem]
+    @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete && $0.kindRaw == "project" }, sort: [SortDescriptor(\ProjectItem.sortOrder)])
+    private var allProjects: [ProjectItem]
+    /// Archived projects take no new tasks. Filtered here: a third condition in the predicate is
+    /// more than the compiler type-checks in reasonable time.
+    private var projects: [ProjectItem] { allProjects.filter { $0.archivedAt == nil } }
     @Query(filter: #Predicate<SectionItem> { !$0.pendingDelete },
            sort: [SortDescriptor(\SectionItem.sortOrder), SortDescriptor(\SectionItem.createdAt)])
     private var sections: [SectionItem]
