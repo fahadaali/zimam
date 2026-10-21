@@ -444,3 +444,137 @@
     transition: none;
   }
 }
+
+/* ——— Prayer times (prayer-view.js) and settings (settings-view.js) ——— */
+
+/* NextPrayerLine: sand on sand-soft, the only place besides prayer chips that colour is used. */
+.prayer-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  inline-size: 100%;
+  min-block-size: var(--space-11);
+  margin-block-end: var(--space-3);
+  padding-inline: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--sand-soft);
+  color: var(--sand);
+  text-align: start;
+  cursor: pointer;
+}
+
+.prayer-line-text {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.timer {
+  font-variant-numeric: tabular-nums;
+}
+
+.prayer-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* PrayerClockCard */
+.prayer-clock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--sand-soft);
+  color: var(--sand);
+}
+
+.prayer-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.prayer-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--space-11);
+  padding-inline: var(--space-3);
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--sand-soft);
+  color: var(--sand);
+}
+
+/* The next prayer: «القادمة», heavier, with a sand edge. */
+.prayer-row.is-next {
+  border-color: var(--sand);
+}
+
+.prayer-time {
+  margin-inline-start: auto;
+}
+
+.account-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+
+.avatar-large {
+  inline-size: calc(var(--space-11) + var(--space-4));
+  block-size: calc(var(--space-11) + var(--space-4));
+  flex: none;
+}
+
+.account-card-body {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.account-card .form-plain {
+  padding-inline: 0;
+}
+
+.account-email {
+  overflow-wrap: anywhere;
+}
+
+.settings-link {
+  inline-size: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.settings-link-label,
+.settings-link-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-link-label > .zm-ico {
+  color: var(--ink-muted);
+}
+
+.form-add.danger {
+  color: var(--priority-high);
+}
+
+/* Grouped sheets: cards on the page colour, as a grouped Form. */
+.prayer-sheet,
+.settings-sheet,
+.prayer-sheet .sheet-bar,
+.settings-sheet .sheet-bar {
+  background: var(--surface);
+}
