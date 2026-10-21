@@ -373,7 +373,7 @@ https://api.zimam.work/v1/subscriptions/apple/notifications
 
 ## الاستيراد بإذن OAuth
 
-يستورد زمام من Google Calendar وMicrosoft To Do وNotion وTrello وAsana وTickTick بإذن يمنحه المستخدم في صفحة المزوّد نفسه، دون ملف ولا رمز يُنسخ. يجري الخادم التدفق كله (التفاصيل في `api/DEVELOPMENT.md`، «الاستيراد بإذن OAuth»)، فيحتاج كل مزوّد تطبيقاً تسجّله أنت مرة واحدة، ثم أسراره في كلاودفلير.
+يستورد زمام من Todoist وGoogle Tasks وGoogle Calendar وMicrosoft To Do وNotion وTrello وAsana وTickTick بإذن يمنحه المستخدم في صفحة المزوّد نفسه، دون ملف ولا رمز يُنسخ. يجري الخادم التدفق كله (التفاصيل في `api/DEVELOPMENT.md`، «الاستيراد بإذن OAuth»)، فيحتاج كل مزوّد تطبيقاً تسجّله أنت مرة واحدة، ثم أسراره في كلاودفلير.
 
 - **ما دامت أسرار مصدر غير مضبوطة** يظهر في التطبيق والموقع رمادياً مكتوباً تحته «غير متاح الآن»، ولا يتعطل شيء آخر. فاضبط المصادر واحداً واحداً متى شئت.
 - **رابط العودة (Redirect URI)** لكل مصدر هو `https://api.zimam.work/v1/imports/oauth/<source>/callback`، حرفياً، بلا شرطة في آخره. `<source>` معرّف المصدر في الجدول.
@@ -384,6 +384,8 @@ https://api.zimam.work/v1/subscriptions/apple/notifications
 | المصدر | `<source>` | الأسرار |
 | --- | --- | --- |
 | Google Calendar | `google-calendar` | `GOOGLE_CLIENT_SECRET` (والمعرّف `GOOGLE_WEB_CLIENT_ID` في `wrangler.jsonc`، ليس سراً) |
+| Google Tasks | `google-tasks-api` | السر نفسه `GOOGLE_CLIENT_SECRET`، فلا سر جديد |
+| Todoist | `todoist-oauth` | `TODOIST_CLIENT_ID`، `TODOIST_CLIENT_SECRET` |
 | Microsoft To Do | `microsoft-todo` | `MS_CLIENT_ID`، `MS_CLIENT_SECRET` |
 | Notion | `notion` | `NOTION_CLIENT_ID`، `NOTION_CLIENT_SECRET` |
 | Trello | `trello` | `TRELLO_API_KEY` |
@@ -480,6 +482,32 @@ npx wrangler secret put TICKTICK_CLIENT_SECRET
 ```
 
 يقرأ بنطاق `tasks:read`. ملف النسخة الاحتياطية CSV يبقى مصدراً مستقلاً، وهو وحده ينقل المهام المنجزة والمجلدات؛ والاستيراد بالطريقتين يحدّث المهام نفسها ولا يكررها.
+
+### ٧. Google Tasks
+
+يستعمل مشروع Google Cloud وعميل الويب وسرّه نفسها التي في Google Calendar، فلا سر جديد. ويبقى استيراد ملف Takeout متاحاً، والاستيراد بالطريقتين يحدّث المهام نفسها ولا يكررها.
+
+1. فعّل Google Tasks API في مشروع `zimam`: [console.cloud.google.com/apis/library/tasks.googleapis.com](https://console.cloud.google.com/apis/library/tasks.googleapis.com) ← **Enable**.
+2. **Google Auth Platform ← Data Access ← Add or remove scopes**: أضف `https://www.googleapis.com/auth/tasks.readonly` ثم **Save**. نطاق حسّاس كنطاق التقويم، والتحقق نفسه يغطيهما.
+3. **Clients ← عميل الويب (`404741015373-ukucah…`) ← Authorized redirect URIs ← Add URI**:
+   `https://api.zimam.work/v1/imports/oauth/google-tasks-api/callback` ثم **Save**.
+
+### ٨. Todoist
+
+يبقى استيراد الرمز الملصوق والملف متاحين دون أسرار؛ هذا يضيف «Todoist: الربط بالحساب» بإذن بضغطة.
+
+1. افتح [app.todoist.com/app/settings/integrations/app-management](https://app.todoist.com/app/settings/integrations/app-management) (App Management Console) ← **Create a new app**.
+2. **App name:** `زمام`، و**App service URL:** `https://zimam.work`، ثم **Create app**.
+3. **OAuth redirect URL:** `https://api.zimam.work/v1/imports/oauth/todoist-oauth/callback` ثم **Save settings**.
+4. انسخ **Client ID** و**Client secret**:
+
+```sh
+cd api
+npx wrangler secret put TODOIST_CLIENT_ID
+npx wrangler secret put TODOIST_CLIENT_SECRET
+```
+
+يطلب زمام `data:read` وحده، فيقرأ ولا يكتب شيئاً في Todoist.
 
 ### التجربة
 
