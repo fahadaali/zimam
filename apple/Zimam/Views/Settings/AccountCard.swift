@@ -21,7 +21,8 @@ struct AccountCard: View {
                 AvatarView(name: session.user?.name, size: ZimamSpacing.space11 * 1.5)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
-                    TextField("اسمك", text: $nameDraft)
+                    TextField(hint: "اسمك", text: $nameDraft)
+                        .labelsHidden()
                         .font(ZimamType.headline)
                         .focused($editingName)
                         .submitLabel(.done)

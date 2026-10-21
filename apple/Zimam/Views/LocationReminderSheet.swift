@@ -187,7 +187,8 @@ struct LocationNewPlaceSection: View {
 
     var body: some View {
         Section {
-            TextField("اسم المكان، مثل البيت أو العمل", text: $name)
+            TextField(hint: "اسم المكان، مثل البيت أو العمل", text: $name)
+                .labelsHidden()
             Toggle("حفظ في أماكني", isOn: $keep)
                 .frame(minHeight: ZimamSpacing.space11)
             PlacePreview(place: option, radius: radius)

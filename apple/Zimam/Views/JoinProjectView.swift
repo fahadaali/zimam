@@ -29,7 +29,8 @@ struct JoinProjectView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("رمز الدعوة أو رابطها", text: $text)
+                    TextField(hint: "رمز الدعوة أو رابطها", text: $text)
+                        .labelsHidden()
                         .autocorrectionDisabled()
                         #if os(iOS)
                         .textInputAutocapitalization(.never)

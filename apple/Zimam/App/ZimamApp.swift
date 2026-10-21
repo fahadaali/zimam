@@ -98,6 +98,9 @@ struct ZimamApp: App {
                     .font(ZimamType.body)
                     .foregroundStyle(ZimamColor.ink)
                     .tint(ZimamColor.brand)
+                    // Every form, its sheets and the inspector too, in sections as on the iPhone: the
+                    // Mac's own style puts labels in a column and turns a link into a small button.
+                    .formStyle(.grouped)
                     // Google's sign-in page returns here through the reversed client ID scheme, the
                     // widgets through zimam://task/<id>, zimam://day/<day>, zimam://today and
                     // zimam://calendar (App/AppLinks.swift), and «فتح في التطبيق» on the web join page

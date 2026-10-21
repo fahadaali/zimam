@@ -66,14 +66,17 @@ private struct TaskDetailForm: View {
     var body: some View {
         Form {
             Section {
-                TextField("عنوان المهمة", text: $title)
+                TextField(hint: "عنوان المهمة", text: $title)
+                    .labelsHidden()
                     .font(ZimamType.headline)
                     .focused($focused, equals: .title)
                     .onSubmit(saveText)
-                TextField("ملاحظات", text: $notes, axis: .vertical)
+                TextField(hint: "ملاحظات", text: $notes, axis: .vertical)
+                    .labelsHidden()
                     .lineLimit(3...8)
                     .focused($focused, equals: .notes)
-                TextField("الوسوم، مفصولة بفاصلة", text: $tags)
+                TextField(hint: "الوسوم، مفصولة بفاصلة", text: $tags)
+                    .labelsHidden()
                     .focused($focused, equals: .tags)
                     .onSubmit(saveText)
             }

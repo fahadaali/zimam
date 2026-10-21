@@ -33,7 +33,8 @@ struct PlaceSearchSection: View {
 
     var body: some View {
         Section {
-            TextField("ابحث عن مكان أو عنوان", text: $query)
+            TextField(hint: "ابحث عن مكان أو عنوان", text: $query)
+                .labelsHidden()
                 .autocorrectionDisabled()
             CurrentPlaceRows(reader: reader)
             PlaceSearchPhaseRow(phase: phase)
