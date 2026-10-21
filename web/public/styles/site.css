@@ -1,4 +1,20 @@
-/* زمام — landing page. Calm: neutral surfaces, brand only for the main action and focus. */
+/* زمام — the website: the landing page, and the header and footer the other pages share.
+   Calm: neutral surfaces, brand only for actions, sand only for prayer times. The screenshots are
+   the web app itself (scripts/screenshots.mjs), shown in device frames drawn here.
+   Tokens only; logical properties only. */
+
+:root {
+  /* The frame around a phone screenshot: dark glass in both themes. */
+  --bezel: var(--ink);
+  --site-glass: color-mix(in srgb, var(--surface) 76%, transparent);
+  --wide: calc(var(--space-11) * 30); /* 1320px: the landing page's widest rows */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bezel: var(--surface-sunken);
+  }
+}
 
 .site-header,
 main,
@@ -13,13 +29,42 @@ main,
   }
 }
 
+/* ——— Header: glass that floats over the page as it scrolls (the only translucent surface) ——— */
+
+.site-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 5;
+  inline-size: 100%;
+  padding-inline: max(var(--gutter), (100% - var(--page)) / 2);
+  background: var(--site-glass);
+  -webkit-backdrop-filter: saturate(180%) blur(var(--space-4));
+  backdrop-filter: saturate(180%) blur(var(--space-4));
+  border-block-end: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .site-header {
+    background: var(--surface);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .site-header {
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-block-end-color: var(--line-strong);
+  }
+}
+
 .site-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-4);
-  padding-block: var(--space-4);
+  padding-block: var(--space-2);
 }
 
 .site-logo {
@@ -37,18 +82,39 @@ main,
 .site-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  align-items: center;
+  gap: var(--space-1);
   padding: 0;
   list-style: none;
 }
 
-.site-nav a,
+.site-nav a:not(.zm-btn),
 .site-footer a {
   display: inline-flex;
   align-items: center;
   min-block-size: var(--space-11);
   padding-inline: var(--space-2);
   color: var(--ink);
+}
+
+.site-nav a:not(.zm-btn) {
+  text-decoration: none;
+  border-radius: var(--radius-md);
+}
+
+.site-nav a:not(.zm-btn):hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.site-open {
+  border-radius: var(--radius-pill);
+}
+
+/* Phones keep the logo and «افتح زمام»; the sections are a scroll away. */
+@media (max-width: 47.99rem) {
+  .site-nav-wide {
+    display: none;
+  }
 }
 
 .site-footer a {
@@ -59,8 +125,21 @@ main:focus {
   outline: none;
 }
 
+/* ——— Hero ——— */
+
 .hero {
-  padding-block: var(--space-8) var(--space-11);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-8);
+  padding-block: var(--space-11) var(--space-8);
+  text-align: center;
+}
+
+.hero-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   max-inline-size: var(--measure);
 }
 
@@ -83,42 +162,226 @@ main:focus {
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: var(--space-3);
 }
 
+/* The Mac window, with the phone standing in front of it at the inline end (the left in Arabic). */
+.hero-stage {
+  position: relative;
+  inline-size: 100%;
+  padding-block-end: var(--space-11);
+}
+
+.hero-stage .device-phone {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-end: var(--space-6);
+  inline-size: clamp(calc(var(--space-11) * 3), 22%, calc(var(--space-11) * 6));
+}
+
+/* Phones: the phone alone, centred; the window would be too small to read. */
+@media (max-width: 47.99rem) {
+  .hero-stage {
+    padding-block-end: 0;
+  }
+
+  .hero-stage .device-window {
+    display: none;
+  }
+
+  .hero-stage .device-phone {
+    position: static;
+    inline-size: min(100%, calc(var(--space-11) * 7));
+    margin-inline: auto;
+  }
+}
+
+/* ——— Device frames ——— */
+
+.device {
+  margin: 0;
+}
+
+.shot {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.device-phone {
+  padding: calc(var(--space-2) + var(--space-1) / 2);
+  border-radius: calc(var(--space-11) + var(--space-2));
+  background: var(--bezel);
+  border: 1px solid var(--line-strong);
+}
+
+.device-phone .shot {
+  border-radius: calc(var(--space-11) - var(--space-1));
+}
+
+.device-tablet {
+  padding: var(--space-3);
+  border-radius: calc(var(--space-8) + var(--space-1));
+  background: var(--bezel);
+  border: 1px solid var(--line-strong);
+}
+
+.device-tablet .shot {
+  border-radius: var(--space-6);
+}
+
+.device-window {
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+}
+
+/* The window's title bar: three quiet dots, as a Mac window's controls, in neutral tones. */
+.window-bar {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+  border-block-end: 1px solid var(--line);
+}
+
+.window-bar span {
+  inline-size: var(--space-3);
+  block-size: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+}
+
+/* ——— Sections ——— */
+
 .section {
-  padding-block: var(--space-8);
+  padding-block: var(--space-11);
   border-block-start: 1px solid var(--line);
+}
+
+.section-title {
+  margin-block-end: var(--space-8);
+  text-align: center;
 }
 
 .section > .title {
   margin-block-end: var(--space-6);
 }
 
-.features,
-.platforms,
-.steps {
+/* A feature: its words beside its screen, the side changing from one to the next. */
+.story {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-8);
+  padding-block: var(--space-8);
+}
+
+.story + .story {
+  border-block-start: 1px solid var(--line);
+}
+
+.story-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-inline-size: var(--measure);
+}
+
+.story-eyebrow {
+  color: var(--ink-muted);
+}
+
+/* Sand is for prayer times only: here it marks the prayer feature. */
+.story-eyebrow-prayer {
+  color: var(--sand);
+}
+
+.story-sample {
+  padding-block-start: var(--space-2);
+}
+
+.story-media {
+  display: flex;
+  justify-content: center;
+}
+
+.story-media .device-phone {
+  inline-size: min(100%, calc(var(--space-11) * 7));
+}
+
+.story-media .device-tablet,
+.story-media .device-window {
+  inline-size: 100%;
+}
+
+@media (min-width: 56rem) {
+  .story {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: var(--space-11);
+  }
+
+  .story:nth-of-type(even) .story-media {
+    order: -1;
+  }
+
+  .story:has(.device-phone) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* ——— «وأكثر من ذلك» ——— */
+
+.perks {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--card-min)), 1fr));
   gap: var(--space-4);
   padding: 0;
+  margin-block-end: var(--space-8);
   list-style: none;
 }
 
-.feature,
-.step {
+.perk {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
 }
 
-.feature-sample {
-  margin-block-start: auto;
-  padding-block-start: var(--space-2);
+.perk-icon {
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--space-11);
+  block-size: var(--space-11);
+  margin-block-end: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  color: var(--ink);
 }
+
+.perk-icon .zm-ico {
+  inline-size: var(--space-6);
+  block-size: var(--space-6);
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--space-11) * 9)), 1fr));
+  gap: var(--space-6);
+}
+
+/* ——— Platforms ——— */
 
 .platforms {
+  display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--space-11) * 5)), 1fr));
+  gap: var(--space-4);
+  padding: 0;
+  list-style: none;
 }
 
 .platform {
@@ -129,9 +392,13 @@ main:focus {
   border-block-start: 1px solid var(--line-strong);
 }
 
+/* ——— Claude and ChatGPT ——— */
+
 .mcp-lead {
   max-inline-size: var(--measure);
+  margin-inline: auto;
   margin-block-end: var(--space-6);
+  text-align: center;
 }
 
 .mcp-url {
@@ -139,7 +406,9 @@ main:focus {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-4);
-  margin-block-end: var(--space-6);
+  max-inline-size: var(--measure);
+  margin-inline: auto;
+  margin-block-end: var(--space-8);
 }
 
 .mcp-url > .caption,
@@ -160,6 +429,44 @@ main:focus {
 .copy-status:empty {
   display: none;
 }
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--card-min)), 1fr));
+  gap: var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.step-number {
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--space-11);
+  block-size: var(--space-11);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+/* ——— Closing ——— */
+
+.closing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding-block: var(--space-11);
+  border-block-start: 1px solid var(--line);
+  text-align: center;
+}
+
+/* ——— Footer and the 404 page ——— */
 
 .site-footer {
   display: flex;
@@ -189,4 +496,30 @@ main:focus {
   flex-wrap: wrap;
   gap: var(--space-3);
   margin-block-start: var(--space-3);
+}
+
+/* ——— Arriving as they scroll in: a fade and a short rise, tied to the scroll so it can be
+   reversed at any point; nothing at all with Reduce Motion or where the browser cannot ——— */
+
+@keyframes site-reveal {
+  from {
+    opacity: 0;
+    translate: 0 var(--space-6);
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal {
+      animation: site-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 25%;
+    }
+  }
+}
+
+/* Icons drawn by site.js from the app's own set (lib/icons.js). */
+.zm-ico-md {
+  inline-size: calc(var(--space-4) + var(--space-1));
+  block-size: calc(var(--space-4) + var(--space-1));
 }

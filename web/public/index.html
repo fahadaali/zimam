@@ -2,13 +2,14 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>زمام | خذ زمام يومك</title>
 <meta name="description" content="زمام مدير مهام عربي أولاً لآيفون وآيباد وماك وساعة أبل والويب، بتقويم هجري وميلادي كامل، وتذكيرات مرتبطة بأوقات الصلاة، ووصول كلود وChatGPT إلى مهامك بإذنك.">
 <meta property="og:title" content="زمام: خذ زمام يومك">
 <meta property="og:description" content="مدير مهام عربي أولاً، بالهجري والميلادي وأوقات الصلاة، ويتحدث معه كلود وChatGPT.">
 <meta property="og:locale" content="ar_SA">
+<meta property="og:image" content="/images/screens/desktop-today-light.webp">
 <link rel="icon" href="/design/app-icons/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/design/app-icons/apple-touch-icon-180.png">
 <link rel="preload" href="/design/fonts/web/thmanyahserifdisplay-Bold.woff2" as="font" type="font/woff2" crossorigin>
@@ -21,6 +22,7 @@
 <body class="zm-root">
 <a class="skip-link visually-hidden" href="#content">تخطَّ إلى المحتوى</a>
 
+<!-- The screenshots are the web app itself with demo data (npm run screenshots, scripts/screenshots.mjs). -->
 <header class="site-header">
   <div class="site-bar">
     <a class="site-logo" href="/">
@@ -30,9 +32,11 @@
       </picture>
     </a>
     <nav aria-label="الموقع">
-      <ul class="site-nav">
-        <li><a class="callout" href="#mcp">كلود وChatGPT</a></li>
-        <li><a class="callout" href="/app/">زمام على الويب</a></li>
+      <ul class="site-nav" role="list">
+        <li class="site-nav-wide"><a class="callout" href="#features">المزايا</a></li>
+        <li class="site-nav-wide"><a class="callout" href="#platforms">الأجهزة</a></li>
+        <li class="site-nav-wide"><a class="callout" href="#mcp">كلود وChatGPT</a></li>
+        <li><a class="zm-btn zm-btn-primary zm-btn-link site-open" href="/app/">افتح زمام</a></li>
       </ul>
     </nav>
   </div>
@@ -40,55 +44,200 @@
 
 <main id="content" tabindex="-1">
   <section class="hero" aria-labelledby="hero-title">
-    <!-- Kashida and swashes (salt, from zm-hero) only here: one stretched word in the line. -->
-    <h1 class="zm-hero hero-title" id="hero-title">
-      <span aria-hidden="true">خذ زمام يومـك</span>
-      <span class="visually-hidden">خذ زمام يومك</span>
-    </h1>
-    <p class="title hero-lead">مدير مهام عربي من الجذور، يعرف التقويم الهجري وأوقات الصلاة، ويتحدث معه كلود وChatGPT.</p>
-    <p class="body muted hero-platforms">لآيفون وآيباد وماك وساعة أبل، ومن المتصفح.</p>
-    <div class="hero-actions">
-      <a class="zm-btn zm-btn-primary zm-btn-link" href="/app/">افتح زمام على الويب</a>
-      <a class="zm-btn zm-btn-secondary zm-btn-link" href="#mcp">ربط كلود وChatGPT</a>
+    <div class="hero-text">
+      <!-- Kashida and swashes (salt, from zm-hero) only here: one stretched word in the line. -->
+      <h1 class="zm-hero hero-title" id="hero-title">
+        <span aria-hidden="true">خذ زمام يومـك</span>
+        <span class="visually-hidden">خذ زمام يومك</span>
+      </h1>
+      <p class="title hero-lead">مدير مهام عربي من الجذور: يعرف التقويم الهجري وأوقات الصلاة، ويرتّب يومك على كل أجهزتك.</p>
+      <p class="body muted hero-platforms">لآيفون وآيباد وماك وساعة أبل، ومن المتصفح. ويتحدث معه كلود وChatGPT.</p>
+      <div class="hero-actions">
+        <a class="zm-btn zm-btn-primary zm-btn-link" href="/app/">افتح زمام على الويب</a>
+        <a class="zm-btn zm-btn-secondary zm-btn-link" href="#features">تعرّف على المزايا</a>
+      </div>
+    </div>
+    <div class="hero-stage">
+      <figure class="device device-window">
+        <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+        <picture>
+          <source srcset="/images/screens/desktop-today-dark.webp" media="(prefers-color-scheme: dark)">
+          <img class="shot" src="/images/screens/desktop-today-light.webp" alt="زمام على الماك بثلاثة أعمدة: الشريط الجانبي، ومهام اليوم، وتفاصيل المهمة المفتوحة" width="2160" height="1350" decoding="async" fetchpriority="high">
+        </picture>
+      </figure>
+      <figure class="device device-phone">
+        <picture>
+          <source srcset="/images/screens/phone-today-dark.webp" media="(prefers-color-scheme: dark)">
+          <img class="shot" src="/images/screens/phone-today-light.webp" alt="شاشة «اليوم» في زمام على الجوال: سطر الصلاة القادمة، ومهام اليوم بشرائح التاريخ والصلاة" width="780" height="1688" decoding="async" fetchpriority="high">
+        </picture>
+      </figure>
     </div>
   </section>
 
-  <section class="section" aria-labelledby="why-title">
-    <h2 class="title" id="why-title">ما يجمعه زمام في مكان واحد</h2>
-    <ul class="features" role="list">
-      <li class="zm-card feature">
-        <h3 class="headline">كلود وChatGPT يقرآن مهامك ويكتبانها</h3>
-        <p class="callout muted">اربط زمام بكلود أو ChatGPT عبر خادم MCP، فيطّلع المساعد على يومك ويضيف المهام ويعدّلها وينجزها بإذنك، دون نسخ ولصق.</p>
-      </li>
-      <li class="zm-card feature">
-        <h3 class="headline">الهجري والميلادي معاً</h3>
-        <p class="callout muted">كل تاريخ بتقويم أم القرى وبالميلادي جنباً إلى جنب، وتقويمك الأساسي أولاً:</p>
-        <p class="feature-sample"><span class="zm-chip zm-chip-date" id="sample-date">٢ جمادى الأولى، ١٣ أكتوبر</span></p>
-      </li>
-      <li class="zm-card feature">
-        <h3 class="headline">تذكيرات مع أوقات الصلاة</h3>
-        <p class="callout muted">اربط المهمة بالصلاة لا بالساعة، فتتحرك مع تغيّر أوقات الصلاة في مدينتك على مدار السنة:</p>
-        <p class="feature-sample"><span class="zm-chip zm-chip-prayer">بعد العصر بـ٢٠ د</span></p>
-      </li>
-    </ul>
+  <section class="section" id="features" aria-labelledby="features-title">
+    <h2 class="visually-hidden" id="features-title">المزايا</h2>
+
+    <article class="story reveal" aria-labelledby="prayer-title">
+      <div class="story-text">
+        <p class="caption story-eyebrow story-eyebrow-prayer">أوقات الصلاة</p>
+        <h3 class="display story-title" id="prayer-title">مهامك مع أوقات الصلاة</h3>
+        <p class="body muted story-body">اربط المهمة بالصلاة لا بالساعة: «بعد العصر بـ٢٠ د» تتحرك مع وقت العصر في مدينتك طوال السنة. ويعدّ لك زمام الوقت المتبقي على الصلاة القادمة، ويعرض مواقيت يومك.</p>
+        <p class="story-sample"><span class="zm-chip zm-chip-prayer" id="sample-prayer">بعد العصر بـ٢٠ د</span></p>
+      </div>
+      <div class="story-media">
+        <figure class="device device-phone">
+        <picture>
+          <source srcset="/images/screens/phone-prayer-dark.webp" media="(prefers-color-scheme: dark)">
+          <img class="shot" src="/images/screens/phone-prayer-light.webp" alt="شاشة أوقات الصلاة في زمام: الوقت المتبقي على الصلاة القادمة ومواقيت اليوم" width="780" height="1688" decoding="async" loading="lazy">
+        </picture>
+      </figure>
+      </div>
+    </article>
+
+    <article class="story reveal" aria-labelledby="calendar-title">
+      <div class="story-text">
+        <p class="caption story-eyebrow">التقويم</p>
+        <h3 class="display story-title" id="calendar-title">الهجري والميلادي معاً</h3>
+        <p class="body muted story-body">كل تاريخ بتقويم أم القرى وبالميلادي جنباً إلى جنب، وتقويمك الأساسي أولاً. والتقويم شهراً أو أسبوعاً، تنقل فيه المهمة إلى يوم آخر بالسحب، وتمتد عليه المهام التي تأخذ أياماً.</p>
+        <p class="story-sample"><span class="zm-chip zm-chip-date" id="sample-date">٢ جمادى الأولى، ١٣ أكتوبر</span></p>
+      </div>
+      <div class="story-media">
+        <figure class="device device-tablet">
+        <picture>
+          <source srcset="/images/screens/tablet-calendar-dark.webp" media="(prefers-color-scheme: dark)">
+          <img class="shot" src="/images/screens/tablet-calendar-light.webp" alt="تقويم زمام شهرياً بالهجري مع الميلادي، وفيه المهام والمهام الممتدة أياماً" width="1770" height="1230" decoding="async" loading="lazy">
+        </picture>
+      </figure>
+      </div>
+    </article>
+
+    <article class="story reveal" aria-labelledby="projects-title">
+      <div class="story-text">
+        <p class="caption story-eyebrow">المشاريع</p>
+        <h3 class="display story-title" id="projects-title">كل مشروع بطريقته</h3>
+        <p class="body muted story-body">قائمة بأقسام، أو لوحة كانبان تسحب فيها المهام بين الأعمدة، أو مخطط زمني بالأيام والأسابيع. وشارك المشروع برابط دعوة، وأسند المهام وعلّق عليها.</p>
+        
+      </div>
+      <div class="story-media">
+        <figure class="device device-window">
+        <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+        <picture>
+          <source srcset="/images/screens/desktop-board-dark.webp" media="(prefers-color-scheme: dark)">
+          <img class="shot" src="/images/screens/desktop-board-light.webp" alt="مشروع في زمام بلوحة كانبان: أعمدة «للتنفيذ» و«قيد العمل» و«بانتظار»" width="2160" height="1350" decoding="async" loading="lazy">
+        </picture>
+      </figure>
+      </div>
+    </article>
+
+    <article class="story reveal" aria-labelledby="task-title">
+      <div class="story-text">
+        <p class="caption story-eyebrow">تفاصيل المهمة</p>
+        <h3 class="display story-title" id="task-title">كل ما تحتاجه المهمة</h3>
+        <p class="body muted story-body">الموعد بالساعة أو بالصلاة، وأكثر من تذكير: عند الموعد، أو قبله بساعة، أو عند صلاة أخرى. ومعها التكرار والمهام الفرعية والمرفقات والملاحظات والوسوم.</p>
+        
+      </div>
+      <div class="story-media">
+        <figure class="device device-phone">
+        <picture>
+          <source srcset="/images/screens/phone-task-dark.webp" media="(prefers-color-scheme: dark)">
+          <img class="shot" src="/images/screens/phone-task-light.webp" alt="تفاصيل مهمة في زمام: الموعد مرتبط بصلاة المغرب، والتذكيرات، والتكرار" width="780" height="1688" decoding="async" loading="lazy">
+        </picture>
+      </figure>
+      </div>
+    </article>
+
+    <article class="story reveal" aria-labelledby="assistant-title">
+      <div class="story-text">
+        <p class="caption story-eyebrow">المساعد</p>
+        <h3 class="display story-title" id="assistant-title">اكتبها كما تقولها</h3>
+        <p class="body muted story-body">اكتب الجملة كما تنطقها أو أملِها، فيقرؤها المساعد ويقترح موعدها وصلاتها ومشروعها، ولا يُضاف شيء قبل موافقتك. ويقسّم المهمة الكبيرة إلى خطوات، ويلخّص لك يومك.</p>
+        
+      </div>
+      <div class="story-media">
+        <figure class="device device-phone">
+        <picture>
+          <source srcset="/images/screens/phone-add-dark.webp" media="(prefers-color-scheme: dark)">
+          <img class="shot" src="/images/screens/phone-add-light.webp" alt="«مهمة جديدة» في زمام: جملة مكتوبة كما تُقال، واقتراح المساعد بموعدها وصلاتها ومشروعها" width="780" height="1688" decoding="async" loading="lazy">
+        </picture>
+      </figure>
+      </div>
+    </article>
   </section>
 
-  <section class="section" aria-labelledby="platforms-title">
-    <h2 class="title" id="platforms-title">على كل أجهزتك</h2>
+  <section class="section" aria-labelledby="more-title">
+    <h2 class="display section-title reveal" id="more-title">وأكثر من ذلك</h2>
+    <ul class="perks" role="list">
+
+      <li class="perk reveal">
+        <span class="perk-icon" data-icon="matrix" aria-hidden="true"></span>
+        <h3 class="headline">المصفوفة</h3>
+        <p class="callout muted">مهم وعاجل في نظرة واحدة، وتنقل المهمة بين الأرباع بالسحب.</p>
+      </li>
+
+      <li class="perk reveal">
+        <span class="perk-icon" data-icon="timeline" aria-hidden="true"></span>
+        <h3 class="headline">المخطط الزمني</h3>
+        <p class="callout muted">خطة المشروع على محور الأيام، بالهجري فوق الميلادي.</p>
+      </li>
+
+      <li class="perk reveal">
+        <span class="perk-icon" data-icon="users" aria-hidden="true"></span>
+        <h3 class="headline">المشاركة</h3>
+        <p class="callout muted">شارك المشروع مع فريقك أو أهلك، وأسند المهام وعلّق عليها.</p>
+      </li>
+
+      <li class="perk reveal">
+        <span class="perk-icon" data-icon="download" aria-hidden="true"></span>
+        <h3 class="headline">الاستيراد</h3>
+        <p class="callout muted">انقل مهامك من Todoist وTickTick وGoogle Tasks وغيرها.</p>
+      </li>
+
+      <li class="perk reveal">
+        <span class="perk-icon" data-icon="bell" aria-hidden="true"></span>
+        <h3 class="headline">يومك في كل مكان</h3>
+        <p class="callout muted">الويدجت وسيري وشاشة القفل، وتنبيهات الأذان والإقامة.</p>
+      </li>
+
+      <li class="perk reveal">
+        <span class="perk-icon" data-icon="refresh" aria-hidden="true"></span>
+        <h3 class="headline">يعمل دون اتصال</h3>
+        <p class="callout muted">تبقى مهامك على جهازك، وتتزامن بين أجهزتك حين يعود الاتصال.</p>
+      </li>
+    </ul>
+    <div class="gallery">
+      <figure class="device device-window">
+        <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+        <picture>
+          <source srcset="/images/screens/desktop-matrix-dark.webp" media="(prefers-color-scheme: dark)">
+          <img class="shot" src="/images/screens/desktop-matrix-light.webp" alt="مصفوفة الأولويات في زمام: مهم وعاجل، ومهم، وعاجل، ويوماً ما" width="2160" height="1350" decoding="async" loading="lazy">
+        </picture>
+      </figure>
+      <figure class="device device-window">
+        <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+        <picture>
+          <source srcset="/images/screens/desktop-timeline-dark.webp" media="(prefers-color-scheme: dark)">
+          <img class="shot" src="/images/screens/desktop-timeline-light.webp" alt="المخطط الزمني في زمام: المهام أشرطة على محور الأيام بالهجري والميلادي" width="2160" height="1350" decoding="async" loading="lazy">
+        </picture>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section" id="platforms" aria-labelledby="platforms-title">
+    <h2 class="display section-title reveal" id="platforms-title">على كل أجهزتك</h2>
     <ul class="platforms" role="list">
-      <li class="platform">
+      <li class="platform reveal">
         <h3 class="headline">آيفون</h3>
-        <p class="callout muted">اليوم والقادم والمشاريع والبحث، مع الويدجت وسيري.</p>
+        <p class="callout muted">اليوم والقادم والتقويم والمشاريع، مع الويدجت وسيري والنشاط الحي.</p>
       </li>
-      <li class="platform">
+      <li class="platform reveal">
         <h3 class="headline">آيباد وماك</h3>
-        <p class="callout muted">ثلاثة أعمدة ولوحة كانبان، واختصارات لوحة المفاتيح.</p>
+        <p class="callout muted">ثلاثة أعمدة ولوحة كانبان، والسحب والإفلات، واختصارات لوحة المفاتيح.</p>
       </li>
-      <li class="platform">
+      <li class="platform reveal">
         <h3 class="headline">ساعة أبل</h3>
-        <p class="callout muted">مهام اليوم، وإنجاز بلمسة، وإضافة بالصوت.</p>
+        <p class="callout muted">مهام اليوم والصلاة القادمة، وإنجاز بلمسة، وإضافة بالصوت.</p>
       </li>
-      <li class="platform">
+      <li class="platform reveal">
         <h3 class="headline">الويب</h3>
         <p class="callout muted">مهامك ومشاريعك من أي متصفح، بحساب أبل أو قوقل نفسه.</p>
       </li>
@@ -96,8 +245,8 @@
   </section>
 
   <section class="section" id="mcp" aria-labelledby="mcp-title">
-    <h2 class="title" id="mcp-title">ربط كلود وChatGPT بزمام</h2>
-    <p class="body mcp-lead">أضف خادم زمام موصلاً مخصصاً، ثم سجّل الدخول بحساب أبل أو قوقل الذي تستعمله في زمام، واختر ما يُسمح للمساعد به.</p>
+    <h2 class="display section-title" id="mcp-title">ربط كلود وChatGPT بزمام</h2>
+    <p class="body muted mcp-lead">أضف خادم زمام موصلاً مخصصاً، ثم سجّل الدخول بحساب أبل أو قوقل الذي تستعمله في زمام، واختر ما يُسمح للمساعد به. فيطّلع على يومك ويضيف المهام ويعدّلها وينجزها بإذنك، دون نسخ ولصق.</p>
     <div class="mcp-url zm-card">
       <p class="caption muted" id="mcp-url-label">رابط الخادم</p>
       <code class="body mcp-url-value" id="mcp-url" dir="ltr" translate="no">https://mcp.zimam.work/mcp</code>
@@ -106,18 +255,27 @@
     </div>
     <ol class="steps" role="list">
       <li class="zm-card step">
+        <span class="step-number title" aria-hidden="true">١</span>
         <h3 class="headline">في كلود</h3>
         <p class="callout muted">من الإعدادات افتح «الموصلات» واختر إضافة موصل مخصص، والصق الرابط، ثم اتبع تسجيل الدخول.</p>
       </li>
       <li class="zm-card step">
+        <span class="step-number title" aria-hidden="true">٢</span>
         <h3 class="headline">في ChatGPT</h3>
         <p class="callout muted">فعّل وضع المطوّر من إعدادات التطبيقات والموصلات، وأنشئ موصلاً بالرابط نفسه، ثم سجّل الدخول.</p>
       </li>
       <li class="zm-card step">
+        <span class="step-number title" aria-hidden="true">٣</span>
         <h3 class="headline">ثم اطلب</h3>
         <p class="callout muted">«ما مهامي اليوم؟»، «أضف مراجعة العقد بعد المغرب يوم الخميس».</p>
       </li>
     </ol>
+  </section>
+
+  <section class="closing reveal" aria-labelledby="closing-title">
+    <h2 class="display" id="closing-title">ابدأ يومك مع زمام</h2>
+    <p class="body muted">مهامك ومشاريعك بالهجري والميلادي، مع أوقات الصلاة، في كل أجهزتك.</p>
+    <a class="zm-btn zm-btn-primary zm-btn-link" href="/app/">افتح زمام على الويب</a>
   </section>
 </main>
 
