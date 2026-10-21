@@ -227,3 +227,40 @@ test("job dates show both calendars and the time, with the Arabic comma", () => 
   // Another year adds the years.
   assert.match(jobDate(ms, { today: "2027-01-02", timeZone: "Asia/Riyadh" }), /١٤٤٨/);
 });
+
+test("the import screen lists each app once, in its group, with its ways in the easiest first", async () => {
+  const { importCatalog, appSubtitle, methodTitle } = await import("../public/app/lib/imports.js");
+  const s = (id, input, available = true, label = id) => ({ id, input, available, label });
+  const sources = [
+    s("todoist-csv", "file"),
+    s("todoist-api", "token"),
+    s("ticktick-csv", "file"),
+    s("google-tasks", "file"),
+    s("csv", "file"),
+    s("todoist-oauth", "oauth"),
+    s("google-tasks-api", "oauth", false),
+    s("asana", "oauth"),
+    s("jira", "oauth", false),
+    s("google-calendar", "oauth"),
+    s("someday-app", "oauth", true, "Someday"),
+  ];
+  const catalog = importCatalog(sources);
+  assert.deepEqual(
+    catalog.map((g) => [g.title, g.apps.map((a) => [a.name, a.methods.map((m) => m.id)])]),
+    [
+      ["تطبيقات المهام", [["Todoist", ["todoist-oauth", "todoist-api", "todoist-csv"]], ["TickTick", ["ticktick-csv"]], ["Google Tasks", ["google-tasks"]]]],
+      ["المشاريع والفرق", [["Asana", ["asana"]]]],
+      ["التقاويم", [["Google Calendar", ["google-calendar"]]]],
+      ["ملف", [["ملف CSV", ["csv"]]]],
+      // A source the list does not know yet still shows, last.
+      ["أخرى", [["Someday", ["someday-app"]]]],
+    ],
+  );
+  // A way in the server cannot start is left out; an app with none (Jira here) is not listed.
+  assert.ok(!catalog.some((g) => g.apps.some((a) => a.id === "jira")));
+  const todoist = catalog[0].apps[0];
+  assert.equal(appSubtitle(todoist), "الربط بالحساب أو برمز API أو من ملف");
+  assert.equal(appSubtitle(catalog[1].apps[0]), "المشاريع والأقسام والمهام");
+  assert.equal(methodTitle({ input: "file" }), "من ملف");
+  assert.deepEqual(importCatalog([]), []);
+});
