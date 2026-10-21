@@ -203,7 +203,7 @@ extension SessionStore {
     nonisolated static func storedSessionAPI() -> APIClient? {
         guard Keychain.read(tokenAccount) != nil else { return nil }
         let configured = Bundle.main.object(forInfoDictionaryKey: "ZimamAPIURL") as? String
-        let baseURL = configured.flatMap(URL.init(string:)) ?? URL(string: "https://zimam.fahad2ao.workers.dev")!
+        let baseURL = configured.flatMap(URL.init(string:)) ?? URL(string: "https://api.zimam.work")!
         return APIClient(baseURL: baseURL) { Keychain.read(SessionStore.tokenAccount) }
     }
 }

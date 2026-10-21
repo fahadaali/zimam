@@ -31,7 +31,7 @@ final class SessionStore {
         isSignedIn = signedIn
         user = signedIn ? Self.loadCachedUser() : nil
         let configured = Bundle.main.object(forInfoDictionaryKey: "ZimamAPIURL") as? String
-        let baseURL = configured.flatMap(URL.init(string:)) ?? URL(string: "https://zimam.fahad2ao.workers.dev")!
+        let baseURL = configured.flatMap(URL.init(string:)) ?? URL(string: "https://api.zimam.work")!
         api = APIClient(baseURL: baseURL) { Keychain.read(SessionStore.tokenAccount) }
     }
 

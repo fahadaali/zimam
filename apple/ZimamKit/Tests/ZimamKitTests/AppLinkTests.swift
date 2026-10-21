@@ -22,7 +22,7 @@ struct AppLinkTests {
     @Test func rejectsOtherLinks() {
         // Invites belong to InviteCode.
         #expect(AppLink(url: URL(string: "zimam://join/abc123")!) == nil)
-        #expect(AppLink(url: URL(string: "https://zimam.app/today")!) == nil)
+        #expect(AppLink(url: URL(string: "https://zimam.work/today")!) == nil)
         #expect(AppLink(url: URL(string: "zimam://task/not-a-uuid")!) == nil)
         #expect(AppLink(url: URL(string: "zimam://day/15-10-2026")!) == nil)
         #expect(AppLink(url: URL(string: "zimam://day/2026-1-5")!) == nil)

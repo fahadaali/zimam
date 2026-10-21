@@ -38,10 +38,10 @@ struct SharingTests {
         #expect(invites.first?.expiresAt == 1_760_604_800_000)
 
         let created = try JSONDecoder().decode(CreatedInvite.self, from: Data("""
-        {"id":"2a3b4c5d-6e7f-4801-9234-56789abcdef0","code":"abc_DEF-123456789","url":"https://zimam.app/join/abc_DEF-123456789","expiresAt":1760604800000}
+        {"id":"2a3b4c5d-6e7f-4801-9234-56789abcdef0","code":"abc_DEF-123456789","url":"https://zimam.work/join/abc_DEF-123456789","expiresAt":1760604800000}
         """.utf8))
         #expect(created.code == "abc_DEF-123456789")
-        #expect(created.url.absoluteString == "https://zimam.app/join/abc_DEF-123456789")
+        #expect(created.url.absoluteString == "https://zimam.work/join/abc_DEF-123456789")
 
         let preview = try JSONDecoder().decode(InvitePreview.self, from: Data("""
         {"projectName":"البيت","role":"viewer","invitedBy":"فهد","expiresAt":1760604800000}
@@ -80,9 +80,9 @@ struct SharingTests {
         let code = "Zx9_Kq-3vB7mN2pL5tR8wY1aC4dF6gH0jS3uE5iO7k"
         #expect(InviteCode.extract(from: code) == code)
         #expect(InviteCode.extract(from: "  \(code)\n") == code)
-        #expect(InviteCode.extract(from: "https://zimam.app/join/\(code)") == code)
-        #expect(InviteCode.extract(from: "انضم إلى مشروعي: https://zimam.app/join/\(code)") == code)
-        #expect(InviteCode.extract(from: "https://zimam.app/join/\(code)/?ref=share") == code)
+        #expect(InviteCode.extract(from: "https://zimam.work/join/\(code)") == code)
+        #expect(InviteCode.extract(from: "انضم إلى مشروعي: https://zimam.work/join/\(code)") == code)
+        #expect(InviteCode.extract(from: "https://zimam.work/join/\(code)/?ref=share") == code)
         #expect(InviteCode.extract(from: "") == nil)
         #expect(InviteCode.extract(from: "رمز خاطئ") == nil)
         #expect(InviteCode.extract(from: "abc") == nil)
@@ -91,12 +91,12 @@ struct SharingTests {
 
     @Test func extractsInviteCodesFromEveryLinkForm() {
         let code = "Zx9_Kq-3vB7mN2pL5tR8wY1aC4dF6gH0jS3uE5iO7k"
-        let site = "https://zimam-web.fahad2ao.workers.dev"
+        let site = "https://zimam.work"
         // The current link: the code in the fragment.
         #expect(InviteCode.extract(from: "\(site)/join/#\(code)") == code)
         #expect(InviteCode.extract(from: "\(site)/join#\(code)") == code)
         #expect(InviteCode.extract(from: "انضم إلى مشروعي: \(site)/join/#\(code) شكراً") == code)
-        // A query, the old path form on either host, and the app's scheme.
+        // A query, the old path form, and the app's scheme.
         #expect(InviteCode.extract(from: "\(site)/join/?code=\(code)") == code)
         #expect(InviteCode.extract(from: "\(site)/join/?code=\(code)&ref=share") == code)
         #expect(InviteCode.extract(from: "\(site)/join/#code=\(code)") == code)
@@ -114,21 +114,21 @@ struct SharingTests {
     @Test func buildsAndRecognisesInviteLinks() throws {
         let code = "Zx9_Kq-3vB7mN2pL5tR8wY1aC4dF6gH0jS3uE5iO7k"
         let link = InviteCode.link(for: code)
-        #expect(link.absoluteString == "https://zimam-web.fahad2ao.workers.dev/join/#\(code)")
+        #expect(link.absoluteString == "https://zimam.work/join/#\(code)")
         #expect(link.fragment == code)
         #expect(InviteCode.isInviteLink(link))
         #expect(InviteCode.extract(from: link.absoluteString) == code)
 
-        #expect(InviteCode.isInviteLink(try makeURL("https://zimam.app/join/\(code)")))
+        #expect(InviteCode.isInviteLink(try makeURL("https://www.zimam.work/join/\(code)")))
         #expect(InviteCode.isInviteLink(try makeURL("zimam://join/\(code)")))
         // Not invites: another path or host, and Google's sign-in return.
-        #expect(!InviteCode.isInviteLink(try makeURL("https://zimam-web.fahad2ao.workers.dev/app/")))
+        #expect(!InviteCode.isInviteLink(try makeURL("https://zimam.work/app/")))
         #expect(!InviteCode.isInviteLink(try makeURL("https://example.com/join/\(code)")))
-        #expect(!InviteCode.isInviteLink(try makeURL("http://zimam.app/join/\(code)")))
+        #expect(!InviteCode.isInviteLink(try makeURL("http://zimam.work/join/\(code)")))
         #expect(!InviteCode.isInviteLink(try makeURL("com.googleusercontent.apps.1-abc:/oauth2redirect?code=x")))
 
-        #expect(ZimamWeb.privacyPolicy.absoluteString == "https://zimam-web.fahad2ao.workers.dev/privacy/")
-        #expect(ZimamWeb.terms.absoluteString == "https://zimam-web.fahad2ao.workers.dev/terms/")
+        #expect(ZimamWeb.privacyPolicy.absoluteString == "https://zimam.work/privacy/")
+        #expect(ZimamWeb.terms.absoluteString == "https://zimam.work/terms/")
     }
 
     @Test func sharingMessages() {

@@ -35,7 +35,7 @@ final class WatchModel {
         isSignedIn = Keychain.read(Self.tokenAccount) != nil
         calendar = UserDefaults.standard.string(forKey: Self.calendarKey).flatMap(CalendarKind.init(rawValue:)) ?? .hijri
         let configured = Bundle.main.object(forInfoDictionaryKey: "ZimamAPIURL") as? String
-        let baseURL = configured.flatMap(URL.init(string:)) ?? URL(string: "https://zimam.fahad2ao.workers.dev")!
+        let baseURL = configured.flatMap(URL.init(string:)) ?? URL(string: "https://api.zimam.work")!
         api = APIClient(baseURL: baseURL) { Keychain.read(WatchModel.tokenAccount) }
         link.onSession = { [weak self] token, calendar in
             self?.received(token: token, calendar: calendar)
