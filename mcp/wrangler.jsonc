@@ -5,6 +5,10 @@
   "compatibility_date": "2026-10-01",
   // Lets the OAuth provider fetch Client ID Metadata Documents without reaching private addresses.
   "compatibility_flags": ["global_fetch_strictly_public"],
+  // Served only on the zimam.work domain, attached on deploy; workers.dev is off (docs/setup.md, «النطاق»).
+  "routes": [{ "pattern": "mcp.zimam.work", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false,
   "observability": { "enabled": true },
   "kv_namespaces": [
     {
@@ -18,7 +22,7 @@
   // Logos, tokens.css and the web fonts for the consent page.
   "assets": { "directory": "../design" },
   "vars": {
-    "MCP_ORIGIN": "https://zimam-mcp.fahad2ao.workers.dev",
+    "MCP_ORIGIN": "https://mcp.zimam.work",
     // Sign in with Apple Services ID for the web.
     "APPLE_WEB_CLIENT_ID": "app.zimam.ios.web",
     // Google OAuth web client ID (public, not a secret); must be in the API's GOOGLE_CLIENT_IDS.

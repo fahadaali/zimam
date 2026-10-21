@@ -3,6 +3,10 @@
   "name": "zimam",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
+  // Served only on the zimam.work domain, attached on deploy; workers.dev is off (docs/setup.md, «النطاق»).
+  "routes": [{ "pattern": "api.zimam.work", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false,
   "observability": { "enabled": true },
   "d1_databases": [
     {
@@ -22,12 +26,12 @@
     // Web codes (Sign in with Apple JS) are exchanged with the redirect URI the page used, which the
     // client sends and must be one of these: the web app's, then the others (the MCP consent page).
     // Each must be a Return URL of the Services ID app.zimam.ios.web too.
-    "APPLE_WEB_REDIRECT_URI": "https://zimam-web.fahad2ao.workers.dev/app",
-    "APPLE_REDIRECT_URIS": "https://zimam-mcp.fahad2ao.workers.dev/authorize",
+    "APPLE_WEB_REDIRECT_URI": "https://zimam.work/app",
+    "APPLE_REDIRECT_URIS": "https://mcp.zimam.work/authorize",
     // Sign in with Google: the OAuth client IDs (iOS app, then web) whose ID tokens are
     // accepted. Client IDs are public, not secrets. Empty turns Google sign-in off.
     "GOOGLE_CLIENT_IDS": "404741015373-r3p4od9ko0qd99hocpg3r7gv1arju4ge.apps.googleusercontent.com,404741015373-ukucah8482ofiuvd9lb4cn4pgqvnfm75.apps.googleusercontent.com",
-    "ALLOWED_ORIGINS": "https://zimam.app,https://zimam-web.fahad2ao.workers.dev",
+    "ALLOWED_ORIGINS": "https://zimam.work",
     // In-app assistant. Keys are secrets: `npx wrangler secret put DEEPSEEK_API_KEY`
     // (or ANTHROPIC_API_KEY with AI_PROVIDER "anthropic"; AI_GATEWAY_TOKEN when used). Never put them here.
     "AI_PROVIDER": "deepseek",

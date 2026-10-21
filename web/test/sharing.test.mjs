@@ -15,21 +15,21 @@ import {
 const code = "Zx9_Kq-3vB7mN2pL5tR8wY1aC4dF6gH0jS3uE5iO7k";
 
 test("an invite link points at this site's join page, with the code after #", () => {
-  const created = { id: "i1", code, url: `https://zimam-web.fahad2ao.workers.dev/join/#${code}`, expiresAt: 0 };
-  assert.equal(inviteShareLink("https://zimam.app", created), `https://zimam.app/join/#${code}`);
-  assert.equal(inviteShareLink("https://zimam-web.fahad2ao.workers.dev", created), created.url);
+  const created = { id: "i1", code, url: `https://zimam.work/join/#${code}`, expiresAt: 0 };
+  assert.equal(inviteShareLink("http://localhost:8787", created), `http://localhost:8787/join/#${code}`);
+  assert.equal(inviteShareLink("https://zimam.work", created), created.url);
   // The link round-trips through the join page and the paste box.
-  const link = new URL(inviteShareLink("https://zimam.app", created));
+  const link = new URL(inviteShareLink("https://zimam.work", created));
   assert.equal(codeFromJoinLocation({ pathname: link.pathname, search: link.search, hash: link.hash }), code);
   assert.equal(extractInviteCode(inviteMessage("المكتب", link.href, code)), code);
   // A malformed code falls back to the server's link.
-  assert.equal(inviteShareLink("https://zimam.app", { code: "bad", url: "https://x/join/#bad" }), "https://x/join/#bad");
+  assert.equal(inviteShareLink("https://zimam.work", { code: "bad", url: "https://x/join/#bad" }), "https://x/join/#bad");
 });
 
 test("the invite message carries the link and the code", () => {
-  const message = inviteMessage("المكتب", `https://zimam.app/join/#${code}`, code);
+  const message = inviteMessage("المكتب", `https://zimam.work/join/#${code}`, code);
   assert.match(message, /«المكتب»/);
-  assert.ok(message.includes(`https://zimam.app/join/#${code}`));
+  assert.ok(message.includes(`https://zimam.work/join/#${code}`));
   assert.ok(message.trim().endsWith(code));
 });
 

@@ -29,7 +29,7 @@ export function googleEnabled(clientId) {
   return typeof clientId === "string" && clientId.trim() !== "";
 }
 
-/** The redirect URI for an origin, e.g. https://zimam-web.fahad2ao.workers.dev/app/google-callback. */
+/** The redirect URI for an origin, e.g. https://zimam.work/app/google-callback. */
 export function googleCallbackUrl(origin) {
   return `${origin}${GOOGLE_CALLBACK_PATH}`;
 }

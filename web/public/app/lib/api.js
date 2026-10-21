@@ -3,10 +3,9 @@
 
 const TOKEN_KEY = "zimam.session";
 
-/** The API for this site: api.zimam.app for zimam.app, the workers.dev API everywhere else. */
-export function apiBase(hostname = location.hostname) {
-  if (hostname === "zimam.app" || hostname.endsWith(".zimam.app")) return "https://api.zimam.app";
-  return "https://zimam.fahad2ao.workers.dev";
+/** The API for this site (zimam.work). */
+export function apiBase() {
+  return "https://api.zimam.work";
 }
 
 // The session token lives in localStorage so the app stays signed in across tabs and restarts, like

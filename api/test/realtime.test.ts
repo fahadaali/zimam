@@ -201,7 +201,7 @@ describe("Opening the socket", () => {
     const user = await signIn();
     const { ticket } = await ticketFor(user);
     expect(await connect(`?ticket=${encodeURIComponent(ticket)}`, { Origin: "https://evil.example" })).toBe(403);
-    const allowed = await connect(`?ticket=${encodeURIComponent(ticket)}`, { Origin: "https://zimam.app" });
+    const allowed = await connect(`?ticket=${encodeURIComponent(ticket)}`, { Origin: "https://zimam.work" });
     expect(typeof allowed).toBe("object");
   });
 
