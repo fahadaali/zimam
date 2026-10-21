@@ -144,6 +144,7 @@ describe("Imports API", () => {
       ["notion", "oauth"],
       ["trello", "oauth"],
       ["asana", "oauth"],
+      ["clickup", "oauth"],
       ["ticktick-api", "oauth"],
     ]);
   });

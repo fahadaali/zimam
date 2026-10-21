@@ -1,5 +1,6 @@
 import type { Source, SourceId } from "../source";
 import { asana } from "./asana";
+import { clickup } from "./clickup";
 import { genericCsv } from "./generic-csv";
 import { googleCalendar } from "./google-calendar";
 import { googleTasks, googleTasksApi } from "./google-tasks";
@@ -28,6 +29,7 @@ export const SOURCES: Record<SourceId, Source> = {
   notion,
   trello,
   asana,
+  clickup,
   "ticktick-api": tickTickApi,
 };
 

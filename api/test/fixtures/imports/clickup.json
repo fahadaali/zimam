@@ -1,0 +1,197 @@
+{
+  "spaces": [
+    {
+      "space": {
+        "id": "S1",
+        "name": "العمل"
+      },
+      "folders": [
+        {
+          "folder": {
+            "id": "F1",
+            "name": "التسويق"
+          },
+          "lists": [
+            {
+              "list": {
+                "id": "L1",
+                "name": "الحملات"
+              },
+              "tasks": [
+                {
+                  "id": "t1",
+                  "name": "خطة الحملة",
+                  "text_content": "الأهداف والجمهور",
+                  "status": {
+                    "status": "to do",
+                    "type": "open",
+                    "orderindex": 0
+                  },
+                  "priority": {
+                    "priority": "urgent"
+                  },
+                  "due_date": "1792648800000",
+                  "due_date_time": true,
+                  "start_date": "1792458000000",
+                  "tags": [
+                    {
+                      "name": "تسويق"
+                    }
+                  ],
+                  "orderindex": "2"
+                },
+                {
+                  "id": "t2",
+                  "name": "تصميم الإعلان",
+                  "status": {
+                    "status": "in progress",
+                    "type": "custom",
+                    "orderindex": 1
+                  },
+                  "priority": {
+                    "priority": "normal"
+                  },
+                  "due_date": "1792890000000",
+                  "due_date_time": false,
+                  "orderindex": "1"
+                },
+                {
+                  "id": "t3",
+                  "name": "اعتماد الميزانية",
+                  "status": {
+                    "status": "complete",
+                    "type": "closed",
+                    "orderindex": 3
+                  },
+                  "date_closed": "1792312200000",
+                  "orderindex": "3"
+                },
+                {
+                  "id": "t4",
+                  "name": "النص الإعلاني",
+                  "status": {
+                    "status": "to do",
+                    "type": "open",
+                    "orderindex": 0
+                  },
+                  "parent": "t1",
+                  "priority": {
+                    "priority": "low"
+                  },
+                  "orderindex": "4"
+                },
+                {
+                  "id": "t5",
+                  "name": "فكرة قديمة",
+                  "status": {
+                    "status": "to do",
+                    "type": "open",
+                    "orderindex": 0
+                  },
+                  "archived": true,
+                  "orderindex": "5"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "folder": {
+            "id": "F0",
+            "name": "hidden",
+            "hidden": true
+          },
+          "lists": [
+            {
+              "list": {
+                "id": "L2",
+                "name": "مهام سريعة"
+              },
+              "tasks": [
+                {
+                  "id": "t6",
+                  "name": "اتصال بالمورد",
+                  "status": {
+                    "status": "to do",
+                    "type": "open",
+                    "orderindex": 0
+                  },
+                  "priority": null,
+                  "orderindex": "1"
+                },
+                {
+                  "id": "t1",
+                  "name": "خطة الحملة",
+                  "text_content": "الأهداف والجمهور",
+                  "status": {
+                    "status": "to do",
+                    "type": "open",
+                    "orderindex": 0
+                  },
+                  "priority": {
+                    "priority": "urgent"
+                  },
+                  "due_date": "1792648800000",
+                  "due_date_time": true,
+                  "start_date": "1792458000000",
+                  "tags": [
+                    {
+                      "name": "تسويق"
+                    }
+                  ],
+                  "orderindex": "2"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "lists": [
+        {
+          "list": {
+            "id": "L3",
+            "name": "قديم",
+            "archived": true
+          },
+          "tasks": []
+        }
+      ]
+    },
+    {
+      "space": {
+        "id": "S2",
+        "name": "البيت"
+      },
+      "folders": [],
+      "lists": [
+        {
+          "list": {
+            "id": "L4",
+            "name": "البيت"
+          },
+          "tasks": [
+            {
+              "id": "t7",
+              "name": "  ",
+              "status": {
+                "status": "to do",
+                "type": "open",
+                "orderindex": 0
+              }
+            },
+            {
+              "id": "t8",
+              "name": "سقي الحديقة",
+              "status": {
+                "status": "to do",
+                "type": "open",
+                "orderindex": 0
+              },
+              "tags": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

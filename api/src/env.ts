@@ -94,6 +94,9 @@ declare global {
       /** Secrets: the Todoist app (the import that connects to the account; a pasted token needs none). */
       TODOIST_CLIENT_ID?: string;
       TODOIST_CLIENT_SECRET?: string;
+      /** Secrets: the ClickUp OAuth app. */
+      CLICKUP_CLIENT_ID?: string;
+      CLICKUP_CLIENT_SECRET?: string;
     }
   }
 }
