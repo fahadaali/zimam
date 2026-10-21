@@ -47,6 +47,12 @@ const SECRETS = {
   TODOIST_CLIENT_SECRET: "todoist-secret",
   CLICKUP_CLIENT_ID: "clickup-client",
   CLICKUP_CLIENT_SECRET: "clickup-secret",
+  JIRA_CLIENT_ID: "jira-client",
+  JIRA_CLIENT_SECRET: "jira-secret",
+  LINEAR_CLIENT_ID: "linear-client",
+  LINEAR_CLIENT_SECRET: "linear-secret",
+  MONDAY_CLIENT_ID: "monday-client",
+  MONDAY_CLIENT_SECRET: "monday-secret",
 };
 const WEB = "https://zimam.work";
 
@@ -173,6 +179,10 @@ describe("OAuth imports", () => {
       ["trello", false],
       ["asana", false],
       ["clickup", false],
+      ["planner", false],
+      ["jira", false],
+      ["linear", false],
+      ["monday", false],
       ["ticktick-api", false],
     ]);
     expect(listed.filter((s) => s.input !== "oauth").every((s) => s.available)).toBe(true);
@@ -346,6 +356,121 @@ describe("OAuth imports", () => {
     expect(done.job).toMatchObject({ status: "done", source: "clickup", counts: { created: 6, failed: 0 } });
     const titles = await env.DB.prepare(`SELECT title FROM tasks WHERE owner_id = ? ORDER BY title`).bind(userId).all();
     expect(titles.results.map((t) => t.title)).toEqual(["الأولى", "الثالثة", "الثانية"]);
+  });
+
+  /** The rest of a flow once `provider` is set: the provider returns, the user confirms, the queue runs. */
+  async function finish(token: string, source: string, url: URL) {
+    const callback = await request("GET", `/v1/imports/oauth/${source}/callback?code=good-code&state=${url.searchParams.get("state")}`);
+    const confirmed = await confirm(token, pendingOf(callback.headers.get("Location")!));
+    expect(confirmed.status).toBe(202);
+    const { job } = await json(confirmed);
+    await deliverAll();
+    return (await json(await request("GET", `/v1/imports/${job.id}`, { token }))).job;
+  }
+  const authOf = (init?: RequestInit) => new Headers(init?.headers).get("Authorization");
+  const graphqlOf = (init?: RequestInit) => JSON.parse(String(init?.body)) as { query: string; variables: Record<string, any> };
+
+  it("imports Microsoft Planner with To Do's Microsoft app: every plan, bucket and page", async () => {
+    const { token } = await signIn();
+    const { url } = await start(token, "planner");
+    expect(url.origin + url.pathname).toBe("https://login.microsoftonline.com/common/oauth2/v2.0/authorize");
+    expect(url.searchParams.get("client_id")).toBe("ms-client");
+    expect(url.searchParams.get("scope")).toBe("Tasks.Read");
+    expect(url.searchParams.has("code_challenge")).toBe(true);
+    provider = (u, init) => {
+      if (u.pathname.endsWith("/oauth2/v2.0/token")) {
+        const form = new URLSearchParams(String(init?.body));
+        return form.get("client_secret") === "ms-secret" && form.get("code_verifier") ? Response.json({ access_token: "planner-token-123" }) : Response.json({}, { status: 400 });
+      }
+      if (authOf(init) !== "Bearer planner-token-123") return new Response("", { status: 401 });
+      if (u.pathname === "/v1.0/me/planner/plans") return Response.json({ value: [{ id: "P1", title: "الخطة" }] });
+      if (u.pathname === "/v1.0/planner/plans/P1/buckets") return Response.json({ value: [{ id: "B1", name: "للتنفيذ", orderHint: "1" }] });
+      if (u.pathname === "/v1.0/planner/plans/P1/tasks") {
+        return u.searchParams.get("$skiptoken")
+          ? Response.json({ value: [{ id: "t2", title: "الثانية", bucketId: "B1" }] })
+          : Response.json({ value: [{ id: "t1", title: "الأولى", bucketId: "B1" }], "@odata.nextLink": "https://graph.microsoft.com/v1.0/planner/plans/P1/tasks?$skiptoken=x" });
+      }
+      return new Response("unknown", { status: 404 });
+    };
+    expect(await finish(token, "planner", url)).toMatchObject({ status: "done", counts: { created: 4, failed: 0 } });
+  });
+
+  it("imports Jira: the token's sites, each project's issues by its own search", async () => {
+    const { token } = await signIn();
+    const { url } = await start(token, "jira");
+    expect(url.origin + url.pathname).toBe("https://auth.atlassian.com/authorize");
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({ client_id: "jira-client", scope: "read:jira-work", audience: "api.atlassian.com", prompt: "consent" });
+    const searched: string[] = [];
+    provider = (u, init) => {
+      if (u.href === "https://auth.atlassian.com/oauth/token") {
+        const body = JSON.parse(String(init?.body));
+        return body.client_secret === "jira-secret" && body.code === "good-code" ? Response.json({ access_token: "jira-token-123" }) : Response.json({}, { status: 403 });
+      }
+      if (authOf(init) !== "Bearer jira-token-123") return new Response("", { status: 401 });
+      if (u.pathname === "/oauth/token/accessible-resources") return Response.json([{ id: "c1", name: "fahad", scopes: ["read:jira-work"] }]);
+      if (u.pathname === "/ex/jira/c1/rest/api/3/project/search") return Response.json({ values: [{ id: "10", name: "الموقع" }], isLast: true });
+      if (u.pathname === "/ex/jira/c1/rest/api/3/search/jql") {
+        searched.push(u.searchParams.get("jql")!);
+        const status = { id: "1", name: "To Do", statusCategory: { key: "new" } };
+        return u.searchParams.get("nextPageToken")
+          ? Response.json({ issues: [{ id: "101", fields: { summary: "الثانية", status, project: { id: "10" } } }], isLast: true })
+          : Response.json({ issues: [{ id: "100", fields: { summary: "الأولى", status, project: { id: "10" } } }], nextPageToken: "n2", isLast: false });
+      }
+      return new Response("unknown", { status: 404 });
+    };
+    // The project, its one column and two issues.
+    expect(await finish(token, "jira", url)).toMatchObject({ status: "done", counts: { created: 4, failed: 0 } });
+    expect(searched).toEqual(["project = 10 ORDER BY created ASC", "project = 10 ORDER BY created ASC"]);
+  });
+
+  it("imports Linear through GraphQL, every page of teams and issues", async () => {
+    const { token } = await signIn();
+    const { url } = await start(token, "linear");
+    expect(url.origin + url.pathname).toBe("https://linear.app/oauth/authorize");
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({ client_id: "linear-client", scope: "read" });
+    provider = (u, init) => {
+      if (u.href === "https://api.linear.app/oauth/token") {
+        const form = new URLSearchParams(String(init?.body));
+        return form.get("client_secret") === "linear-secret" ? Response.json({ access_token: "lin_oauth_token123" }) : Response.json({}, { status: 400 });
+      }
+      if (authOf(init) !== "Bearer lin_oauth_token123") return new Response("", { status: 401 });
+      const { query, variables } = graphqlOf(init);
+      if (query.includes("teams(")) {
+        return Response.json({ data: { teams: { nodes: [{ id: "T1", name: "المنتج", states: { nodes: [{ id: "s1", name: "Todo", type: "unstarted", position: 0 }] } }], pageInfo: { hasNextPage: false } } } });
+      }
+      const issue = (id: string) => ({ id, title: id === "i1" ? "الأولى" : "الثانية", state: { id: "s1", type: "unstarted" }, team: { id: "T1" } });
+      return variables.after
+        ? Response.json({ data: { issues: { nodes: [issue("i2")], pageInfo: { hasNextPage: false } } } })
+        : Response.json({ data: { issues: { nodes: [issue("i1")], pageInfo: { hasNextPage: true, endCursor: "c1" } } } });
+    };
+    expect(await finish(token, "linear", url)).toMatchObject({ status: "done", counts: { created: 4, failed: 0 } });
+  });
+
+  it("imports monday.com through GraphQL: boards, then each board's items by cursor", async () => {
+    const { token } = await signIn();
+    const { url } = await start(token, "monday");
+    expect(url.origin + url.pathname).toBe("https://auth.monday.com/oauth2/authorize");
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({ client_id: "monday-client", scope: "boards:read" });
+    provider = (u, init) => {
+      if (u.href === "https://auth.monday.com/oauth2/token") {
+        const form = new URLSearchParams(String(init?.body));
+        return form.get("client_secret") === "monday-secret" ? Response.json({ access_token: "monday-token-123" }) : Response.json({}, { status: 400 });
+      }
+      // monday.com takes the token as it is.
+      if (authOf(init) !== "monday-token-123") return new Response("", { status: 401 });
+      const { query } = graphqlOf(init);
+      if (query.includes("next_items_page")) return Response.json({ data: { next_items_page: { cursor: null, items: [{ id: "2", name: "الثانية", state: "active", group: { id: "g1" }, column_values: [] }] } } });
+      if (query.includes("items_page")) return Response.json({ data: { boards: [{ items_page: { cursor: "k", items: [{ id: "1", name: "الأولى", state: "active", group: { id: "g1" }, column_values: [] }] } }] } });
+      return Response.json({
+        data: {
+          boards: [
+            { id: "B1", name: "اللوحة", type: "board", groups: [{ id: "g1", title: "المجموعة", position: "1" }] },
+            { id: "B2", name: "Subitems of اللوحة", type: "sub_items_board", groups: [] },
+          ],
+        },
+      });
+    };
+    expect(await finish(token, "monday", url)).toMatchObject({ status: "done", counts: { created: 4, failed: 0 } });
   });
 
   it("refuses unknown sources and return targets, and needs a session", async () => {

@@ -5,6 +5,10 @@ import { zimamRule } from "../src/imports/recurrence";
 import { derivedKey } from "../src/imports/source";
 import { type AsanaData, mapAsana } from "../src/imports/sources/asana";
 import { type ClickUpData, mapClickUp } from "../src/imports/sources/clickup";
+import { adfToText, type JiraData, mapJira } from "../src/imports/sources/jira";
+import { type LinearData, mapLinear } from "../src/imports/sources/linear";
+import { type MondayData, mapMonday } from "../src/imports/sources/monday";
+import { mapPlanner, type PlannerData } from "../src/imports/sources/planner";
 import { type GoogleCalendarData, isChosenCalendar, mapGoogleCalendar } from "../src/imports/sources/google-calendar";
 import { mapMicrosoftTodo, type MicrosoftTodoData, todoRecurrence } from "../src/imports/sources/microsoft-todo";
 import { mapNotion, type NotionData, notionMapping } from "../src/imports/sources/notion";
@@ -315,6 +319,175 @@ describe("ClickUp", () => {
     expect(bundle.projects.some((p) => p.name === "قديم")).toBe(false);
     expect(bundle.tasks.some((t) => t.title === "فكرة قديمة")).toBe(false);
     expect(bundle.warnings).toEqual(["عناصر مؤرشفة أو في سلة المحذوفات تُركت: ٢", "مهام بلا عنوان تُركت: ١"]);
+  });
+});
+
+describe("Microsoft Planner", () => {
+  const data: PlannerData = {
+    plans: [
+      {
+        plan: { id: "P1", title: "إطلاق المنتج" },
+        buckets: [
+          { id: "B2", name: "قيد العمل", orderHint: "8585" },
+          { id: "B1", name: "للتنفيذ", orderHint: "8584" },
+        ],
+        tasks: [
+          { id: "t1", title: "كتابة الخطة", bucketId: "B1", priority: 1, dueDateTime: "2026-10-24T21:00:00Z", startDateTime: "2026-10-19T21:00:00Z", orderHint: "2" },
+          { id: "t2", title: "مراجعة التصميم", bucketId: "B2", priority: 5, percentComplete: 50, orderHint: "1" },
+          { id: "t3", title: "حجز القاعة", bucketId: "B1", priority: 9, percentComplete: 100, completedDateTime: "2026-10-18T08:00:00Z", orderHint: "3" },
+          { id: "t4", title: " ", bucketId: "B1" },
+        ],
+      },
+    ],
+  };
+  const bundle = mapPlanner(data, RIYADH);
+
+  it("maps plans to kanban projects and buckets to columns in Planner's order", () => {
+    expect(bundle.projects.map((p) => [p.name, p.view])).toEqual([["إطلاق المنتج", "kanban"]]);
+    expect(bundle.sections.map((s) => s.name)).toEqual(["للتنفيذ", "قيد العمل"]);
+  });
+
+  it("maps days in the user's zone, priority, progress and completion", () => {
+    // 21:00 UTC is the next day in Riyadh.
+    expect(byTitle(bundle.tasks, "كتابة الخطة")).toMatchObject({ sectionKey: "bucket:B1", priority: 3, dueDate: "2026-10-25", startDate: "2026-10-20", done: false });
+    expect(byTitle(bundle.tasks, "مراجعة التصميم")).toMatchObject({ priority: 0, done: false, sectionKey: "bucket:B2" });
+    expect(byTitle(bundle.tasks, "حجز القاعة")).toMatchObject({ priority: 1, done: true, completedAt: Date.parse("2026-10-18T08:00:00Z") });
+    expect(bundle.warnings).toEqual(["مهام بلا عنوان تُركت: ١"]);
+  });
+});
+
+describe("Jira", () => {
+  const issue = (id: string, fields: Record<string, unknown>) => ({ id, fields: { project: { id: "10" }, ...fields } });
+  const todo = { id: "1", name: "To Do", statusCategory: { key: "new" } };
+  const doing = { id: "3", name: "In Progress", statusCategory: { key: "indeterminate" } };
+  const done = { id: "4", name: "Done", statusCategory: { key: "done" } };
+  const data: JiraData = {
+    sites: [
+      {
+        site: { id: "c1", name: "fahad" },
+        projects: [{ id: "10", name: "الموقع" }],
+        issues: [
+          issue("100", { summary: "صفحة الدفع", status: doing, priority: { name: "High" }, duedate: "2026-10-26", labels: ["ويب"] }),
+          issue("101", {
+            summary: "نص الصفحة",
+            status: todo,
+            priority: { name: "Low" },
+            parent: { id: "100" },
+            description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "المسودة الأولى" }] }, { type: "bulletList", content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "العنوان" }] }] }] }] },
+          }),
+          issue("102", { summary: "الشعار", status: done, resolutiondate: "2026-10-15T12:00:00.000+0300" }),
+        ],
+      },
+    ],
+  };
+  const bundle = mapJira(data, RIYADH);
+
+  it("maps projects to kanban boards with their open statuses as columns, to do first", () => {
+    expect(bundle.projects.map((p) => [p.name, p.view, p.parentKey])).toEqual([["الموقع", "kanban", null]]);
+    expect(bundle.sections.map((s) => s.name)).toEqual(["To Do", "In Progress"]);
+  });
+
+  it("maps priority, due day, labels, description as text, sub-tasks and resolution", () => {
+    expect(byTitle(bundle.tasks, "صفحة الدفع")).toMatchObject({ priority: 3, dueDate: "2026-10-26", tags: ["ويب"], sectionKey: "status:project:c1:10:3" });
+    expect(byTitle(bundle.tasks, "نص الصفحة")).toMatchObject({ priority: 1, parentKey: "issue:c1:100", notes: "المسودة الأولى\n• العنوان" });
+    expect(byTitle(bundle.tasks, "الشعار")).toMatchObject({ done: true, sectionKey: null, completedAt: Date.parse("2026-10-15T09:00:00Z") });
+  });
+
+  it("reads Atlassian documents as text", () => {
+    expect(adfToText(null)).toBe("");
+    expect(adfToText({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "سطر" }, { type: "hardBreak" }, { type: "text", text: "آخر" }] }] })).toBe("سطر\nآخر");
+  });
+});
+
+describe("Linear", () => {
+  const data: LinearData = {
+    teams: [
+      {
+        id: "T1",
+        name: "المنتج",
+        states: {
+          nodes: [
+            { id: "s3", name: "In Progress", type: "started", position: 2 },
+            { id: "s1", name: "Backlog", type: "backlog", position: 0 },
+            { id: "s2", name: "Todo", type: "unstarted", position: 1 },
+            { id: "s4", name: "Done", type: "completed", position: 3 },
+            { id: "s5", name: "Canceled", type: "canceled", position: 4 },
+          ],
+        },
+      },
+    ],
+    issues: [
+      { id: "i1", title: "تسجيل الدخول", priority: 1, dueDate: "2026-10-23", sortOrder: 1, state: { id: "s3", type: "started" }, team: { id: "T1" }, project: { name: "الإصدار ١" }, labels: { nodes: [{ name: "خلفية" }] } },
+      { id: "i2", title: "زر الدخول", priority: 3, sortOrder: 2, state: { id: "s2", type: "unstarted" }, team: { id: "T1" }, parent: { id: "i1" } },
+      { id: "i3", title: "الشعار", priority: 4, sortOrder: 3, completedAt: "2026-10-17T10:00:00.000Z", state: { id: "s4", type: "completed" }, team: { id: "T1" } },
+      { id: "i4", title: "فكرة ملغاة", state: { id: "s5", type: "canceled" }, team: { id: "T1" } },
+    ],
+  };
+  const bundle = mapLinear(data, RIYADH);
+
+  it("maps teams to kanban projects with their open states in Linear's order", () => {
+    expect(bundle.projects.map((p) => [p.name, p.view])).toEqual([["المنتج", "kanban"]]);
+    expect(bundle.sections.map((s) => s.name)).toEqual(["Backlog", "Todo", "In Progress"]);
+  });
+
+  it("maps priority, due day, labels and project as tags, sub-issues, completion, and leaves canceled out", () => {
+    expect(byTitle(bundle.tasks, "تسجيل الدخول")).toMatchObject({ priority: 3, dueDate: "2026-10-23", tags: ["خلفية", "الإصدار ١"], sectionKey: "state:s3" });
+    expect(byTitle(bundle.tasks, "زر الدخول")).toMatchObject({ priority: 2, parentKey: "issue:i1", sectionKey: "state:s2" });
+    expect(byTitle(bundle.tasks, "الشعار")).toMatchObject({ priority: 1, done: true, sectionKey: null, completedAt: Date.parse("2026-10-17T10:00:00Z") });
+    expect(bundle.tasks.some((t) => t.title === "فكرة ملغاة")).toBe(false);
+    expect(bundle.warnings).toEqual(["مهام ملغاة في المصدر تُركت: ١"]);
+  });
+});
+
+describe("monday.com", () => {
+  const status = (title: string, text: string) => ({ id: title, type: "status", text, column: { title } });
+  const data: MondayData = {
+    boards: [
+      {
+        board: { id: "B1", name: "التسويق", type: "board", groups: [{ id: "g2", title: "هذا الأسبوع", position: "2" }, { id: "g1", title: "اليوم", position: "1" }] },
+        items: [
+          {
+            id: "1",
+            name: "منشور الإطلاق",
+            state: "active",
+            group: { id: "g1" },
+            column_values: [
+              status("Status", "Working on it"),
+              status("Priority", "High"),
+              { id: "date", type: "date", text: "2026-10-22 09:00", date: "2026-10-22", time: "06:00:00" },
+              { id: "tags", type: "tags", text: "حملة, ويب" },
+              { id: "notes", type: "long_text", text: "صورة ونص قصير" },
+            ],
+            subitems: [{ id: "2", name: "التصميم", state: "active", column_values: [status("Status", "Done")] }],
+          },
+          { id: "3", name: "تقرير الأسبوع", state: "active", group: { id: "g2" }, column_values: [status("الحالة", "تم"), { id: "date", type: "date", text: "2026-10-25", date: "2026-10-25", time: null }] },
+          { id: "4", name: "مؤتمر", state: "active", group: { id: "g2" }, column_values: [{ id: "tl", type: "timeline", text: "", from: "2026-11-02", to: "2026-11-04" }] },
+          { id: "5", name: "قديم", state: "archived", group: { id: "g2" } },
+        ],
+      },
+    ],
+  };
+  const bundle = mapMonday(data, RIYADH);
+
+  it("maps boards to projects and groups to sections in their order", () => {
+    expect(bundle.projects.map((p) => p.name)).toEqual(["التسويق"]);
+    expect(bundle.sections.map((s) => s.name)).toEqual(["اليوم", "هذا الأسبوع"]);
+  });
+
+  it("maps status, priority, dates, timeline, tags, notes and sub-items", () => {
+    expect(byTitle(bundle.tasks, "منشور الإطلاق")).toMatchObject({
+      sectionKey: "group:B1:g1",
+      done: false,
+      priority: 3,
+      dueDate: "2026-10-22",
+      dueTime: "09:00",
+      tags: ["حملة", "ويب"],
+      notes: "صورة ونص قصير",
+    });
+    expect(byTitle(bundle.tasks, "التصميم")).toMatchObject({ parentKey: "item:1", done: true });
+    expect(byTitle(bundle.tasks, "تقرير الأسبوع")).toMatchObject({ done: true, dueDate: "2026-10-25", dueTime: null });
+    expect(byTitle(bundle.tasks, "مؤتمر")).toMatchObject({ startDate: "2026-11-02", dueDate: "2026-11-04" });
+    expect(bundle.warnings).toEqual(["عناصر مؤرشفة أو في سلة المحذوفات تُركت: ١"]);
   });
 });
 

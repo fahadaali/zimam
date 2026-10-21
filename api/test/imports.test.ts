@@ -145,6 +145,10 @@ describe("Imports API", () => {
       ["trello", "oauth"],
       ["asana", "oauth"],
       ["clickup", "oauth"],
+      ["planner", "oauth"],
+      ["jira", "oauth"],
+      ["linear", "oauth"],
+      ["monday", "oauth"],
       ["ticktick-api", "oauth"],
     ]);
   });

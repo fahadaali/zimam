@@ -61,7 +61,9 @@
     // above; its secret and every other provider's credentials are secrets (docs/setup.md, «الاستيراد بإذن OAuth»):
     // GOOGLE_CLIENT_SECRET, MS_CLIENT_ID, MS_CLIENT_SECRET, NOTION_CLIENT_ID, NOTION_CLIENT_SECRET,
     // TRELLO_API_KEY, ASANA_CLIENT_ID, ASANA_CLIENT_SECRET, TICKTICK_CLIENT_ID, TICKTICK_CLIENT_SECRET,
-    // TODOIST_CLIENT_ID, TODOIST_CLIENT_SECRET, CLICKUP_CLIENT_ID, CLICKUP_CLIENT_SECRET.
+    // TODOIST_CLIENT_ID, TODOIST_CLIENT_SECRET, CLICKUP_CLIENT_ID, CLICKUP_CLIENT_SECRET, JIRA_CLIENT_ID,
+    // JIRA_CLIENT_SECRET, LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET, MONDAY_CLIENT_ID, MONDAY_CLIENT_SECRET.
+    // Microsoft Planner uses Microsoft To Do's MS_CLIENT_ID and MS_CLIENT_SECRET.
     // A source without its secrets is listed as unavailable. Never put them here.
     "GOOGLE_WEB_CLIENT_ID": "404741015373-ukucah8482ofiuvd9lb4cn4pgqvnfm75.apps.googleusercontent.com"
   },
