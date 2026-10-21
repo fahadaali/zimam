@@ -28,7 +28,27 @@
 
 ### ٣. النطاق
 
-بعد حجز `zimam.app` على كلاودفلير: **Workers & Pages ← zimam ← Settings ← Domains & Routes ← Add ← Custom domain** بالقيمة `api.zimam.app`.
+النطاق `zimam.work` في حساب كلاودفلير نفسه، وكل خادم مربوط باسمه في `routes` من `wrangler.jsonc`، فيربطه النشر تلقائياً (Custom domain):
+
+| الخادم | المجلد | النطاق |
+| --- | --- | --- |
+| `zimam` | `api/` | `api.zimam.work` |
+| `zimam-mcp` | `mcp/` | `mcp.zimam.work` |
+| `zimam-web` | `web/` | `zimam.work` |
+
+- عناوين workers.dev مطفأة في الثلاثة (`"workers_dev": false` و`"preview_urls": false`)، فلا يُوصل إلى الخوادم إلا من النطاق.
+- إن كان في **DNS** سجل على `zimam.work` أو `api` أو `mcp` فاحذفه قبل النشر، وإلا فشل ربط النطاق.
+- (اختياري) `www.zimam.work`: سجل `AAAA` بالقيمة `100::` مع **Proxied**، وقاعدة من **Rules ← Redirect Rules** (القالب «Redirect from WWW to root») تحوّله إلى `https://zimam.work` بالرمز 301.
+
+ما يتبع النطاق خارج المستودع، ويُعمل قبل الدمج لأن الخوادم لا تُجاب إلا عليه:
+
+1. **أبل ← Services ID `app.zimam.ios.web`:** النطاقان `zimam.work` و`mcp.zimam.work`، ورابطا العودة `https://zimam.work/app` و`https://mcp.zimam.work/authorize` (الخطوتان ٥ و٦ أدناه).
+2. **قوقل ← عميل الويب:** الأصلان والروابط الثلاثة («الدخول بحساب قوقل» و«Google Calendar» أدناه).
+3. **مزوّدو الاستيراد:** رابط العودة `https://api.zimam.work/v1/imports/oauth/<source>/callback` لكل مزوّد، وفي Trello الأصل `https://api.zimam.work` («الاستيراد بإذن OAuth»).
+4. **App Store Connect:** رابط إشعارات الخادم (`https://api.zimam.work/v1/subscriptions/apple/notifications`)، وروابط الدعم والخصوصية والشروط (`docs/appstore/listing.md`).
+5. **كلود وChatGPT:** احذف الموصل القديم وأضفه بالرابط `https://mcp.zimam.work/mcp`.
+
+النسخ المثبتة من التطبيق قبل الانتقال تتوقف عن المزامنة حتى تُحدَّث (بياناتها محفوظة على الجهاز)، ومستخدمو الويب يدخلون من جديد على `zimam.work`.
 
 ### ٤. (اختياري) تشغيل wrangler من جلسة Claude السحابية
 
@@ -52,11 +72,11 @@
 | Deploy command | `npx wrangler deploy` |
 
 3. **Sign in with Apple للويب:** في حساب المطوّر، افتح Services ID `app.zimam.ios.web`، وفعّل Sign in with Apple، واختر `app.zimam.ios` تطبيقاً أساسياً، وأضف:
-   - Domain: `zimam-mcp.fahad2ao.workers.dev`
-   - Return URL: `https://zimam-mcp.fahad2ao.workers.dev/authorize`
-4. **الربط في كلود:** Settings ← Connectors ← Add custom connector، بالرابط `https://zimam-mcp.fahad2ao.workers.dev/mcp`. وفي ChatGPT: فعّل وضع المطوّر (Developer mode) من الإعدادات، ثم أضف موصلاً بنفس الرابط.
+   - Domain: `mcp.zimam.work`
+   - Return URL: `https://mcp.zimam.work/authorize`
+4. **الربط في كلود:** Settings ← Connectors ← Add custom connector، بالرابط `https://mcp.zimam.work/mcp`. وفي ChatGPT: فعّل وضع المطوّر (Developer mode) من الإعدادات، ثم أضف موصلاً بنفس الرابط.
 
-بعد حجز النطاق يصير الرابط `https://mcp.zimam.app/mcp`: غيّر `MCP_ORIGIN` في `mcp/wrangler.jsonc`، وأضف النطاق الجديد في Services ID، ورابط العودة الجديد (`https://mcp.zimam.app/authorize`) إلى `APPLE_REDIRECT_URIS` في `api/wrangler.jsonc` ليُحفظ رمز Apple الذي يُلغى عند حذف الحساب.
+أصل الخادم `MCP_ORIGIN` في `mcp/wrangler.jsonc`، ورابط العودة نفسه في `APPLE_REDIRECT_URIS` في `api/wrangler.jsonc`، ليُحفظ رمز Apple الذي يُلغى عند حذف الحساب. إن تغيّر النطاق فغيّرهما مع Services ID.
 
 ### ٦. الموقع وتطبيق الويب
 
@@ -71,8 +91,8 @@
 | Deploy command | `npx wrangler deploy` |
 
 2. **Sign in with Apple للويب:** في Services ID `app.zimam.ios.web` أضف:
-   - Domain: `zimam-web.fahad2ao.workers.dev`
-   - Return URL: `https://zimam-web.fahad2ao.workers.dev/app`
+   - Domain: `zimam.work`
+   - Return URL: `https://zimam.work/app`
 
    هذا الرابط هو `APPLE_WEB_REDIRECT_URI` في `api/wrangler.jsonc`: يستبدل الخادم به رمز Apple من الموقع (انظر «رمز Sign in with Apple» في `api/DEVELOPMENT.md`). إن تغيّر النطاق فغيّره في الموضعين.
 
@@ -124,7 +144,7 @@ npx wrangler r2 bucket create zimam-attachments
 في [developer.apple.com](https://developer.apple.com/account) (بعد حسم: حساب شخصي أم كيان تجاري):
 
 1. **Identifiers ← App IDs**: المعرّف `app.zimam.ios`، مع تفعيل Sign in with Apple وPush Notifications وApp Groups.
-2. **Identifiers ← Services IDs**: المعرّف `app.zimam.ios.web` لتسجيل الدخول من الموقع، مع النطاق `zimam.app`.
+2. **Identifiers ← Services IDs**: المعرّف `app.zimam.ios.web` لتسجيل الدخول من الموقع وصفحة ربط كلود، مع النطاقين `zimam.work` و`mcp.zimam.work`.
 3. **App Groups**: `group.app.zimam.ios` لمشاركة البيانات بين التطبيق والويدجت.
 
 ### المعرّفات الخاصة بالويدجت والساعة
@@ -210,29 +230,29 @@ npx wrangler secret put APPLE_PRIVATE_KEY < AuthKey_XXXXXXXXXX.p8   # نص ال�
 
 ### ٦. الروابط العامة (روابط الدعوة تفتح التطبيق)
 
-رابط الدعوة `https://zimam-web.fahad2ao.workers.dev/join/#<code>` يفتح التطبيق مباشرة إن كان مثبتاً، ويفتح صفحة الدعوة في المتصفح إن لم يكن. يحتاج ذلك ثلاثة أشياء، اثنان منها في المستودع:
+رابط الدعوة `https://zimam.work/join/#<code>` يفتح التطبيق مباشرة إن كان مثبتاً، ويفتح صفحة الدعوة في المتصفح إن لم يكن. يحتاج ذلك ثلاثة أشياء، اثنان منها في المستودع:
 
 1. **في حساب المطوّر (خطوتك):** **Identifiers ← App IDs ← `app.zimam.ios`**، فعّل **Associated Domains** واحفظ. يحدّث Xcode ملفات التوقيع في البناء التالي. دون هذه الخطوة يرفض التوقيع الإمكانية `com.apple.developer.associated-domains`.
-2. **في التطبيق:** `apple/project.yml` يضيف `applinks:zimam-web.fahad2ao.workers.dev` إلى إمكانات التطبيق، ثم `xcodegen`. ويفتح `App/InviteLinks.swift` شاشة «الانضمام بدعوة» بالرمز. وزر «فتح في التطبيق» في صفحة الدعوة يستعمل `zimam://join/<code>`، لأن Safari لا يفتح التطبيق من رابط عام إلى الموقع نفسه.
+2. **في التطبيق:** `apple/project.yml` يضيف `applinks:zimam.work` إلى إمكانات التطبيق، ثم `xcodegen`. ويفتح `App/InviteLinks.swift` شاشة «الانضمام بدعوة» بالرمز. وزر «فتح في التطبيق» في صفحة الدعوة يستعمل `zimam://join/<code>`، لأن Safari لا يفتح التطبيق من رابط عام إلى الموقع نفسه.
 3. **في الموقع:** `web/public/.well-known/apple-app-site-association` يذكر `72V86SZ2XC.app.zimam.ios` والمسارين `/join` و`/join/*`، وينشر مع الموقع بنوع `application/json`.
 
 للتحقق بعد النشر:
 
 ```sh
-curl -sI https://zimam-web.fahad2ao.workers.dev/.well-known/apple-app-site-association   # 200 وContent-Type: application/json
-curl -s https://app-site-association.cdn-apple.com/a/v1/zimam-web.fahad2ao.workers.dev  # ما تراه أبل (يتأخر حتى يوم)
+curl -sI https://zimam.work/.well-known/apple-app-site-association   # 200 وContent-Type: application/json
+curl -s https://app-site-association.cdn-apple.com/a/v1/zimam.work  # ما تراه أبل (يتأخر حتى يوم)
 ```
 
 ثم من الملاحظات أو الرسائل على آيفون فيه بناء جديد، اضغط رابط دعوة. أبل تقرأ الملف عند تثبيت التطبيق أو تحديثه، فإن تغيّر الملف فاحذف التطبيق وثبّته من جديد للتجربة. وللتطوير يمكن إضافة `?mode=developer` إلى النطاق في `project.yml` مع تفعيل **Associated Domains Development** في إعدادات المطوّر على الجهاز.
 
-**عند الانتقال إلى `zimam.app`:** تتغيّر أربعة أماكن معاً: `applinks:zimam.app` في `apple/project.yml`، و`ZimamWeb.origin` في `apple/ZimamKit/Sources/ZimamKit/ZimamWeb.swift`، و`INVITE_URL` في `api/src/routes/members.ts`، ويُنشر الملف نفسه على `https://zimam.app/.well-known/apple-app-site-association`. أبقِ النطاق القديم في `project.yml` مدة حتى لا تتعطل الدعوات المرسلة قبل الانتقال (صالحة سبعة أيام)، و`InviteCode` يقرأ الرابطين.
+**إن تغيّر النطاق** تتغيّر أربعة أماكن معاً: `applinks:` في `apple/project.yml`، و`ZimamWeb.origin` في `apple/ZimamKit/Sources/ZimamKit/ZimamWeb.swift`، و`INVITE_URL` في `api/src/routes/members.ts`، ويُنشر الملف نفسه على النطاق الجديد. الدعوات المرسلة على النطاق القديم لا تفتح التطبيق، لكن لصق رابطها في «الانضمام بدعوة» يقرأ الرمز (`InviteCode`).
 
 ### ٧. سياسة الخصوصية وشروط الاستخدام
 
 الصفحتان `web/public/privacy/` و`web/public/terms/` كُتبتا من الكود، والمشغّل فيهما فهد العتيبي وبريد التواصل `fahad2ao@gmail.com`، وقاعدة البيانات في شرق أوروبا. البنود القانونية (نقل البيانات خارج المملكة، والسن، وسقف المسؤولية، والنظام الواجب التطبيق) بصياغة عامة؛ ويُستحسن أن يراجعها مختص.
 
 1. إن غيّرت موقع قاعدة البيانات أو أضفت مزوّداً، حدّث فقرتي «أين تُحفظ» و«النقل خارج المملكة» في `privacy/` ومعهما «آخر تحديث» بالهجري والميلادي.
-2. في App Store Connect: **App Privacy ← Privacy Policy URL** بالقيمة `https://zimam-web.fahad2ao.workers.dev/privacy/` (لاحقاً `https://zimam.app/privacy/`)، واملأ «تفاصيل الخصوصية» بما تذكره السياسة، والإجابات جاهزة في `docs/appstore/privacy-label.md`. وإن اعتمدت شروطاً خاصة بدل اتفاقية أبل القياسية فضع رابط `/terms/` في **License Agreement**.
+2. في App Store Connect: **App Privacy ← Privacy Policy URL** بالقيمة `https://zimam.work/privacy/`، واملأ «تفاصيل الخصوصية» بما تذكره السياسة، والإجابات جاهزة في `docs/appstore/privacy-label.md`. وإن اعتمدت شروطاً خاصة بدل اتفاقية أبل القياسية فضع رابط `/terms/` في **License Agreement**.
 3. أي تغيير فيما يجمعه الخادم أو يرسله (حقل جديد، مزوّد جديد) يُحدَّث معه نص السياسة في الطلب نفسه.
 
 ### ٨. اشتراكات «زمام الاحترافية»
@@ -260,7 +280,7 @@ curl -s https://app-site-association.cdn-apple.com/a/v1/zimam-web.fahad2ao.worke
 3. **Subscription Prices**: الأسعار تُحدَّد هنا وحدها (السعودية أساساً، ويحسب App Store بقية الدول). التطبيق يعرض السعر كما يعطيه App Store (`displayPrice`) بعملة حساب المستخدم وأرقامه، فلا سعر مكتوب في الكود. والأسعار في `Zimam.storekit` للتجربة المحلية فقط.
 4. **Family Sharing**: اتركه مطفأً؛ الخادم يربط الاشتراك بحساب زمام من اشتراه.
 5. **Review Information**: لقطة شاشة لصفحة «زمام الاحترافية» في التطبيق، وملاحظة للمراجع. يُرسل المنتجان للمراجعة مع أول إصدار يعرضهما.
-6. تشترط المراجعة رابطي الشروط والخصوصية للاشتراكات المتجددة: **App Privacy ← Privacy Policy URL** هو `https://zimam-web.fahad2ao.workers.dev/privacy`، والشروط `https://zimam-web.fahad2ao.workers.dev/terms` في وصف التطبيق أو في **App Information ← License Agreement**. وهما الرابطان في صفحة الاشتراك في التطبيق.
+6. تشترط المراجعة رابطي الشروط والخصوصية للاشتراكات المتجددة: **App Privacy ← Privacy Policy URL** هو `https://zimam.work/privacy`، والشروط `https://zimam.work/terms` في وصف التطبيق أو في **App Information ← License Agreement**. وهما الرابطان في صفحة الاشتراك في التطبيق.
 
 #### ٣. مفتاح In-App Purchase والأسرار الثلاثة
 
@@ -282,10 +302,10 @@ npx wrangler secret put APPSTORE_PRIVATE_KEY < SubscriptionKey_XXXXXXXXXX.p8
 **Apps ← زمام ← App Information ← App Store Server Notifications**: في **Production Server URL** و**Sandbox Server URL** كليهما:
 
 ```
-https://zimam.fahad2ao.workers.dev/v1/subscriptions/apple/notifications
+https://api.zimam.work/v1/subscriptions/apple/notifications
 ```
 
-واختر **Version 2**. الخادم لا يصدّق محتوى الإشعار، بل يسأل Apple عن المعاملة نفسها. وعند الانتقال إلى `api.zimam.app` غيّر الرابطين.
+واختر **Version 2**. الخادم لا يصدّق محتوى الإشعار، بل يسأل Apple عن المعاملة نفسها.
 
 **فترة السماح (اختياري، يُنصح به):** **Apps ← زمام ← Monetization ← Subscriptions ← Billing Grace Period**: فعّلها واختر مدتها، للمشتركين كلهم وللبيئتين. حين يفشل الدفع يبقى المشترك على «زمام الاحترافية» حتى نهايتها، ويقرؤها الخادم من Apple (عمود `grace_expires_at`، `api/migrations/0014_subscription_grace.sql`).
 
@@ -320,7 +340,7 @@ https://zimam.fahad2ao.workers.dev/v1/subscriptions/apple/notifications
 | النوع | الإعداد | المعرّف |
 | --- | --- | --- |
 | iOS | Bundle ID: `app.zimam.ios` (يخدم الآيفون والآيباد والماك) | `404741015373-r3p4od9ko0qd99hocpg3r7gv1arju4ge.apps.googleusercontent.com` |
-| Web application | Authorized JavaScript origins: `https://zimam-web.fahad2ao.workers.dev` و`https://zimam-mcp.fahad2ao.workers.dev`، وAuthorized redirect URIs كما في الجدول التالي | `404741015373-ukucah8482ofiuvd9lb4cn4pgqvnfm75.apps.googleusercontent.com` |
+| Web application | Authorized JavaScript origins: `https://zimam.work` و`https://mcp.zimam.work`، وAuthorized redirect URIs كما في الجدول التالي | `404741015373-ukucah8482ofiuvd9lb4cn4pgqvnfm75.apps.googleusercontent.com` |
 
 #### روابط العودة (Authorized redirect URIs) لعميل الويب
 
@@ -330,8 +350,8 @@ https://zimam.fahad2ao.workers.dev/v1/subscriptions/apple/notifications
 
 | الموضع | الرابط |
 | --- | --- |
-| الموقع (`web/public/app/google-callback.html`) | `https://zimam-web.fahad2ao.workers.dev/app/google-callback` |
-| صفحة ربط كلود وChatGPT (`mcp/src/consent.ts`، المسار `GET /google-callback`) | `https://zimam-mcp.fahad2ao.workers.dev/google-callback` |
+| الموقع (`web/public/app/google-callback.html`) | `https://zimam.work/app/google-callback` |
+| صفحة ربط كلود وChatGPT (`mcp/src/consent.ts`، المسار `GET /google-callback`) | `https://mcp.zimam.work/google-callback` |
 
 - الرابط بلا `.html` ولا شرطة في آخره، كما يبنيه الكود من أصل الصفحة.
 - قد يأخذ Google دقائق قليلة قبل أن يقبل الرابط الجديد.
@@ -349,7 +369,6 @@ https://zimam.fahad2ao.workers.dev/v1/subscriptions/apple/notifications
 
 - تفريغ أي قيمة يخفي زر قوقل في مكانها، وتفريغ `GOOGLE_CLIENT_IDS` يوقف `POST /v1/auth/google` (503).
 - جدول `identities` (`api/migrations/0008_identities.sql`) يطبّقه أمر النشر في Workers Builds تلقائياً، وينقل إليه كل حسابات أبل الحالية.
-- عند الانتقال إلى `zimam.app`: أضف `https://zimam.app` و`https://mcp.zimam.app` إلى Authorized JavaScript origins لعميل الويب، و`https://zimam.app/app/google-callback` و`https://mcp.zimam.app/google-callback` إلى Authorized redirect URIs.
 - بعد تعديل `project.yml` شغّل `xcodegen`. أول بناء ينزّل حزمة GoogleSignIn-iOS (الإصدار 9.2.0 فما فوق ضمن 9.x).
 
 ## الاستيراد بإذن OAuth
@@ -357,10 +376,10 @@ https://zimam.fahad2ao.workers.dev/v1/subscriptions/apple/notifications
 يستورد زمام من Google Calendar وMicrosoft To Do وNotion وTrello وAsana وTickTick بإذن يمنحه المستخدم في صفحة المزوّد نفسه، دون ملف ولا رمز يُنسخ. يجري الخادم التدفق كله (التفاصيل في `api/DEVELOPMENT.md`، «الاستيراد بإذن OAuth»)، فيحتاج كل مزوّد تطبيقاً تسجّله أنت مرة واحدة، ثم أسراره في كلاودفلير.
 
 - **ما دامت أسرار مصدر غير مضبوطة** يظهر في التطبيق والموقع رمادياً مكتوباً تحته «غير متاح الآن»، ولا يتعطل شيء آخر. فاضبط المصادر واحداً واحداً متى شئت.
-- **رابط العودة (Redirect URI)** لكل مصدر هو `https://zimam.fahad2ao.workers.dev/v1/imports/oauth/<source>/callback`، حرفياً، بلا شرطة في آخره. `<source>` معرّف المصدر في الجدول.
+- **رابط العودة (Redirect URI)** لكل مصدر هو `https://api.zimam.work/v1/imports/oauth/<source>/callback`، حرفياً، بلا شرطة في آخره. `<source>` معرّف المصدر في الجدول.
 - **الأسرار** بـ `npx wrangler secret put` من داخل `api/` فقط، ولا تُلصق في المحادثة ولا في المستودع. كل أمر يطلب القيمة ثم يطبّقها فوراً على الخادم المنشور، فلا حاجة إلى نشر جديد.
 - جدول `import_oauth_states` (`api/migrations/0013_import_oauth.sql`) يطبّقه أمر النشر في Workers Builds تلقائياً.
-- **عند الانتقال إلى `api.zimam.app`:** رابط العودة يُبنى من نطاق الطلب، فأضف لكل مزوّد الرابط نفسه بالنطاق الجديد (`https://api.zimam.app/v1/imports/oauth/<source>/callback`) قبل نقل التطبيق والموقع إليه.
+- **رابط العودة يُبنى من نطاق الطلب:** إن تغيّر نطاق الخادم فأضف لكل مزوّد الرابط نفسه بالنطاق الجديد قبل النشر.
 
 | المصدر | `<source>` | الأسرار |
 | --- | --- | --- |
@@ -378,7 +397,7 @@ https://zimam.fahad2ao.workers.dev/v1/subscriptions/apple/notifications
 1. فعّل Google Calendar API في مشروع `zimam`: [console.cloud.google.com/apis/library/calendar-json.googleapis.com](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com) ← **Enable**.
 2. **Google Auth Platform ← Data Access ← Add or remove scopes**: أضف `https://www.googleapis.com/auth/calendar.readonly` ثم **Save**. هذا نطاق حسّاس (sensitive): حتى تتحقق Google من التطبيق (**Verification Center**، وتطلب شرح الاستعمال ومقطع فيديو لصفحة الموافقة وسياسة الخصوصية) يرى المستخدم «Google hasn't verified this app» ويكمل من **Advanced**، ويقف التطبيق عند ١٠٠ مستخدم لهذا النطاق. يكفي ذلك للتجربة الشخصية؛ اطلب التحقق قبل الإطلاق.
 3. **Clients ← عميل الويب (`404741015373-ukucah…`) ← Authorized redirect URIs ← Add URI**:
-   `https://zimam.fahad2ao.workers.dev/v1/imports/oauth/google-calendar/callback` ثم **Save**.
+   `https://api.zimam.work/v1/imports/oauth/google-calendar/callback` ثم **Save**.
 4. في صفحة عميل الويب نفسها: **Client secrets ← Add secret** (أو انسخ السر الموجود)، ثم:
 
 ```sh
@@ -391,7 +410,7 @@ npx wrangler secret put GOOGLE_CLIENT_SECRET
 ### ٢. Microsoft To Do
 
 1. افتح [entra.microsoft.com](https://entra.microsoft.com) ← **Applications ← App registrations ← New registration** (أو من [portal.azure.com](https://portal.azure.com) بالمسار نفسه). يكفي حساب Microsoft شخصي.
-2. **Name:** `زمام`. **Supported account types:** «Accounts in any organizational directory and personal Microsoft accounts» (مهام To Do في الحسابات الشخصية غالباً). **Redirect URI:** المنصة **Web** والرابط `https://zimam.fahad2ao.workers.dev/v1/imports/oauth/microsoft-todo/callback`. ثم **Register**.
+2. **Name:** `زمام`. **Supported account types:** «Accounts in any organizational directory and personal Microsoft accounts» (مهام To Do في الحسابات الشخصية غالباً). **Redirect URI:** المنصة **Web** والرابط `https://api.zimam.work/v1/imports/oauth/microsoft-todo/callback`. ثم **Register**.
 3. **API permissions ← Add a permission ← Microsoft Graph ← Delegated permissions**: اختر `Tasks.Read` و`offline_access` (ويبقى `User.Read` الموجود). لا تحتاج «Grant admin consent»: يوافق كل مستخدم بنفسه.
 4. **Certificates & secrets ← Client secrets ← New client secret**، المدة ٢٤ شهراً، وانسخ **Value** فوراً (لا يظهر مرة أخرى). ضع تذكيراً بتجديده قبل انتهائه، وإلا توقف هذا المصدر وحده.
 5. انسخ **Application (client) ID** من **Overview**، ثم:
@@ -405,8 +424,8 @@ npx wrangler secret put MS_CLIENT_SECRET
 ### ٣. Notion
 
 1. افتح [notion.so/profile/integrations](https://www.notion.so/profile/integrations) ← **New integration**، واختر النوع **Public**.
-2. الاسم `زمام` والشعار، ومساحة العمل التي تملكها، وبيانات الشركة: الموقع `https://zimam-web.fahad2ao.workers.dev`، وسياسة الخصوصية `https://zimam-web.fahad2ao.workers.dev/privacy/`، والشروط `https://zimam-web.fahad2ao.workers.dev/terms/`، وبريد الدعم.
-3. **Redirect URIs:** `https://zimam.fahad2ao.workers.dev/v1/imports/oauth/notion/callback`.
+2. الاسم `زمام` والشعار، ومساحة العمل التي تملكها، وبيانات الشركة: الموقع `https://zimam.work`، وسياسة الخصوصية `https://zimam.work/privacy/`، والشروط `https://zimam.work/terms/`، وبريد الدعم.
+3. **Redirect URIs:** `https://api.zimam.work/v1/imports/oauth/notion/callback`.
 4. **Capabilities:** «Read content» وحدها (لا تحديث ولا إضافة)، و«No user information».
 5. احفظ، ثم انسخ **OAuth Client ID** و**OAuth Client Secret** من تبويب **Configuration**:
 
@@ -423,9 +442,9 @@ npx wrangler secret put NOTION_CLIENT_SECRET
 Trello لا يعطي رمزاً عبر OAuth 2: الطريق الذي اخترناه «تفويض الرمز» (`trello.com/1/authorize` بـ `response_type=token` و`callback_method=fragment`)، فيرجع Trello إلى صفحة صغيرة في الخادم ومعه الرمز في جزء الرابط بعد `#`، وتسلّمه الصفحة للخادم مرة واحدة. يحتاج مفتاح API فقط، لا سراً ولا توقيع OAuth 1.0a.
 
 1. افتح [trello.com/power-ups/admin](https://trello.com/power-ups/admin) ← **New** (يلزم أن تكون مسؤول مساحة عمل في Trello، ويكفي أن تنشئ مساحة لنفسك).
-2. الاسم `زمام`، ومساحة العمل، والبريد، و**Iframe connector URL** `https://zimam-web.fahad2ao.workers.dev` (لا يُستعمل، لكنه مطلوب). ثم **Create**.
+2. الاسم `زمام`، ومساحة العمل، والبريد، و**Iframe connector URL** `https://zimam.work` (لا يُستعمل، لكنه مطلوب). ثم **Create**.
 3. تبويب **API key ← Generate a new API key**.
-4. في الصفحة نفسها، **Allowed origins ← Add**: `https://zimam.fahad2ao.workers.dev` (نطاق رابط العودة؛ بدونه يرفض Trello الرجوع). لا تحتاج **Secret**.
+4. في الصفحة نفسها، **Allowed origins ← Add**: `https://api.zimam.work` (نطاق رابط العودة؛ بدونه يرفض Trello الرجوع). لا تحتاج **Secret**.
 
 ```sh
 cd api
@@ -437,7 +456,7 @@ npx wrangler secret put TRELLO_API_KEY
 ### ٥. Asana
 
 1. افتح [app.asana.com/0/my-apps](https://app.asana.com/0/my-apps) ← **Create new app**، الاسم `زمام`.
-2. **OAuth ← Redirect URLs ← Add redirect URL**: `https://zimam.fahad2ao.workers.dev/v1/imports/oauth/asana/callback`.
+2. **OAuth ← Redirect URLs ← Add redirect URL**: `https://api.zimam.work/v1/imports/oauth/asana/callback`.
 3. **OAuth ← Permission scopes:** زمام لا يرسل نطاقاً، فيُعطى الرمز ما يحدده التطبيق هنا. اختر **Full permissions** إن عُرض، وإلا فنطاقات القراءة: `workspaces:read` و`projects:read` و`tasks:read` (ومعها ما يطلبه Asana للأقسام والوسوم إن عرضها). يقرأ زمام فقط ولا يكتب شيئاً.
 4. **Manage distribution:** «Any workspace» ليستعمله غيرك.
 5. انسخ **Client ID** و**Client secret** من **OAuth**:
@@ -451,7 +470,7 @@ npx wrangler secret put ASANA_CLIENT_SECRET
 ### ٦. TickTick
 
 1. افتح [developer.ticktick.com/manage](https://developer.ticktick.com/manage) وادخل بحساب TickTick ← **+ App Name**، الاسم `زمام`.
-2. **OAuth redirect URL:** `https://zimam.fahad2ao.workers.dev/v1/imports/oauth/ticktick-api/callback` ثم **Save**.
+2. **OAuth redirect URL:** `https://api.zimam.work/v1/imports/oauth/ticktick-api/callback` ثم **Save**.
 3. انسخ **Client ID** و**Client Secret**:
 
 ```sh

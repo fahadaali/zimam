@@ -7,6 +7,6 @@ Cloudflare Worker يخدم التطبيق والموقع: الحسابات، و�
 - المساعد الذكي: عبر Cloudflare AI Gateway إلى كلود أو DeepSeek.
 - مرفقات المهام: R2 (المخزن `zimam-attachments`، ويُنشأ قبل النشر).
 - الأسرار عبر `wrangler secret put` فقط، ونسخة محلية في `.dev.vars` (مستثناة من المستودع).
-- النطاق المقترح: `api.zimam.app`.
+- النطاق: `api.zimam.work` (`docs/setup.md`، «النطاق»).
 
 التشغيل والاختبار والمسارات والمزامنة: [`DEVELOPMENT.md`](DEVELOPMENT.md).

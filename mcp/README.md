@@ -3,14 +3,14 @@
 Cloudflare Worker يفتح زمام لكلود وChatGPT بإذن المستخدم. الرابط الذي يُضاف في كلود أو ChatGPT:
 
 ```
-https://zimam-mcp.fahad2ao.workers.dev/mcp
+https://mcp.zimam.work/mcp
 ```
 
 ## كيف يعمل الربط
 
 1. يضيف المستخدم الرابط موصلاً مخصصاً، فيسجّل كلود أو ChatGPT نفسه تلقائياً (Dynamic Client Registration، أو Client ID Metadata Document).
 2. تفتح صفحة `/authorize` بالعربية: اسم التطبيق الطالب، والجهة التي سيُرسل إليها الإذن، والصلاحيات (الاطلاع، والإضافة والتعديل).
-3. يضغط «المتابعة بحساب أبل» فتفتح نافذة أبل، أو «المتابعة بحساب قوقل» فتفتح صفحة الدخول من Google في نافذة منبثقة (أو في الصفحة نفسها إن مُنعت النوافذ المنبثقة) وترجع إلى `GET /google-callback`، ويرجع رمز هوية يتحقق منه خادم زمام (`signInWithApple` أو `signInWithGoogle`). يُربط الرمز بهذه الصفحة وحدها: الـ nonce الذي يوقّعه المزوّدان هو تجزيء رمز الصفحة. خيار Google يظهر فقط إن ضُبط `GOOGLE_WEB_CLIENT_ID` في `wrangler.jsonc` (معرّف عميل الويب، ليس سراً)، ويجب أن يكون `https://zimam-mcp.fahad2ao.workers.dev/google-callback` ضمن **Authorized redirect URIs** لهذا العميل في Google Cloud (`docs/setup.md`). صفحة العودة تُحمّل سكربتها من `GET /google-callback.js` بسياسة محتوى لا تسمح بسكربت مضمَّن، وتسلّم الرمز لصفحة الموافقة عبر `BroadcastChannel`، أو ترسل نموذج الموافقة بنفسها بعد الدخول في الصفحة نفسها.
+3. يضغط «المتابعة بحساب أبل» فتفتح نافذة أبل، أو «المتابعة بحساب قوقل» فتفتح صفحة الدخول من Google في نافذة منبثقة (أو في الصفحة نفسها إن مُنعت النوافذ المنبثقة) وترجع إلى `GET /google-callback`، ويرجع رمز هوية يتحقق منه خادم زمام (`signInWithApple` أو `signInWithGoogle`). يُربط الرمز بهذه الصفحة وحدها: الـ nonce الذي يوقّعه المزوّدان هو تجزيء رمز الصفحة. خيار Google يظهر فقط إن ضُبط `GOOGLE_WEB_CLIENT_ID` في `wrangler.jsonc` (معرّف عميل الويب، ليس سراً)، ويجب أن يكون `https://mcp.zimam.work/google-callback` ضمن **Authorized redirect URIs** لهذا العميل في Google Cloud (`docs/setup.md`). صفحة العودة تُحمّل سكربتها من `GET /google-callback.js` بسياسة محتوى لا تسمح بسكربت مضمَّن، وتسلّم الرمز لصفحة الموافقة عبر `BroadcastChannel`، أو ترسل نموذج الموافقة بنفسها بعد الدخول في الصفحة نفسها.
 4. يُصدر `workers-oauth-provider` رمز وصول لهذا المستخدم، وتُحفظ الرموز في KV مجزّأة.
 
 الصفحة لا تُضمَّن في إطار، ولا يُقبل النموذج من متصفح آخر (ملف تعريف مربوط بالمتصفح).

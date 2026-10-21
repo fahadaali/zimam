@@ -90,8 +90,8 @@
 - تدير اشتراكك وتلغيه من إعدادات حسابك في App Store.
 - الأسعار تظهر في التطبيق قبل الشراء بعملة بلدك.
 
-سياسة الخصوصية: https://zimam-web.fahad2ao.workers.dev/privacy/
-شروط الاستخدام: https://zimam-web.fahad2ao.workers.dev/terms/
+سياسة الخصوصية: https://zimam.work/privacy/
+شروط الاستخدام: https://zimam.work/terms/
 ```
 
 الطول: ٢٧١٢ حرفاً.
@@ -130,13 +130,12 @@
 
 | الحقل | القيمة | أين |
 | --- | --- | --- |
-| Support URL (إلزامي) | `https://zimam-web.fahad2ao.workers.dev/` | Version Information |
-| Marketing URL (اختياري) | `https://zimam-web.fahad2ao.workers.dev/` | Version Information |
-| Privacy Policy URL (إلزامي) | `https://zimam-web.fahad2ao.workers.dev/privacy/` | App Privacy |
-| License Agreement (اختياري) | `https://zimam-web.fahad2ao.workers.dev/terms/` أو اتفاقية أبل القياسية | App Information |
+| Support URL (إلزامي) | `https://zimam.work/` | Version Information |
+| Marketing URL (اختياري) | `https://zimam.work/` | Version Information |
+| Privacy Policy URL (إلزامي) | `https://zimam.work/privacy/` | App Privacy |
+| License Agreement (اختياري) | `https://zimam.work/terms/` أو اتفاقية أبل القياسية | App Information |
 
 - **رابط الدعم** يجب أن يوصل إلى طريقة تواصل فعلية. الموقع اليوم بلا بريد ولا صفحة دعم، فقبل الإرسال أضف بريد التواصل إلى الموقع (أو صفحة `/support/`) واجعل رابط الدعم إليها. هو البريد نفسه الذي ينتظره ما بين المعقوفين في صفحتي الخصوصية والشروط.
-- **عند الانتقال إلى `zimam.app`:** غيّر الروابط الأربعة إلى `https://zimam.app/` و`https://zimam.app/privacy/` و`https://zimam.app/terms/`، والرابطين في نهاية الوصف، وأبقِ النطاق القديم يحوّل إلى الجديد، لأن الإصدارات المنشورة تحمل الروابط القديمة. ومعها الأماكن الأخرى في `docs/setup.md` («عند الانتقال إلى zimam.app»).
 
 ## التصنيف
 
