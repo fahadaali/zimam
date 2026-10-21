@@ -138,6 +138,10 @@ private struct ProjectOpenedKey: EnvironmentKey {
     static let defaultValue: ((UUID) -> Void)? = nil
 }
 
+private struct ProjectClosedKey: EnvironmentKey {
+    static let defaultValue: ((UUID) -> Void)? = nil
+}
+
 private struct OverviewOpenedKey: EnvironmentKey {
     static let defaultValue: ((OverviewRoute) -> Void)? = nil
 }
@@ -156,6 +160,13 @@ extension EnvironmentValues {
     var projectOpened: ((UUID) -> Void)? {
         get { self[ProjectOpenedKey.self] }
         set { self[ProjectOpenedKey.self] = newValue }
+    }
+
+    /// Told when a project is deleted or archived from its own screen: on the iPad and the Mac the
+    /// sidebar leaves it for the inbox, as its screen is a column that cannot be dismissed.
+    var projectClosed: ((UUID) -> Void)? {
+        get { self[ProjectClosedKey.self] }
+        set { self[ProjectClosedKey.self] = newValue }
     }
 
     /// Told when the timeline or the matrix opens on the iPhone, for the same reason.

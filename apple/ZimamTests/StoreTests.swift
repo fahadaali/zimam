@@ -199,4 +199,50 @@ struct StoreTests {
         #expect(!grandchild.isDirty)
         #expect(!other.pendingDelete)
     }
+
+    // MARK: «خيارات المشروع» (Store.swift)
+
+    @Test func deletingAProjectTakesItsTasksSectionsAndRemindersWithoutSendingThem() throws {
+        let project = store.addProject(name: "البيت")
+        let other = store.addProject(name: "العمل")
+        let section = try #require(store.addSection(named: "للشراء", to: project.id))
+        let task = store.addTask(title: "شراء الخبز", projectId: project.id)
+        let reminder = store.addTimeReminder(to: task.id, at: Date())
+        let elsewhere = store.addTask(title: "التقرير", projectId: other.id)
+        let inbox = store.addTask(title: "اتصال")
+
+        store.delete(project)
+
+        #expect(project.pendingDelete)
+        #expect(project.isDirty)
+        for item in [task.pendingDelete, section.pendingDelete, reminder.pendingDelete] { #expect(item) }
+        // The project's deletion deletes them on the server, for every member: they are not sent.
+        #expect(!task.isDirty)
+        #expect(!section.isDirty)
+        #expect(!reminder.isDirty)
+        #expect(!elsewhere.pendingDelete)
+        #expect(!inbox.pendingDelete)
+        #expect(!other.pendingDelete)
+    }
+
+    @Test func renamingAndArchivingAProject() {
+        let project = store.addProject(name: "البيت")
+        let version = project.updatedAt
+
+        store.rename(project, to: "  المنزل ")
+        #expect(project.name == "المنزل")
+        #expect(project.updatedAt > version)
+        // An empty name or the same name changes nothing.
+        let renamed = project.updatedAt
+        store.rename(project, to: "   ")
+        store.rename(project, to: "المنزل")
+        #expect(project.name == "المنزل")
+        #expect(project.updatedAt == renamed)
+
+        store.setArchived(project, true)
+        #expect(project.archivedAt != nil)
+        #expect(project.isDirty)
+        store.setArchived(project, false)
+        #expect(project.archivedAt == nil)
+    }
 }

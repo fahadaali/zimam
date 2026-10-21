@@ -257,6 +257,44 @@ struct Store {
         return project
     }
 
+    /// «إعادة التسمية»: owners and editors (the server checks the role).
+    func rename(_ project: ProjectItem, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != project.name else { return }
+        project.name = trimmed
+        touch(project)
+    }
+
+    /// «أرشفة المشروع» and «استرجاع المشروع»: the project leaves the lists; its tasks keep their days.
+    func setArchived(_ project: ProjectItem, _ archived: Bool) {
+        guard (project.archivedAt != nil) != archived else { return }
+        project.archivedAt = archived ? Milliseconds.now : nil
+        touch(project)
+    }
+
+    /// «حذف المشروع», the owner's: its tasks, sections and their reminders go with it. Only the
+    /// project's deletion is sent; the server deletes the rest for every member, so here they are
+    /// hidden at once and not sent on their own.
+    func delete(_ project: ProjectItem) {
+        let id = project.id
+        let tasks = ((try? context.fetch(FetchDescriptor<TaskItem>())) ?? []).filter { $0.projectId == id && !$0.pendingDelete }
+        let taskIds = Set(tasks.map(\.id))
+        for task in tasks {
+            task.pendingDelete = true
+            task.isDirty = false
+        }
+        for section in (try? context.fetch(FetchDescriptor<SectionItem>())) ?? [] where section.projectId == id && !section.pendingDelete {
+            section.pendingDelete = true
+            section.isDirty = false
+        }
+        for reminder in (try? context.fetch(FetchDescriptor<ReminderItem>())) ?? [] where taskIds.contains(reminder.taskId) && !reminder.pendingDelete {
+            reminder.pendingDelete = true
+            reminder.isDirty = false
+        }
+        project.pendingDelete = true
+        touch(project)
+    }
+
     // MARK: Saving
 
     func touch(_ item: some SyncedItem) {

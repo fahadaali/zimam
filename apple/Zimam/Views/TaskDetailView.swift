@@ -30,7 +30,8 @@ struct TaskDetailView: View {
                 task: task,
                 subtasks: tasks.filter { $0.parentId == taskId },
                 reminders: reminders.filter { $0.taskId == taskId },
-                projects: allProjects.filter { $0.kindRaw == "project" }
+                // Archived projects leave the picker, except the one the task is in.
+                projects: allProjects.filter { $0.kindRaw == "project" && ($0.archivedAt == nil || $0.id == task.projectId) }
             )
         } else {
             Text("لم تعد هذه المهمة موجودة.")

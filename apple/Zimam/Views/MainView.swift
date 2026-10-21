@@ -48,6 +48,12 @@ struct MainView: View {
             if regular { widen() } else { narrow() }
         }
         .focusedSceneValue(\.zimamActions, actions)
+        // A project deleted or archived while open (ProjectOptions.swift): its column closes.
+        .environment(\.projectClosed, { id in
+            guard sidebar.projectId == id else { return }
+            sidebar = .inbox
+            selectedTaskId = ""
+        })
         // A task opened from Siri, Shortcuts or Spotlight (OpenTaskIntent).
         .onChange(of: TaskOpener.shared.pending, initial: true) { _, id in
             guard let id else { return }

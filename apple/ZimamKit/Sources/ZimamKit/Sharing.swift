@@ -33,6 +33,46 @@ public enum ProjectRole: String, Codable, Sendable, CaseIterable {
     public var canEdit: Bool { self != .viewer }
 }
 
+/// «خيارات المشروع»: what the signed-in user may do to a project. Owners and editors rename
+/// and archive; the owner alone deletes. The server enforces the same (api/src/data/mutations.ts).
+public struct ProjectPermissions: Equatable, Sendable {
+    public let canRename: Bool
+    public let canArchive: Bool
+    public let canDelete: Bool
+
+    public init(role: ProjectRole?) {
+        canRename = role?.canEdit ?? false
+        canArchive = role?.canEdit ?? false
+        canDelete = role == .owner
+    }
+
+    /// Whether the menu has anything to show.
+    public var any: Bool { canRename || canArchive || canDelete }
+
+    /// The user's role in a project: the members' list when it has been loaded; before that, the
+    /// creator of a project (or one made on this device, with no owner yet) is its owner, and
+    /// anyone else's role is unknown, which allows nothing.
+    public static func role(ownerId: UUID?, me: UUID?, memberRole: ProjectRole?) -> ProjectRole? {
+        if let memberRole { return memberRole }
+        return ownerId == nil || (me != nil && ownerId == me) ? .owner : nil
+    }
+}
+
+/// The words of «خيارات المشروع», as the web app has them (web/public/app/lib/project-actions.js).
+public enum ProjectActionText {
+    public static func archiveLabel(archived: Bool) -> String {
+        archived ? "استرجاع المشروع" : "أرشفة المشروع"
+    }
+
+    public static func deleteQuestion(_ name: String) -> String {
+        "حذف «\(name)»؟"
+    }
+
+    public static let deleteNote = "تُحذف معه مهامه وأقسامه وتذكيراتها عند كل أعضائه، ولا يمكن استرجاعه."
+    public static let archiveNote = "يختفي من القوائم، وتبقى مهامه في مواعيدها. تجده في «المشاريع المؤرشفة»."
+    public static let archivedTitle = "المشاريع المؤرشفة"
+}
+
 /// `GET /v1/projects/:id/members`: the owner first, then by join date.
 public struct ProjectMember: Codable, Equatable, Sendable, Identifiable {
     public var userId: UUID

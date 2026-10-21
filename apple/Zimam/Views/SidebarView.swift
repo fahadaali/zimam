@@ -14,6 +14,7 @@ struct SidebarView: View {
     @Environment(SyncEngine.self) private var sync
     @Environment(\.dateFormatterZimam) private var formatter
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(SessionStore.self) private var session
 
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }, sort: \ProjectItem.sortOrder)
     private var allProjects: [ProjectItem]
@@ -27,6 +28,7 @@ struct SidebarView: View {
     @State private var newName = ""
     @State private var joining = false
     @State private var sharing: ShareTarget?
+    @State private var action: ProjectAction?
     /// The row a dragged task is over.
     @State private var dropTarget: SidebarItem?
 
@@ -36,7 +38,11 @@ struct SidebarView: View {
     }
 
     private var projects: [ProjectItem] {
-        allProjects.filter { $0.kindRaw == "project" }
+        allProjects.filter { $0.kindRaw == "project" && $0.archivedAt == nil }
+    }
+
+    private var archived: [ProjectItem] {
+        allProjects.filter { $0.kindRaw == "project" && $0.archivedAt != nil }
     }
 
     var body: some View {
@@ -86,8 +92,19 @@ struct SidebarView: View {
                     }
                 }
             }
+            ArchivedProjectsSection(projects: archived, action: $action)
         }
         .listStyle(.sidebar)
+        .projectActions($action)
+        // The open project deleted or archived, here or on another device: back to the inbox.
+        .onChange(of: projects.map(\.id)) { _, ids in
+            switch selection {
+            case .project(let id)?, .section(let id, _)?:
+                if !ids.contains(id) { selection = .inbox }
+            default:
+                break
+            }
+        }
         // The system glass column on iOS and macOS 26, the sunken surface before.
         .zimamSidebarBackground()
         .navigationTitle("زمام")
@@ -136,6 +153,10 @@ struct SidebarView: View {
             .modifier(taskDrop(.project(project.id), name: project.name, project: project.id, section: nil))
             .contextMenu {
                 Button("مشاركة", systemImage: "person.2") { sharing = ShareTarget(id: project.id) }
+                if projectPermissions(project, me: session.user?.id).any {
+                    Divider()
+                    ProjectOptionsItems(project: project, action: $action)
+                }
             }
     }
 
