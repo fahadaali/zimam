@@ -9,7 +9,8 @@
 
 | الملف | ما فيه |
 | --- | --- |
-| `public/index.html` | صفحة التعريف: الشعار، «خذ زمام يومك»، ما يميّز زمام، المنصات، وربط كلود وChatGPT |
+| `public/index.html`، `styles/site.css` | صفحة التعريف: «خذ زمام يومك» ومشهد الماك والجوال، ثم المزايا كلٌّ بجانب شاشته (أوقات الصلاة، الهجري والميلادي، المشاريع، تفاصيل المهمة، المساعد)، و«وأكثر من ذلك»، والأجهزة، وربط كلود وChatGPT. الشريط العلوي زجاجي، والأقسام تظهر بالتمرير (`animation-timeline: view()`) ولا تتحرك مع تقليل الحركة. `test/landing.test.mjs` يتحقق من الصور ونصوصها البديلة |
+| `public/images/screens/` | لقطات الصفحة: واجهة الويب نفسها ببيانات تجريبية، بمقاس الجوال والآيباد والماك، فاتحة وداكنة (WebP). تُعاد بـ `npm run screenshots` (`scripts/screenshots.mjs`، والبيانات في `scripts/demo-data.mjs`) كلما تغيّرت الواجهة؛ يحتاج Playwright وChromium، ولا يحتاجهما الموقع |
 | `public/privacy/`، `public/terms/` | سياسة الخصوصية وشروط الاستخدام (**مسودتان** للمراجعة، والمعقوفات `[ ]` يملؤها المالك)، بأنماط `styles/pages.css`. روابطهما في تذييل كل صفحة، وتحت بطاقة الدخول وفي آخر كل عرض في تطبيق الويب، وفي إعدادات التطبيق |
 | `public/join/` | صفحة الدعوة `/join/#<code>`: الرمز بعد `#` فلا يصل إلى الخادم، و`join.js` يقرؤه ويعرض «فتح في التطبيق» (`zimam://join/<code>`) و«فتح في الويب» (`/app/#/join/<code>`). الصيغة القديمة `/join/<code>` تصل إلى صفحة 404 فيحوّلها `join/redirect.js` |
 | `public/.well-known/apple-app-site-association` | الروابط العامة: روابط `/join` تفتح التطبيق `72V86SZ2XC.app.zimam.ios` إن كان مثبتاً، ونوعه `application/json` من `_headers` |
@@ -59,6 +60,7 @@
 ```sh
 npx -y npm@11 install   # wrangler فقط، للتطوير والنشر
 npm run build           # ينسخ ملفات التصميم إلى public/design/
+npm run screenshots     # يعيد لقطات صفحة التعريف من الواجهة نفسها (يحتاج Playwright، أو CHROMIUM_PATH)
 npm test                # node --test
 npx wrangler dev        # معاينة محلية على http://localhost:8787 (بعد npm run build)
 npx wrangler deploy --dry-run

@@ -1,5 +1,9 @@
 // Small enhancements for the landing page; it reads fully without them.
 import { dualDate, localIsoDate } from "/app/lib/dates.js";
+import { hydrateIcons } from "/app/lib/icons.js";
+
+// The small features' icons, from the app's own line icons.
+hydrateIcons(document);
 
 // Show today's date in both calendars in the Hijri example.
 const sample = document.getElementById("sample-date");
