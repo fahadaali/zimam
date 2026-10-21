@@ -1,7 +1,11 @@
 import { addNote, fitName, fitTask, type ImportBundle, ImportError, type ImportedProject, type ImportedTask, LIMITS, orderTasks, Warnings } from "../model";
-import { type FileSource, nativeKey, type ParseContext } from "../source";
+import { type FileSource, nativeKey, type ParseContext, type TokenSource } from "../source";
+import { MAX_PAGES, type Provider, providerGet } from "./provider-http";
 
-interface GoogleTask {
+export const TASKS_API = "https://tasks.googleapis.com/tasks/v1";
+
+/** A task as both Takeout's Tasks.json and the Tasks API write it. */
+export interface GoogleTask {
   id?: string;
   title?: string;
   notes?: string;
@@ -14,7 +18,7 @@ interface GoogleTask {
   links?: { type?: string; description?: string; link?: string }[];
 }
 
-interface GoogleTaskList {
+export interface GoogleTaskList {
   id?: string;
   title?: string;
   items?: GoogleTask[];
@@ -27,9 +31,6 @@ const NOT_GOOGLE_TASKS = new ImportError(
 
 /**
  * Tasks.json from Google Takeout: `{ items: [taskList] }`, each list with its tasks.
- * Each list becomes a project. Google keeps only a due date (the time part of `due`
- * is always midnight UTC and means nothing), so the date is read as written.
- * Completed tasks come in as done; deleted ones are skipped.
  */
 export function parseGoogleTasks(text: string, _ctx: ParseContext): ImportBundle {
   let data: unknown;
@@ -43,10 +44,20 @@ export function parseGoogleTasks(text: string, _ctx: ParseContext): ImportBundle
   if (!Array.isArray(lists) || !lists.every(isList)) {
     throw NOT_GOOGLE_TASKS;
   }
+  return mapGoogleTasks(lists as GoogleTaskList[]);
+}
+
+/**
+ * Task lists, from the file or the API, to a bundle. Each list becomes a project. Google keeps
+ * only a due date (the time part of `due` is always midnight UTC and means nothing), so the date
+ * is read as written. Completed tasks come in as done; deleted ones are skipped. Keys are Google's
+ * own ids, so the file and the account import update the same tasks.
+ */
+export function mapGoogleTasks(lists: GoogleTaskList[]): ImportBundle {
   const warnings = new Warnings();
   const projects: ImportedProject[] = [];
   const tasks: ImportedTask[] = [];
-  (lists as GoogleTaskList[]).forEach((list, listIndex) => {
+  lists.forEach((list, listIndex) => {
     if (!list.id) return;
     const projectKey = nativeKey("list", list.id);
     projects.push({
@@ -107,4 +118,45 @@ export const googleTasks: FileSource = {
   input: "file",
   extensions: [".json"],
   parse: parseGoogleTasks,
+};
+
+/** Every page of a Tasks API listing (`items`, `nextPageToken`). */
+async function listAll<T>(provider: Provider, url: URL): Promise<T[]> {
+  const out: T[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const body = await providerGet<{ items?: T[]; nextPageToken?: string }>(provider, url.toString());
+    out.push(...(body?.items ?? []));
+    if (!body?.nextPageToken) break;
+    url.searchParams.set("pageToken", body.nextPageToken);
+  }
+  return out;
+}
+
+/** The user's task lists and their tasks, completed ones included, read with `tasks.readonly`. */
+export async function readGoogleTasks(provider: Provider): Promise<GoogleTaskList[]> {
+  const listsUrl = new URL(`${TASKS_API}/users/@me/lists`);
+  listsUrl.searchParams.set("maxResults", "100");
+  const lists = await listAll<GoogleTaskList>(provider, listsUrl);
+  const out: GoogleTaskList[] = [];
+  for (const list of lists) {
+    if (!list.id) continue;
+    const url = new URL(`${TASKS_API}/lists/${encodeURIComponent(list.id)}/tasks`);
+    url.searchParams.set("maxResults", "100");
+    // Completed tasks cleared from the list are hidden; Takeout has them, so the import does too.
+    url.searchParams.set("showCompleted", "true");
+    url.searchParams.set("showHidden", "true");
+    out.push({ id: list.id, title: list.title, items: await listAll<GoogleTask>(provider, url) });
+  }
+  return out;
+}
+
+export const googleTasksApi: TokenSource = {
+  id: "google-tasks-api",
+  label: "Google Tasks",
+  refSource: "google-tasks",
+  input: "oauth",
+  async load(token, ctx) {
+    const lists = await readGoogleTasks({ label: "Google Tasks", fetch: ctx.fetch, headers: { Authorization: `Bearer ${token}` } });
+    return mapGoogleTasks(lists);
+  },
 };

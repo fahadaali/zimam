@@ -2,12 +2,12 @@ import type { Source, SourceId } from "../source";
 import { asana } from "./asana";
 import { genericCsv } from "./generic-csv";
 import { googleCalendar } from "./google-calendar";
-import { googleTasks } from "./google-tasks";
+import { googleTasks, googleTasksApi } from "./google-tasks";
 import { microsoftTodo } from "./microsoft-todo";
 import { notion } from "./notion";
 import { tickTickCsv } from "./ticktick";
 import { tickTickApi } from "./ticktick-api";
-import { todoistApi, todoistCsv } from "./todoist";
+import { todoistApi, todoistCsv, todoistOAuth } from "./todoist";
 import { trello } from "./trello";
 
 /**
@@ -16,9 +16,11 @@ import { trello } from "./trello";
  * Calendar are imported on the device (EventKit).
  */
 export const SOURCES: Record<SourceId, Source> = {
+  "todoist-oauth": todoistOAuth,
   "todoist-csv": todoistCsv,
   "todoist-api": todoistApi,
   "ticktick-csv": tickTickCsv,
+  "google-tasks-api": googleTasksApi,
   "google-tasks": googleTasks,
   csv: genericCsv,
   "google-calendar": googleCalendar,

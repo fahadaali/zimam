@@ -409,7 +409,7 @@ npx wrangler d1 migrations apply zimam --remote   # جدول realtime_tickets
 
 ### الاستيراد بإذن OAuth
 
-ستة مصادر يقرؤها الخادم من واجهة المزوّد بإذن يمنحه المستخدم في صفحة المزوّد: `google-calendar` و`microsoft-todo` و`notion` و`trello` و`asana` و`ticktick-api`. كلها `TokenSource` بـ `input: "oauth"`، والطابور والمستورد كما هما. تسجيل التطبيقات والأسرار في `docs/setup.md` («الاستيراد بإذن OAuth»).
+ثمانية مصادر يقرؤها الخادم من واجهة المزوّد بإذن يمنحه المستخدم في صفحة المزوّد: `todoist-oauth` و`google-tasks-api` و`google-calendar` و`microsoft-todo` و`notion` و`trello` و`asana` و`ticktick-api`. كلها `TokenSource` بـ `input: "oauth"`، والطابور والمستورد كما هما. تسجيل التطبيقات والأسرار في `docs/setup.md` («الاستيراد بإذن OAuth»).
 
 | المسار | ما يفعله |
 | --- | --- |
@@ -428,6 +428,8 @@ npx wrangler d1 migrations apply zimam --remote   # جدول realtime_tickets
 
 | المزوّد | الإذن | تبادل الرمز |
 | --- | --- | --- |
+| Todoist | `todoist.com/oauth/authorize`، `data:read`، بلا PKCE | `todoist.com/oauth/access_token`، السر في الجسم |
+| Google Tasks | `tasks.readonly`، `access_type=online`، PKCE | كـ Google Calendar: عميل الويب نفسه وسره |
 | Google Calendar | `calendar.readonly`، `access_type=online`، PKCE | `oauth2.googleapis.com/token`، السر في الجسم. عميل الويب `GOOGLE_WEB_CLIENT_ID` وسره `GOOGLE_CLIENT_SECRET` |
 | Microsoft To Do | `Tasks.Read offline_access` على `login.microsoftonline.com/common`، PKCE | السر في الجسم |
 | Notion | `owner=user`؛ يختار المستخدم ما يشاركه في صفحة Notion | JSON مع Basic auth |
@@ -448,6 +450,8 @@ npx wrangler d1 migrations apply zimam --remote   # جدول realtime_tickets
 
 | المصدر | ما يُنقل |
 | --- | --- |
+| `todoist-oauth` | ما ينقله `todoist-api` نفسه (المشاريع والأقسام والمهام المفتوحة)، بالقارئ نفسه و`refSource` واحد `todoist`، فالاستيراد بالرمز أو بالإذن أو بالملف يحدّث ولا يكرر. الفرق أن الرمز يأتي من تدفق OAuth بدل أن يُلصق |
+| `google-tasks-api` | ما ينقله ملف Takeout (`google-tasks`) نفسه، بالتحويل نفسه (`mapGoogleTasks`) و`refSource` واحد `google-tasks`: كل قائمة مشروع، والمهام بتواريخها والفرعية والمنجزة. تُقرأ القوائم ومهامها صفحةً صفحة من `tasks.googleapis.com/tasks/v1` بـ `showCompleted` و`showHidden`، فتأتي المنجزة التي أُخفيت من القائمة أيضاً |
 | `google-calendar` | من آخر ٣٠ يوماً إلى ٣٦٥ يوماً قادمة. التقويم الأساسي والتقاويم المعلَّمة (`selected`) في Google Calendar، كل منها مشروع بعرض التقويم؛ وتقاويم Google نفسها (العطل وأعياد الميلاد) لا تُنقل. الحدث مهمة موعدها بدايته بمنطقة المستخدم، وملاحظاتها الوصف (HTML نصاً) والمكان. الحدث طوال اليوم لأكثر من يوم: `startDate` أول يوم و`dueDate` آخره. السلسلة المتكررة مهمة واحدة بتكرارها إن عبّر عنها تكرار زمام (قاعدة RRULE واحدة بلا EXDATE ولا RDATE، ولا مرّة منقولة أو ملغاة، ومرّة قادمة، واليوم نفسه بمنطقة الحدث ومنطقة المستخدم)، وموعدها المرة القادمة، و`COUNT` ما بقي منها. وإلا فكل مرّة في المدة مهمة مستقلة. الملغى، و«مكان العمل»، والحدث بلا عنوان لا تُنقل. الأحداث لا تُعلَّم منجزة |
 | `microsoft-todo` | كل قائمة مشروع، و«المهام» (`defaultList`) صندوق الوارد، والرسائل المعلَّمة لا تُنقل. الأهمية العالية أولوية عالية والمنخفضة منخفضة. الموعد والبداية أيام (To Do بلا وقت)، والتذكير المفعّل تذكير وقت على المهمة المفتوحة غير المتكررة، والخطوات مهام فرعية، والتصنيفات وسوم، والمنجزة بوقتها. التكرار اليومي والأسبوعي والشهري والسنوي بالتاريخ نفسه يُنقل، و«أول اثنين في الشهر» يُحفظ نصاً في الملاحظات |
 | `notion` | كل قاعدة بيانات مشاركة مشروع، وصفحاتها مهام بقواعد الخصائص أدناه. الصفحات في سلة المحذوفات تُترك، والخصائص التي لم تُنقل تُسمّى في تحذير |

@@ -132,9 +132,11 @@ describe("Imports API", () => {
     expect(res.status).toBe(200);
     expect(res.body.maxFileBytes).toBe(MAX_UPLOAD_BYTES);
     expect(res.body.sources.map((s: { id: string; input: string }) => [s.id, s.input])).toEqual([
+      ["todoist-oauth", "oauth"],
       ["todoist-csv", "file"],
       ["todoist-api", "token"],
       ["ticktick-csv", "file"],
+      ["google-tasks-api", "oauth"],
       ["google-tasks", "file"],
       ["csv", "file"],
       ["google-calendar", "oauth"],

@@ -136,6 +136,31 @@ export const PROVIDERS: Record<OAuthSourceId, OAuthProvider> = {
     tokenParams: { scope: "tasks:read" },
     credentials: (env) => ({ clientId: env.TICKTICK_CLIENT_ID, clientSecret: env.TICKTICK_CLIENT_SECRET }),
   },
+  "todoist-oauth": {
+    flow: "code",
+    authorizeUrl: "https://todoist.com/oauth/authorize",
+    tokenUrl: "https://todoist.com/oauth/access_token",
+    scope: "data:read",
+    pkce: false,
+    clientAuth: "body",
+    body: "form",
+    credentials: (env) => ({ clientId: env.TODOIST_CLIENT_ID, clientSecret: env.TODOIST_CLIENT_SECRET }),
+  },
+  "google-tasks-api": {
+    flow: "code",
+    authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+    tokenUrl: "https://oauth2.googleapis.com/token",
+    scope: "https://www.googleapis.com/auth/tasks.readonly",
+    pkce: true,
+    clientAuth: "body",
+    body: "form",
+    // The same web client and secret as Google Calendar; no refresh token: the import reads once.
+    params: { access_type: "online", include_granted_scopes: "false", prompt: "consent" },
+    credentials: (env) => ({
+      clientId: env.GOOGLE_WEB_CLIENT_ID?.trim() || undefined,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
+    }),
+  },
 };
 
 export const isOAuthSource = (id: string): id is OAuthSourceId => Object.hasOwn(PROVIDERS, id);

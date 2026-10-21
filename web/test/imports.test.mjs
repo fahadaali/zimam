@@ -155,6 +155,8 @@ test("OAuth sources: availability, the start request, and the way back", () => {
   assert.equal(firstAvailable([notion]), null);
   assert.equal(connectLabel(trello), "الربط بـ Trello");
   assert.equal(sourceTitle({ id: "ticktick-api", label: "TickTick" }), "TickTick: الربط بالحساب");
+  assert.equal(sourceTitle({ id: "todoist-oauth", label: "Todoist" }), "Todoist: الربط بالحساب");
+  assert.equal(sourceTitle({ id: "google-tasks-api", label: "Google Tasks" }), "Google Tasks: الربط بالحساب");
   assert.equal(
     oauthStartPath("google-calendar", "https://zimam.work"),
     "/v1/imports/oauth/google-calendar/start?return=https%3A%2F%2Fzimam.work",
@@ -184,6 +186,8 @@ test("OAuth return: asks which account receives the data before confirming", () 
   assert.equal(accountLabel(null), null);
   assert.equal(confirmQuestion("notion", account), "استيراد بيانات Notion إلى حسابك فهد، fahad@example.com؟");
   assert.equal(confirmQuestion("ticktick-api", "a@b.c"), "استيراد بيانات TickTick إلى حسابك a@b.c؟");
+  assert.equal(confirmQuestion("todoist-oauth", "a@b.c"), "استيراد بيانات Todoist إلى حسابك a@b.c؟");
+  assert.equal(confirmQuestion("google-tasks-api", "a@b.c"), "استيراد بيانات Google Tasks إلى حسابك a@b.c؟");
   assert.equal(confirmQuestion(null, null), "استيراد البيانات إلى حسابك؟");
   assert.match(CONFIRM_NOTE, /«إلغاء»/);
 

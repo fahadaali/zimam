@@ -71,6 +71,8 @@
 | --- | --- | --- | --- |
 | تذكيرات أبل وتقويم أبل | EventKit على الجهاز مباشرة | استيراد | مزامنة ثنائية |
 | Google Calendar | Google Calendar API عبر OAuth | استيراد الأحداث وعرضها | مزامنة ثنائية |
+| Google Tasks | Google Tasks API عبر OAuth، أو ملف Takeout | استيراد القوائم والمهام | مزامنة ثنائية |
+| Todoist | Todoist API عبر OAuth، أو رمز أو ملف | استيراد المشاريع والمهام | مزامنة ثنائية |
 | TickTick | TickTick Open API | استيراد المهام والقوائم | مزامنة ثنائية |
 | Microsoft To Do | Microsoft Graph API | استيراد المهام والقوائم | مزامنة ثنائية |
 | Notion | Notion API | استيراد قاعدة بيانات مهام | مزامنة ثنائية |

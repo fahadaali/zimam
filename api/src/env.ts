@@ -91,6 +91,9 @@ declare global {
       /** Secrets: the TickTick Open API app. */
       TICKTICK_CLIENT_ID?: string;
       TICKTICK_CLIENT_SECRET?: string;
+      /** Secrets: the Todoist app (the import that connects to the account; a pasted token needs none). */
+      TODOIST_CLIENT_ID?: string;
+      TODOIST_CLIENT_SECRET?: string;
     }
   }
 }
