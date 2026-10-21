@@ -37,7 +37,7 @@ import { nextOccurrence } from "./lib/recurrence.js";
 import { newReminder } from "./lib/reminders.js";
 import { canEdit } from "./lib/sharing.js";
 import { openShare } from "./share-view.js";
-import { hasProjectActions, showProjectMenu, toggleArchive } from "./project-menu.js";
+import { confirmDelete as confirmProjectDelete, hasProjectActions, openRename, showProjectMenu, toggleArchive } from "./project-menu.js";
 import { projectPermissions, splitArchived } from "./lib/project-actions.js";
 // Start dates, the timeline (Gantt) and the priority matrix.
 import { addStartField } from "./duration-view.js";
@@ -46,7 +46,7 @@ import { projectTimeline, viewTimeline } from "./timeline-view.js";
 // The frame and the open task.
 import { createShell } from "./shell.js";
 import { createTaskPane } from "./task-pane.js";
-import { swipeToDelete } from "./swipe.js";
+import { swipeActions, swipeToDelete } from "./swipe.js";
 import { createPrayers } from "./prayer-view.js";
 import { openSettings } from "./settings-view.js";
 import { showTaskMenu } from "./move-sheet.js";
@@ -996,12 +996,32 @@ async function viewProjects() {
   else {
     const grid = h("ul", { className: "project-grid", role: "list" });
     for (const p of projects) {
-      grid.append(h("li", null, ProjectCard({ name: p.name, done: p.doneCount ?? 0, total: p.taskCount ?? 0, href: `#/projects/${encodeURIComponent(p.id)}` })));
+      const li = h("li", null, ProjectCard({ name: p.name, done: p.doneCount ?? 0, total: p.taskCount ?? 0, href: `#/projects/${encodeURIComponent(p.id)}` }));
+      projectSwipe(li, p);
+      grid.append(li);
     }
     out.push(grid);
   }
   if (archived.length) out.push(archivedProjects(archived));
   return out;
+}
+
+/**
+ * On phones, a project card swipes as in the app (ProjectsView.swift): toward the inline end for
+ * «إعادة التسمية», toward the inline start for «أرشفة» and «حذف», each as the role allows.
+ */
+function projectSwipe(li, project) {
+  const can = projectPermissions(project);
+  const ctx = projectMenuContext();
+  swipeActions(li, {
+    row: ".zm-project",
+    isCompact: () => frame.layout() === "compact",
+    start: can.canRename ? [{ label: "تسمية", ariaLabel: `إعادة تسمية «${project.name}»`, onClick: () => openRename(project, ctx) }] : [],
+    end: [
+      ...(can.canArchive ? [{ label: "أرشفة", ariaLabel: `أرشفة «${project.name}»`, tone: "neutral", onClick: () => toggleArchive(project, ctx) }] : []),
+      ...(can.canDelete ? [{ label: "حذف", ariaLabel: `حذف «${project.name}»`, tone: "danger", onClick: () => confirmProjectDelete(project, ctx) }] : []),
+    ],
+  });
 }
 
 /** «المشاريع المؤرشفة»: folded under the grid, each with «استرجاع» and its menu. */

@@ -404,43 +404,64 @@
   }
 }
 
-/* ——— Swipe to delete (swipe.js) ——— */
+/* ——— Swipe actions (swipe.js) ——— */
 
 /* The row slides within its own box, so the page never scrolls sideways under it. */
-.task-item.is-swipeable {
+.is-swipeable {
   position: relative;
   overflow-x: clip;
   touch-action: pan-y;
 }
 
-.swipe-delete {
+.swipe-tray {
   position: absolute;
   inset-block: 0;
+  display: flex;
+}
+
+.swipe-tray-end {
   inset-inline-end: 0;
+}
+
+.swipe-tray-start {
+  inset-inline-start: 0;
+}
+
+.swipe-action {
   inline-size: calc(var(--space-11) * 2);
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--priority-high);
+  background: var(--brand);
   color: var(--on-brand);
   font-weight: 600;
   cursor: pointer;
 }
 
-.task-item.is-swipeable > .zm-task {
+.swipe-action.swipe-danger {
+  background: var(--priority-high);
+  color: var(--on-brand);
+}
+
+.swipe-action.swipe-neutral {
+  background: var(--ink-muted);
+  color: var(--surface);
+}
+
+.is-swipeable > .swipe-row {
   position: relative;
   z-index: 1;
-  /* Toward the inline start: the right in Arabic, uncovering «حذف» at the left. */
+  /* Positive: toward the inline start (the right in Arabic), uncovering the end's actions. */
   translate: calc(var(--swipe, 0px) * var(--end-sign) * -1) 0;
   transition: translate var(--duration-complete) var(--ease-settle), background-color var(--duration-complete) ease;
 }
 
 /* While the finger holds it, the row follows with no delay. */
-.task-item.is-dragging-swipe > .zm-task {
+.is-dragging-swipe > .swipe-row {
   transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .task-item.is-swipeable > .zm-task {
+  .is-swipeable > .swipe-row {
     transition: none;
   }
 }
