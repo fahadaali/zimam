@@ -8,7 +8,7 @@
 import { Button, h } from "./lib/components.js";
 import { dualDate } from "./lib/dates.js";
 import { boardApi } from "./lib/feature-api.js";
-import { QUADRANTS, VISIBLE_ROWS, hiddenCount, moveToQuadrant, quadrant, quadrants, todayIn } from "./lib/matrix.js";
+import { QUADRANTS, VISIBLE_ROWS, hiddenCount, moveToQuadrant, quadrant, quadrants } from "./lib/matrix.js";
 import { arabicNumber } from "./lib/numbers.js";
 import { taskCount } from "./lib/tasks.js";
 
@@ -17,9 +17,10 @@ const expanded = new Set();
 
 let dragged = null;
 
-/** `ctx`: { me, primary, taskItem, canEditTask, announce, showError, markLocalChange, render }. */
+/** `ctx`: { today, primary, taskItem, canEditTask, announce, showError, markLocalChange, render }. */
 export async function viewMatrix(ctx) {
-  const today = todayIn(ctx.me?.settings?.timeZone);
+  // The device's day, as everywhere else in the web app (main.js state.today).
+  const today = ctx.today;
   const { tasks } = await boardApi.tasks({ status: "open" });
   const top = tasks.filter((t) => !t.parentId);
   const root = h("div", { className: "matrix" });

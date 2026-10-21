@@ -43,6 +43,9 @@ export const ICON_PATHS = {
   trash: [p("M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2")], // trash
   repeat: [p("m17 2 4 4-4 4"), p("M3 11v-1a4 4 0 0 1 4-4h14"), p("m7 22-4-4 4-4"), p("M21 13v1a4 4 0 0 1-4 4H3")], // repeat
   ellipsis: [circle(12, 12, 1), circle(19, 12, 1), circle(5, 12, 1)], // ellipsis
+  camera: [p("M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"), circle(12, 13, 3)], // camera
+  mic: [rect(9, 2, 6, 13, 3), p("M19 10v2a7 7 0 0 1-14 0v-2"), p("M12 19v3")], // mic
+  "stop-circle": [circle(12, 12, 10), rect(9, 9, 6, 6, 1)], // stop.circle
 };
 
 /** Icons that follow the reading direction, flipped in Arabic by .zm-ico-mirror (shell.css). */

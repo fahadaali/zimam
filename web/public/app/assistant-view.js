@@ -1,11 +1,12 @@
-// The assistant on the web, as in the Apple app (AssistantViews.swift): «اقتراح بالمساعد» in the
-// add-task form, «تقسيم إلى خطوات» in a task's details, and «ملخص اليوم» on Today. Nothing is saved
-// before the person accepts: the suggestion card (design/components/AISuggestion) offers
-// «إضافة», «تعديل» (fills the form) and «تجاهل».
+// The assistant on the web, as in the Apple app (AssistantViews.swift): «اقتراح بالمساعد» and
+// «إملاء» (the title from speech, then the same suggestion) in the add-task form, «تقسيم إلى
+// خطوات» in a task's details, and «ملخص اليوم» on Today. Nothing is saved before the person accepts:
+// the suggestion card (design/components/AISuggestion) offers «إضافة», «تعديل» (fills the form) and «تجاهل».
 // Plain DOM through h() and textContent; nothing here parses HTML.
 import { Button, h, icons } from "./lib/components.js";
 import { icon } from "./lib/icons.js";
 import { assistantErrorText, breakdownText, isoWithOffset, suggestionLines, suggestionToTask } from "./lib/assistant.js";
+import { dictatedTitle, dictationErrorText, dictationPrefix, transcriptOf } from "./lib/dictation.js";
 import { assistantApi, boardApi } from "./lib/feature-api.js";
 import { after, byManualOrder } from "./lib/order.js";
 import { canEdit } from "./lib/sharing.js";
@@ -42,6 +43,7 @@ const add = {
   button: null,
   hint: null,
   run: 0,
+  getCtx: null,
 };
 
 /**
@@ -57,15 +59,108 @@ export function setupAddAssistant(getCtx) {
   add.button = Button({ variant: "secondary", className: "assist-button", "aria-describedby": "assist-hint" }, "اقتراح بالمساعد");
   add.hint = h("p", { className: "caption muted", id: "assist-hint" }, "اكتب المهمة بجملة، مثل «ذكرني أراجع العقد بعد المغرب يوم الخميس»، ثم اطلب الاقتراح.");
   add.box = h("div", { className: "assist-box", "aria-live": "polite" });
-  field.after(h("div", { className: "field assist" }, h("div", { className: "assist-row" }, add.button), add.hint, add.box));
+  add.getCtx = getCtx;
+  setupDictation();
+  field.after(h("div", { className: "field assist" }, h("div", { className: "assist-row" }, add.button, dictation.button), dictation.status, add.hint, add.box));
   add.button.addEventListener("click", () => suggest(getCtx()));
+  // Closing the sheet (إلغاء, Esc, or adding) stops listening without asking the assistant.
+  document.getElementById("add-dialog")?.addEventListener("close", stopDictation);
 }
 
 /** Clears the card and anything kept from it, when the dialog opens again. */
 export function resetAddAssistant() {
+  stopDictation();
   add.run++;
   add.box?.replaceChildren();
   if (add.button) add.button.disabled = false;
+}
+
+/** «اقتراح بالمساعد» for what is in the title now, as after dictation. */
+export function suggestFromTitle() {
+  if (add.ready && add.getCtx) return suggest(add.getCtx());
+}
+
+// ——— «إملاء»: the title from speech (AddTaskView.swift) ———
+
+const dictation = {
+  button: null,
+  status: null,
+  /** The SpeechRecognition listening now; null when idle or after a cancel. */
+  recognition: null,
+};
+
+const speechRecognition = () => (typeof window === "undefined" ? null : (window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null));
+
+function setupDictation() {
+  dictation.button = Button({ variant: "quiet", className: "dictate-button", hidden: !speechRecognition() });
+  dictation.status = h("p", { className: "callout muted dictate-status", "aria-live": "polite" });
+  dictation.button.addEventListener("click", toggleDictation);
+  showListening(false);
+}
+
+function showListening(listening) {
+  dictation.button.replaceChildren(icon(listening ? "stop-circle" : "mic", { size: "sm" }), listening ? "إيقاف الإملاء" : "إملاء");
+  dictation.status.textContent = listening ? "أستمع… قل المهمة كما تقولها لشخص." : "";
+}
+
+/** Stops listening and keeps the words heard so far, without asking the assistant. */
+function stopDictation() {
+  const recognition = dictation.recognition;
+  if (!recognition) return;
+  dictation.recognition = null;
+  recognition.abort();
+  showListening(false);
+}
+
+function toggleDictation() {
+  // «إيقاف الإملاء»: stop, and the end below asks the assistant.
+  if (dictation.recognition) {
+    dictation.recognition.stop();
+    return;
+  }
+  const Recognition = speechRecognition();
+  if (!Recognition) return;
+  const titleInput = document.getElementById("add-title-input");
+  const prefix = dictationPrefix(titleInput.value);
+  const recognition = new Recognition();
+  recognition.lang = "ar-SA";
+  recognition.interimResults = true;
+  recognition.continuous = false;
+  let failed = false;
+  // A new sentence replaces the last suggestion, as the app sets the assistant back to idle.
+  add.run++;
+  add.box.replaceChildren();
+  add.button.disabled = false;
+
+  recognition.addEventListener("result", (event) => {
+    if (dictation.recognition !== recognition) return;
+    titleInput.value = dictatedTitle(prefix, transcriptOf(event.results));
+    titleInput.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  recognition.addEventListener("error", (event) => {
+    const text = dictationErrorText(event.error);
+    if (!text || dictation.recognition !== recognition) return;
+    failed = true;
+    add.box.replaceChildren(h("p", { className: "callout assist-error", role: "alert" }, text));
+  });
+  recognition.addEventListener("end", () => {
+    if (dictation.recognition !== recognition) return; // cancelled: the sheet closed
+    dictation.recognition = null;
+    showListening(false);
+    dictation.button.focus();
+    // The dictated sentence goes to the assistant when it can be reached; otherwise it stays in
+    // the title, ready to add as it is.
+    if (!failed && titleInput.value.trim() && online()) suggestFromTitle();
+  });
+
+  try {
+    recognition.start();
+  } catch {
+    add.box.replaceChildren(h("p", { className: "callout assist-error", role: "alert" }, dictationErrorText("start")));
+    return;
+  }
+  dictation.recognition = recognition;
+  showListening(true);
 }
 
 
