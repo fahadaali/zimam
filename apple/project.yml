@@ -27,8 +27,8 @@ settings:
     # so it survives regenerating the project.
     DEVELOPMENT_TEAM: 72V86SZ2XC
     CODE_SIGN_STYLE: Automatic
-    # The API worker. Becomes https://api.zimam.app once the domain is attached.
-    ZIMAM_API_URL: "https://zimam.fahad2ao.workers.dev"
+    # The API worker (api/wrangler.jsonc).
+    ZIMAM_API_URL: "https://api.zimam.work"
     # Sign in with Google: the iOS OAuth client (it serves the Mac too) and its reversed form,
     # the URL scheme Google returns to. Public values, not secrets. Empty hides the Google button.
     # The API accepts this client in GOOGLE_CLIENT_IDS (api/wrangler.jsonc).
@@ -194,8 +194,8 @@ targets:
         keychain-access-groups: [$(AppIdentifierPrefix)app.zimam.ios]
         # Invite links (https://<site>/join/#<code>) open the app: web/public/.well-known/
         # apple-app-site-association lists 72V86SZ2XC.app.zimam.ios for /join/*. Needs Associated
-        # Domains on the App ID (docs/setup.md). Becomes applinks:zimam.app with the domain.
-        com.apple.developer.associated-domains: ["applinks:zimam-web.fahad2ao.workers.dev"]
+        # Domains on the App ID (docs/setup.md, «الروابط العامة»): the site, where invite links open.
+        com.apple.developer.associated-domains: ["applinks:zimam.work"]
 
   # The app's unit tests (Swift Testing), hosted in the app on iPhone, iPad and Mac: Store edits on
   # an in-memory SwiftData container, Lingering, and ProjectMembers and SyncEngine over a stubbed URLSession.

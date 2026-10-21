@@ -15,7 +15,7 @@ import {
   parseGoogleFragment,
 } from "../public/app/lib/google.js";
 
-const ORIGIN = "https://zimam-web.fahad2ao.workers.dev";
+const ORIGIN = "https://zimam.work";
 const RANDOM = "abcdefghijklmnopqrstuv"; // randomNonce(16): 22 URL-safe characters
 
 test("the Google button shows only with a client ID", () => {

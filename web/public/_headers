@@ -19,8 +19,8 @@
   Content-Type: application/json
   Cache-Control: public, max-age=3600
 
-# The app: Apple's sign-in script and popup, and the API (workers.dev now, api.zimam.app later),
-# over HTTPS and over the realtime WebSocket (wss).
+# The app: Apple's sign-in script and popup, and the API (api.zimam.work), over HTTPS and over the
+# realtime WebSocket (wss).
 # Location only for «استعمال موقعي الحالي» in «أوقات الصلاة» (prayer-view.js), asked when pressed.
 # The microphone only for «إملاء» in the add sheet (main.js), asked when pressed. blob: images are
 # the account photo, read with the session and shown from an object URL (avatar.js).
@@ -32,7 +32,7 @@
   ! Permissions-Policy
   Cross-Origin-Opener-Policy: same-origin-allow-popups
   Permissions-Policy: camera=(), microphone=(self), geolocation=(self), payment=(), usb=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://appleid.cdn-apple.com; style-src 'self'; img-src 'self' blob:; font-src 'self'; connect-src 'self' https://zimam.fahad2ao.workers.dev wss://zimam.fahad2ao.workers.dev https://api.zimam.app wss://api.zimam.app https://appleid.apple.com; frame-src https://appleid.apple.com; object-src 'none'; base-uri 'none'; form-action 'self' https://appleid.apple.com; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://appleid.cdn-apple.com; style-src 'self'; img-src 'self' blob:; font-src 'self'; connect-src 'self' https://api.zimam.work wss://api.zimam.work https://appleid.apple.com; frame-src https://appleid.apple.com; object-src 'none'; base-uri 'none'; form-action 'self' https://appleid.apple.com; frame-ancestors 'none'
   Content-Security-Policy-Report-Only: require-trusted-types-for 'script'
   Cache-Control: no-cache
 

@@ -20,8 +20,8 @@ test("reconnects back off from a second to a minute, with jitter", () => {
 
 test("the socket URL is the API's, over wss, with the ticket", () => {
   assert.equal(
-    realtimeUrl("https://api.zimam.app", "zt_a+b/c"),
-    "wss://api.zimam.app/v1/realtime?ticket=zt_a%2Bb%2Fc",
+    realtimeUrl("https://api.zimam.work", "zt_a+b/c"),
+    "wss://api.zimam.work/v1/realtime?ticket=zt_a%2Bb%2Fc",
   );
   assert.equal(realtimeUrl("http://localhost:8787", "zt_x"), "ws://localhost:8787/v1/realtime?ticket=zt_x");
 });

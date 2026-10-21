@@ -93,7 +93,7 @@ const reminders = {
 const me = {
   id: "u-demo",
   name: "سارة",
-  email: "demo@zimam.app",
+  email: "demo@zimam.work",
   avatarVersion: null,
   settings: {
     calendar: "hijri",

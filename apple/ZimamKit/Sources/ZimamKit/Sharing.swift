@@ -105,7 +105,7 @@ public struct TaskComment: Codable, Equatable, Sendable, Identifiable {
 /// Invite codes and links. The link is `https://<site>/join/#<code>`: the code rides in the
 /// fragment, so it never reaches a server log or a `Referer` header, and the static join page
 /// (web/public/join/) reads it in the browser. Older forms are still read: the path form
-/// `/join/<code>` the API returned before (zimam.app), `?code=`, and `zimam://join/<code>`.
+/// `/join/<code>` the API returned before, `?code=`, and `zimam://join/<code>`.
 /// web/public/app/lib/invites.js reads them by the same rules.
 public enum InviteCode {
     /// The link shared for a new invite.

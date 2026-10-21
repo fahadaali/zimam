@@ -51,8 +51,8 @@ Only people the project owner invites can see a shared project. The owner can re
 
 The AI assistant runs on Zimam's server (Anthropic or DeepSeek models through Cloudflare AI Gateway); no API key is in the app.
 
-Privacy policy: https://zimam-web.fahad2ao.workers.dev/privacy/
-Terms: https://zimam-web.fahad2ao.workers.dev/terms/
+Privacy policy: https://zimam.work/privacy/
+Terms: https://zimam.work/terms/
 ```
 
 الطول: ٣٤٦٥ حرفاً مع السطر الذي بين المعقوفين.

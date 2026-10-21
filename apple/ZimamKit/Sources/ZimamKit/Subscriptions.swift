@@ -38,8 +38,8 @@ public enum ZimamPro {
     /// Shown under the products, as App Review expects for auto-renewing subscriptions.
     public static let renewalTerms = "يتجدد الاشتراك تلقائياً ويُخصم من حساب Apple ما لم تلغه قبل نهاية الفترة بأربع وعشرين ساعة على الأقل. تديره وتلغيه من إعدادات حسابك في App Store."
 
-    public static let termsURL = URL(string: "https://zimam-web.fahad2ao.workers.dev/terms")!
-    public static let privacyURL = URL(string: "https://zimam-web.fahad2ao.workers.dev/privacy")!
+    public static let termsURL = URL(string: "https://zimam.work/terms")!
+    public static let privacyURL = URL(string: "https://zimam.work/privacy")!
     /// Where subscriptions are managed when the system sheet is not available (the Mac).
     public static let manageURL = URL(string: "https://apps.apple.com/account/subscriptions")!
 

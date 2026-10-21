@@ -133,7 +133,7 @@ for (const scheme of ["light", "dark"]) {
     const context = await browser.newContext({ ...options, colorScheme: scheme, locale: "ar-SA", timezoneId: "Asia/Riyadh", reducedMotion: "reduce" });
     await context.addInitScript(prepare, NOW);
     // The API, played by the demo data; Apple's sign-in script is not needed.
-    await context.route(/workers\.dev|api\.zimam\.app/, (route) => {
+    await context.route(/api\.zimam\.work/, (route) => {
       const { status, body } = answer(route.request().method(), route.request().url());
       route.fulfill({ status, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) });
     });
