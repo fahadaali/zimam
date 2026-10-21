@@ -79,16 +79,19 @@ export async function request(method, path, body) {
   const headers = { Accept: "application/json" };
   const token = currentToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  // A FormData body (a file upload) sets its own multipart Content-Type with the boundary.
+  // A FormData body (a file upload) sets its own multipart Content-Type with the boundary. A Blob
+  // (the account photo) goes as its raw bytes, with its own type.
   const form = typeof FormData !== "undefined" && body instanceof FormData;
-  if (body !== undefined && !form) headers["Content-Type"] = "application/json";
+  const raw = typeof Blob !== "undefined" && body instanceof Blob;
+  if (raw) headers["Content-Type"] = body.type || "application/octet-stream";
+  else if (body !== undefined && !form) headers["Content-Type"] = "application/json";
 
   let response;
   try {
     response = await fetch(apiBase() + path, {
       method,
       headers,
-      body: body === undefined ? undefined : form ? body : JSON.stringify(body),
+      body: body === undefined ? undefined : form || raw ? body : JSON.stringify(body),
       credentials: "omit",
     });
   } catch {
@@ -144,6 +147,11 @@ export const api = {
   me: () => request("GET", "/v1/me"),
   updateMe: (fields) => request("PATCH", "/v1/me", fields),
   deleteMe: () => request("DELETE", "/v1/me"),
+  /** The account photo: JPEG or PNG bytes up to 1 MB (avatar.js makes a 512×512 JPEG); answers the user. */
+  uploadAvatar: (blob) => request("PUT", "/v1/me/avatar", blob.type ? blob : new Blob([blob], { type: "image/jpeg" })),
+  removeAvatar: () => request("DELETE", "/v1/me/avatar"),
+  /** The photo's bytes as a Blob; ApiError 404 when there is none. `version` (avatarVersion) only busts the browser's cache. */
+  avatar: (version) => requestBlob(`/v1/me/avatar${query({ v: version })}`),
   projects: () => request("GET", "/v1/projects"),
   project: (id) => request("GET", `/v1/projects/${encodeURIComponent(id)}`),
   createProject: (name) => request("POST", "/v1/projects", { name }),

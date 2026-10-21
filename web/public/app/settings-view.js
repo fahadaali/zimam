@@ -1,16 +1,18 @@
 // «الإعدادات» on the web (SettingsView.swift), opened from the account menu: the account card with
-// the name; «عام» (the primary calendar and the first day of the week); «أوقات الصلاة»; «استيراد
-// المهام»; «الحساب والمزامنة» («مزامنة الآن»، «تسجيل الخروج»، «حذف الحساب» after a confirmation);
-// and «عن زمام». Settings save through PATCH /v1/me as soon as they change.
+// the photo («تغيير الصورة»، «إزالة الصورة») and the name; «عام» (the primary calendar and the
+// first day of the week); «أوقات الصلاة»; «استيراد المهام»; «الحساب والمزامنة» («مزامنة الآن»،
+// «تسجيل الخروج»، «حذف الحساب» after a confirmation); and «عن زمام». Settings save through PATCH /v1/me as soon as they change.
+import { avatarView, preparePhoto, rememberAvatar } from "./avatar.js";
+import { api } from "./lib/api.js";
 import { Button, h } from "./lib/components.js";
 import { dualDateWithYear } from "./lib/dates.js";
 import { icon } from "./lib/icons.js";
 import { WEEKDAYS, WEEKDAY_NAMES } from "./lib/recurrence.js";
-import { avatarInitial } from "./lib/sharing.js";
 
 /**
- * `ctx` (from main.js): { me(), today(), saveMe({ name?, settings? }) → Promise<me>, openPrayers(),
- * sync(), signOut(), deleteAccount() → Promise, announce, errorText }.
+ * `ctx` (from main.js): { me(), today(), saveMe({ name?, settings? }) → Promise<me>, setMe(me) (the
+ * account after its photo changed), openPrayers(), sync(), signOut(), deleteAccount() → Promise,
+ * announce, errorText }.
  */
 export function openSettings(ctx) {
   document.getElementById("settings-dialog")?.remove();
@@ -46,6 +48,58 @@ export function openSettings(ctx) {
       h("span", { className: "settings-link-value callout muted" }, value ?? "", icon("chevron-forward", { size: "xs" })),
     );
 
+  // The photo (AvatarStore.swift): «تغيير الصورة» picks a file, made into a 512 px square JPEG
+  // (avatar.js) and sent with PUT /v1/me/avatar; «إزالة الصورة» when there is one.
+  const photoError = h("p", { className: "caption field-error", role: "alert" });
+  const photoFailed = (failure) => {
+    if (failure?.status === 401) return;
+    photoError.textContent = failure?.code === "network" ? ctx.errorText(failure) : "تعذّر رفع الصورة. اختر صورة JPEG أو PNG.";
+  };
+  const picker = h("input", { type: "file", accept: "image/jpeg,image/png,image/heic,image/*", hidden: true, tabindex: "-1", "aria-hidden": "true" });
+  let photoBusy = false;
+  picker.addEventListener("change", async () => {
+    const file = picker.files?.[0];
+    picker.value = "";
+    if (!file || photoBusy) return;
+    photoBusy = true;
+    photoError.textContent = "";
+    draw();
+    try {
+      const photo = await preparePhoto(file);
+      const me = await api.uploadAvatar(photo);
+      rememberAvatar(me.avatarVersion, photo);
+      ctx.setMe(me);
+      ctx.announce("تغيّرت صورتك.");
+    } catch (failure) {
+      photoFailed(failure);
+    } finally {
+      photoBusy = false;
+      draw();
+      body.querySelector(".avatar-action")?.focus();
+    }
+  });
+  async function removePhoto() {
+    if (photoBusy) return;
+    photoBusy = true;
+    photoError.textContent = "";
+    draw();
+    try {
+      ctx.setMe(await api.removeAvatar());
+      ctx.announce("أُزيلت صورتك.");
+    } catch (failure) {
+      if (failure?.status !== 401) photoError.textContent = ctx.errorText(failure);
+    } finally {
+      photoBusy = false;
+      draw();
+      body.querySelector(".avatar-action")?.focus();
+    }
+  }
+  function photoControls(me) {
+    const change = Button({ variant: "quiet", className: "avatar-action", disabled: photoBusy, onclick: () => picker.click() }, icon("camera", { size: "sm" }), "تغيير الصورة");
+    const remove = me?.avatarVersion != null ? Button({ variant: "quiet", className: "avatar-action", disabled: photoBusy, onclick: removePhoto }, icon("trash", { size: "sm" }), "إزالة الصورة") : null;
+    return [h("div", { className: "avatar-actions" }, change, remove, picker), photoError];
+  }
+
   function draw() {
     const me = ctx.me();
     const settings = me?.settings ?? {};
@@ -59,8 +113,8 @@ export function openSettings(ctx) {
     const account = h(
       "div",
       { className: "account-card" },
-      h("span", { className: "avatar avatar-large title", "aria-hidden": "true" }, avatarInitial(me?.name)),
-      h("div", { className: "account-card-body" }, name, me?.email ? h("p", { className: "caption muted account-email" }, me.email) : null),
+      avatarView(me, "avatar-large title"),
+      h("div", { className: "account-card-body" }, name, me?.email ? h("p", { className: "caption muted account-email" }, me.email) : null, photoControls(me)),
     );
 
     const calendar = h(

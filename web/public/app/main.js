@@ -399,6 +399,9 @@ function busy() {
   return !!active && els.view.contains(active) && active.matches("input, select, textarea, :focus-visible");
 }
 
+/** What of the account the screens show, to tell whether another device changed it. */
+const accountKey = (me) => JSON.stringify([me?.settings ?? null, me?.name ?? null, me?.avatarVersion ?? null]);
+
 async function liveRefresh() {
   if (els.shell.hidden) return;
   if (document.hidden) {
@@ -409,7 +412,12 @@ async function liveRefresh() {
     liveTimer = setTimeout(liveRefresh, LIVE_RETRY);
     return;
   }
-  await refreshProjects();
+  // The account too: settings, name or photo changed on another device.
+  const [, me] = await Promise.all([refreshProjects(), api.me().catch(() => null)]);
+  if (me && accountKey(me) !== accountKey(state.me)) {
+    state.me = me;
+    prayers.load();
+  }
   frame.refreshSidebar();
   refreshOpenTask();
   // The import view follows its job itself; re-rendering would reset the form mid-way. The invite
@@ -539,6 +547,11 @@ $("settings-button").addEventListener("click", () =>
     me: () => state.me,
     today: () => state.today,
     saveMe,
+    // The photo changed (settings-view.js): the account button in the toolbar follows.
+    setMe: (me) => {
+      state.me = me;
+      render({ focus: false });
+    },
     openPrayers: () => prayers.openSheet(),
     sync: syncNow,
     signOut: () => els.signout.click(),
