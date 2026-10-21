@@ -8,7 +8,7 @@ declare global {
       /** Set by the OAuth provider for the default handler. */
       OAUTH_PROVIDER: OAuthHelpers;
       API: ZimamBackend;
-      /** Public origin of this worker, e.g. https://mcp.zimam.app. */
+      /** Public origin of this worker, e.g. https://mcp.zimam.work. */
       MCP_ORIGIN: string;
       APPLE_WEB_CLIENT_ID: string;
       /** Google OAuth web client ID for the consent page; empty hides Sign in with Google. */

@@ -3,7 +3,7 @@
 //
 // The shared link is https://<site>/join/#<code>: the code rides in the fragment, so it never
 // reaches a server log or a Referer header, and the static page web/public/join/ reads it here.
-// Older forms are still read: /join/<code> (the API's link before, on zimam.app), ?code=, and the
+// Older forms are still read: /join/<code> (the API's link before), ?code=, and the
 // app's zimam://join/<code>. apple/ZimamKit/Sources/ZimamKit/Sharing.swift (InviteCode) reads
 // them by the same rules.
 

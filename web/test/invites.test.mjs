@@ -15,7 +15,7 @@ import {
 } from "../public/app/lib/invites.js";
 
 const code = "Zx9_Kq-3vB7mN2pL5tR8wY1aC4dF6gH0jS3uE5iO7k";
-const site = "https://zimam-web.fahad2ao.workers.dev";
+const site = "https://zimam.work";
 
 test("codes are base64url, 8 to 128 characters", () => {
   assert.equal(isInviteCode(code), true);
@@ -35,8 +35,8 @@ test("extracts the code from every link form", () => {
   assert.equal(extractInviteCode(`${site}/join/?code=${code}`), code);
   assert.equal(extractInviteCode(`${site}/join/?code=${code}&ref=share`), code);
   assert.equal(extractInviteCode(`${site}/join/#code=${code}`), code);
-  assert.equal(extractInviteCode(`https://zimam.app/join/${code}`), code);
-  assert.equal(extractInviteCode(`https://zimam.app/join/${code}/?ref=share`), code);
+  assert.equal(extractInviteCode(`https://zimam.work/join/${code}`), code);
+  assert.equal(extractInviteCode(`https://zimam.work/join/${code}/?ref=share`), code);
   assert.equal(extractInviteCode(`zimam://join/${code}`), code);
 });
 

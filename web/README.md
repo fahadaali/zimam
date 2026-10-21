@@ -2,8 +2,8 @@
 
 صفحة التعريف بزمام وواجهة إدارة المهام من المتصفح، أصولاً ثابتة على Cloudflare Workers (`zimam-web`) بلا سكربت Worker وبلا إطار عمل ولا حزم تعمل في المتصفح.
 
-- الموقع: `https://zimam-web.fahad2ao.workers.dev` (لاحقاً `https://zimam.app`).
-- الواجهة البرمجية: `https://zimam.fahad2ao.workers.dev` (لاحقاً `https://api.zimam.app`)، ويختارها `public/app/lib/api.js` بحسب النطاق.
+- الموقع: `https://zimam.work`.
+- الواجهة البرمجية: `https://api.zimam.work`، في `public/app/lib/api.js`.
 
 ## الهيكل
 
@@ -83,11 +83,9 @@ npx wrangler deploy --dry-run
 ## تسجيل الدخول بحساب أبل
 
 - Sign in with Apple JS بوضع النافذة المنبثقة، بمعرّف الخدمة `app.zimam.ios.web`، ورابط العودة `<الموقع>/app`.
-- في حساب مطوّر أبل: **Identifiers ← Services IDs ← `app.zimam.ios.web` ← Configure**، أضف النطاق `zimam-web.fahad2ao.workers.dev` ورابط العودة:
+- في حساب مطوّر أبل: **Identifiers ← Services IDs ← `app.zimam.ios.web` ← Configure**، أضف النطاق `zimam.work` ورابط العودة:
 
-  `https://zimam-web.fahad2ao.workers.dev/app`
-
-  وعند الانتقال إلى النطاق: `zimam.app` و`https://zimam.app/app`.
+  `https://zimam.work/app`
 - يولّد المتصفح nonce عشوائياً، ويرسل لأبل تجزئته SHA-256، ثم يرسل الـ nonce الخام مع رمز الهوية إلى `POST /v1/auth/apple` مع `device: "web"`، فيتحقق الخادم أن الرمز صدر لهذا الدخول نفسه. ويُتحقق كذلك من قيمة `state`.
 - ويرسل معهما `authorizationCode` الذي يعطيه أبل، و`redirectUri` الذي طُلب به (`${location.origin}/app`)، فيحفظ الخادم رمز أبل ليلغيه عند حذف الحساب. الرابط يجب أن يكون في `APPLE_WEB_REDIRECT_URI` أو `APPLE_REDIRECT_URIS` في `api/wrangler.jsonc`، وإلا أُهمل الرمز وتم الدخول.
 - أصل الموقع مضاف إلى `ALLOWED_ORIGINS` في `api/wrangler.jsonc`، فإن تغيّر النطاق فأضفه هناك.
@@ -95,7 +93,7 @@ npx wrangler deploy --dry-run
 ## تسجيل الدخول بحساب قوقل
 
 - زرّنا «المتابعة بحساب قوقل» تحت «المتابعة بحساب أبل» بالمقاس والزوايا والخط نفسها، بحرف G الملوّن على خلفية بيضاء (رمادية داكنة في الثيم الداكن) كما تطلب Google، وبلا أي سكربت من Google. الضغط يفتح `https://accounts.google.com/o/oauth2/v2/auth` (`response_type=id_token`، `scope=openid email profile`، `prompt=select_account`) في نافذة منبثقة، ويرجع Google إلى `/app/google-callback` بالرمز في جزء الرابط بعد `#`. صفحة العودة (`public/app/google-callback.html` وسكربتها `google-callback.js`) تسلّم الرمز للصفحة التي فتحتها عبر `BroadcastChannel` من الأصل نفسه وعبر `postMessage` إن بقي الرابط بالنافذة الأم، ثم تُغلق. إن مُنعت النوافذ المنبثقة ذهبت الصفحة كلها إلى Google ورجعت إلى `/app/` فيكمل الدخول من `sessionStorage`. `state` عشوائي لكل ضغطة ويُتحقق منه عند العودة. المنطق الخالص في `public/app/lib/google.js` واختباره في `test/google.test.mjs`.
-- معرّف عميل الويب في الثابت `GOOGLE_CLIENT_ID` أعلى `public/app/main.js` (ليس سراً)، وهو أيضاً في `GOOGLE_CLIENT_IDS` في `api/wrangler.jsonc`. إن فرغ الثابت اختفى الزر. وفي Google Cloud يجب أن يكون `https://zimam-web.fahad2ao.workers.dev/app/google-callback` ضمن **Authorized redirect URIs** لهذا العميل (`docs/setup.md`).
+- معرّف عميل الويب في الثابت `GOOGLE_CLIENT_ID` أعلى `public/app/main.js` (ليس سراً)، وهو أيضاً في `GOOGLE_CLIENT_IDS` في `api/wrangler.jsonc`. إن فرغ الثابت اختفى الزر. وفي Google Cloud يجب أن يكون `https://zimam.work/app/google-callback` ضمن **Authorized redirect URIs** لهذا العميل (`docs/setup.md`).
 - كما في أبل: nonce عشوائي جديد لكل شاشة دخول ولكل محاولة، يُعطى Google تجزئته SHA-256، ويُرسل الخام مع رمز الهوية إلى `POST /v1/auth/google` مع `device: "web"`.
 - إن طابق بريدُ Google المتحقَّق منه حساباً دخل بأبل دخل المستخدم الحساب نفسه (القاعدة في `api/DEVELOPMENT.md`).
 

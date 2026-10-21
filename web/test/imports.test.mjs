@@ -156,8 +156,8 @@ test("OAuth sources: availability, the start request, and the way back", () => {
   assert.equal(connectLabel(trello), "الربط بـ Trello");
   assert.equal(sourceTitle({ id: "ticktick-api", label: "TickTick" }), "TickTick: الربط بالحساب");
   assert.equal(
-    oauthStartPath("google-calendar", "https://zimam-web.fahad2ao.workers.dev"),
-    "/v1/imports/oauth/google-calendar/start?return=https%3A%2F%2Fzimam-web.fahad2ao.workers.dev",
+    oauthStartPath("google-calendar", "https://zimam.work"),
+    "/v1/imports/oauth/google-calendar/start?return=https%3A%2F%2Fzimam.work",
   );
 
   const id = "Zk3_q-8vXc1Lr0aT9yUeWb2NpHs4MdFg7jK6oQiAxYz";

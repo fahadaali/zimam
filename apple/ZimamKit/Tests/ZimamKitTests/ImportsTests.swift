@@ -312,7 +312,7 @@ struct AppleRemindersImportTests {
     @Test func rulesZimamCannotExpressAreNotedAndLongTitlesKept() {
         let long = String(repeating: "م", count: 600)
         let items = [
-            AppleRemindersImport.Item(externalId: "r1", listId: "L1", title: long, url: URL(string: "https://zimam.app"),
+            AppleRemindersImport.Item(externalId: "r1", listId: "L1", title: long, url: URL(string: "https://zimam.work"),
                                       due: DateComponents(year: 2026, month: 10, day: 1),
                                       repeatRule: .init(frequency: .monthly, isExact: false)),
         ]
@@ -321,7 +321,7 @@ struct AppleRemindersImportTests {
         #expect(task.title.count == 500)
         #expect(task.recurrence == nil)
         #expect(task.notes?.hasPrefix(long) ?? false)
-        #expect(task.notes?.contains("https://zimam.app") ?? false)
+        #expect(task.notes?.contains("https://zimam.work") ?? false)
         #expect(task.notes?.contains("لا يدعمها زمام") ?? false)
     }
 }

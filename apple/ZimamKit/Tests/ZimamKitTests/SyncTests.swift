@@ -134,15 +134,15 @@ struct SyncTests {
     }
 
     @Test func realtimeRequestUsesWebSocketSchemeAndSession() throws {
-        let api = APIClient(baseURL: URL(string: "https://api.zimam.app")!) { "zs_token" }
+        let api = APIClient(baseURL: URL(string: "https://api.zimam.work")!) { "zs_token" }
         let request = try #require(api.realtimeRequest())
-        #expect(request.url?.absoluteString == "wss://api.zimam.app/v1/realtime")
+        #expect(request.url?.absoluteString == "wss://api.zimam.work/v1/realtime")
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer zs_token")
 
         let local = APIClient(baseURL: URL(string: "http://localhost:8787")!) { "zs_token" }
         #expect(local.realtimeRequest()?.url?.absoluteString == "ws://localhost:8787/v1/realtime")
 
-        let signedOut = APIClient(baseURL: URL(string: "https://api.zimam.app")!) { nil }
+        let signedOut = APIClient(baseURL: URL(string: "https://api.zimam.work")!) { nil }
         #expect(signedOut.realtimeRequest() == nil)
     }
 

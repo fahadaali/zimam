@@ -43,7 +43,7 @@ const SECRETS = {
   TICKTICK_CLIENT_ID: "ticktick-client",
   TICKTICK_CLIENT_SECRET: "ticktick-secret",
 };
-const WEB = "https://zimam-web.fahad2ao.workers.dev";
+const WEB = "https://zimam.work";
 
 beforeEach(() => {
   sent = [];

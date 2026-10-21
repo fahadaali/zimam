@@ -6,8 +6,8 @@ import { AppleTokenClient, AppleTokenError, appleRedirectUris, appleTokensFromEn
 import { ZimamService } from "../src/service";
 import { appleToken, call, fakeApple, pullAll, push, signIn, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
 
-const WEB_REDIRECT = "https://zimam-web.fahad2ao.workers.dev/app";
-const MCP_REDIRECT = "https://zimam-mcp.fahad2ao.workers.dev/authorize";
+const WEB_REDIRECT = "https://zimam.work/app";
+const MCP_REDIRECT = "https://mcp.zimam.work/authorize";
 
 type User = Awaited<ReturnType<typeof signIn>>;
 
@@ -287,7 +287,7 @@ describe("Sign in with Apple tokens", () => {
       // Without a code, or with a redirect URI that is not allowed, it signs in and keeps nothing new.
       expect((await service.signInWithApple(idToken, "handle-9")).ok).toBe(true);
       fakeApple.codes.set("stray", { refreshToken: "stray-refresh", sub });
-      expect((await service.signInWithApple(idToken, "handle-9", { authorizationCode: "stray", redirectUri: "https://zimam-mcp.fahad2ao.workers.dev/other" })).ok).toBe(true);
+      expect((await service.signInWithApple(idToken, "handle-9", { authorizationCode: "stray", redirectUri: "https://mcp.zimam.work/other" })).ok).toBe(true);
       expect(fakeApple.exchanged).toHaveLength(1);
     } finally {
       ZimamService.appleTokens = tokens;
