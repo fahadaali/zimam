@@ -172,6 +172,17 @@ function taskMenu() {
  * (the Menu key or Shift+F10 give no pointer position). `ctx` is openMoveSheet's.
  */
 export function showTaskMenu(event, task, ctx) {
+  // On the Mac and Linux the menu event comes while the right button is still down; the popover
+  // would take its release for a click outside and close at once, so it opens after the release.
+  if (event.buttons & 2) {
+    const point = { clientX: event.clientX, clientY: event.clientY, currentTarget: event.currentTarget, target: event.target };
+    window.addEventListener("pointerup", () => setTimeout(() => openTaskMenu(point, task, ctx)), { once: true, capture: true });
+    return;
+  }
+  openTaskMenu(event, task, ctx);
+}
+
+function openTaskMenu(event, task, ctx) {
   const el = taskMenu();
   menuTask = task;
   menuCtx = ctx;
