@@ -273,6 +273,37 @@ describe("Members", () => {
   });
 });
 
+describe("Project options", () => {
+  // «خيارات المشروع» in the web app and the Apple app show what these rules allow.
+  it("lets owners and editors rename and archive, and the owner alone delete", async () => {
+    const owner = await signIn();
+    const editor = await signIn();
+    const viewer = await signIn();
+    const projectId = await createProject(owner);
+    await join(owner, editor, projectId, "editor");
+    await join(owner, viewer, projectId, "viewer");
+    const patch = (user: User, body: unknown) => call("PATCH", `/v1/projects/${projectId}`, { token: user.token, body });
+    const remove = (user: User) => call("DELETE", `/v1/projects/${projectId}`, { token: user.token });
+
+    expect((await patch(editor, { name: "المنزل" })).body).toMatchObject({ name: "المنزل" });
+    const archived = await patch(editor, { archivedAt: 1760000000000 });
+    expect(archived.body.archivedAt).toBe(1760000000000);
+    expect((await patch(editor, { archivedAt: null })).body.archivedAt).toBeNull();
+    expect((await patch(viewer, { name: "x" })).status).toBe(403);
+
+    const refused = await remove(editor);
+    expect(refused.status).toBe(403);
+    expect(refused.body.error.code).toBe("forbidden");
+    expect((await remove(viewer)).status).toBe(403);
+
+    await addTask(owner, projectId);
+    expect((await remove(owner)).status).toBe(204);
+    // Gone for every member, with its tasks.
+    expect((await call("GET", "/v1/projects", { token: editor.token })).body.projects).toEqual([]);
+    expect((await call("GET", `/v1/projects/${projectId}`, { token: owner.token })).status).toBe(404);
+  });
+});
+
 describe("Comments", () => {
   it("lets viewers comment but not add tasks", async () => {
     const owner = await signIn();

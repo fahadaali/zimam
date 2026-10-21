@@ -69,6 +69,30 @@ struct SharingTests {
         #expect(comments.first?.createdDate == Date(timeIntervalSince1970: 1_760_000_000))
     }
 
+    @Test func projectOptionsFollowTheRole() {
+        let me = UUID()
+        let other = UUID()
+        #expect(ProjectPermissions(role: .owner) == ProjectPermissions(role: .owner))
+        #expect(ProjectPermissions(role: .owner).canDelete)
+        #expect(ProjectPermissions(role: .editor).canRename && ProjectPermissions(role: .editor).canArchive)
+        #expect(!ProjectPermissions(role: .editor).canDelete)
+        #expect(!ProjectPermissions(role: .viewer).any)
+        #expect(!ProjectPermissions(role: nil).any)
+        // Before the members load: the creator owns it, a project made here has no owner yet, anyone else is unknown.
+        #expect(ProjectPermissions.role(ownerId: me, me: me, memberRole: nil) == .owner)
+        #expect(ProjectPermissions.role(ownerId: nil, me: me, memberRole: nil) == .owner)
+        #expect(ProjectPermissions.role(ownerId: other, me: me, memberRole: nil) == nil)
+        #expect(ProjectPermissions.role(ownerId: other, me: me, memberRole: .editor) == .editor)
+        #expect(ProjectPermissions.role(ownerId: other, me: nil, memberRole: nil) == nil)
+    }
+
+    @Test func projectOptionsWording() {
+        #expect(ProjectActionText.archiveLabel(archived: false) == "أرشفة المشروع")
+        #expect(ProjectActionText.archiveLabel(archived: true) == "استرجاع المشروع")
+        #expect(ProjectActionText.deleteQuestion("البيت") == "حذف «البيت»؟")
+        #expect(ProjectActionText.deleteNote.contains("لا يمكن استرجاعه"))
+    }
+
     @Test func roleNames() {
         #expect(ProjectRole.owner.arabicName == "المالك")
         #expect(ProjectRole.editor.arabicName == "محرر")

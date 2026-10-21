@@ -25,7 +25,7 @@ struct AddTaskView: View {
     @Environment(LocationProvider.self) private var location
     @Environment(\.dateFormatterZimam) private var formatter
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete && $0.kindRaw == "project" }, sort: [SortDescriptor(\ProjectItem.sortOrder)])
+    @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete && $0.kindRaw == "project" && $0.archivedAt == nil }, sort: [SortDescriptor(\ProjectItem.sortOrder)])
     private var projects: [ProjectItem]
 
     @State private var title = ""

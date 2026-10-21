@@ -51,7 +51,7 @@ export function showAssignee(members, current) {
 export function sharingErrorText(code) {
   return (
     {
-      owner_cannot_leave: "المالك لا يغادر مشروعه. احذف المشروع من التطبيق إن لم تعد تحتاجه.",
+      owner_cannot_leave: "المالك لا يغادر مشروعه. احذفه من «خيارات المشروع» إن لم تعد تحتاجه.",
       cannot_change_owner: "لا يتغيّر دور المالك.",
       invite_used: "استُعملت هذه الدعوة، فلا تُلغى. أزل العضو إن أردت.",
       forbidden: "لا تملك صلاحية هذا التعديل. المالك وحده يدير الأعضاء والدعوات.",

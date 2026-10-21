@@ -31,52 +31,71 @@ struct ImportView: View {
         .refreshable { await load() }
     }
 
-    private var serverSources: [ImportSource] {
-        (sources?.sources ?? []).filter { $0.input != .unsupported }
+    /// Each app once, in its group (ImportCatalog); «تطبيقات المهام» and «التقاويم» stay for Apple
+    /// Reminders and Apple Calendar, read on this device.
+    private var groups: [ImportCatalog.Group] {
+        ImportCatalog.groups(from: sources?.sources ?? [], keeping: ["tasks", "calendars"])
     }
 
+    @ViewBuilder
     private var sourcesSection: some View {
-        Section {
-            NavigationLink {
-                RemindersImportView()
-            } label: {
-                SourceRow(id: AppleRemindersImport.sourceId, label: "", systemImage: "checklist")
-            }
-            NavigationLink {
-                CalendarImportView()
-            } label: {
-                SourceRow(id: AppleCalendarImport.sourceId, label: "تقويم أبل", systemImage: "calendar")
-            }
-            ForEach(serverSources) { source in
-                if source.available {
+        let shown = groups
+        ForEach(shown) { group in
+            Section {
+                if group.id == "tasks" {
                     NavigationLink {
-                        ImportSourceView(source: source, maxFileBytes: sources?.maxFileBytes ?? Self.fallbackMaxBytes) { job in
-                            history.removeAll { $0.id == job.id }
-                            history.insert(job, at: 0)
-                        }
+                        RemindersImportView()
                     } label: {
-                        SourceRow(id: source.id, label: source.label, systemImage: Self.icon(for: source))
+                        SourceRow(id: AppleRemindersImport.sourceId, label: "", systemImage: "checklist")
                     }
-                } else {
-                    // An OAuth source the server is not set up for yet: listed, greyed, not opened.
-                    SourceRow(id: source.id, label: source.label, systemImage: Self.icon(for: source),
-                              subtitle: ImportText.unavailable)
-                        .foregroundStyle(ZimamColor.inkMuted)
-                        .accessibilityElement(children: .combine)
+                }
+                if group.id == "calendars" {
+                    NavigationLink {
+                        CalendarImportView()
+                    } label: {
+                        SourceRow(id: AppleCalendarImport.sourceId, label: "تقويم أبل", systemImage: "calendar")
+                    }
+                }
+                ForEach(group.apps) { app in
+                    NavigationLink {
+                        destination(for: app)
+                    } label: {
+                        SourceRow(id: app.id, label: app.name, systemImage: Self.icon(for: app.methods[0]),
+                                  title: app.name, subtitle: ImportCatalog.subtitle(of: app))
+                    }
+                }
+                if group.id == shown.last?.id, sources == nil && isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: ZimamSpacing.space11)
+                }
+            } header: {
+                Text(group.title)
+            } footer: {
+                if group.id == shown.last?.id {
+                    if let loadError {
+                        Text(loadError).foregroundStyle(ZimamColor.priorityHigh)
+                    } else if let sources {
+                        Text("\(ImportText.limit(sources.maxFileBytes, locale: ZimamLocale.current)) إعادة استيراد البيانات نفسها تحدّث ما تغيّر ولا تكرر المهام.")
+                    }
                 }
             }
-            if sources == nil && isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity, minHeight: ZimamSpacing.space11)
-            }
-        } header: {
-            Text("من أين تنقل مهامك؟")
-        } footer: {
-            if let loadError {
-                Text(loadError).foregroundStyle(ZimamColor.priorityHigh)
-            } else if let sources {
-                Text("\(ImportText.limit(sources.maxFileBytes, locale: ZimamLocale.current)) إعادة استيراد البيانات نفسها تحدّث ما تغيّر ولا تكرر المهام.")
-            }
+        }
+    }
+
+    /// An app with one way in opens it; with more, «الطريقة» comes first.
+    @ViewBuilder
+    private func destination(for app: ImportCatalog.App) -> some View {
+        if app.methods.count == 1 {
+            sourceView(app.methods[0])
+        } else {
+            ImportMethodsView(app: app) { sourceView($0) }
+        }
+    }
+
+    private func sourceView(_ source: ImportSource) -> some View {
+        ImportSourceView(source: source, maxFileBytes: sources?.maxFileBytes ?? Self.fallbackMaxBytes) { job in
+            history.removeAll { $0.id == job.id }
+            history.insert(job, at: 0)
         }
     }
 
@@ -131,13 +150,15 @@ private struct SourceRow: View {
     let id: String
     let label: String
     let systemImage: String
-    /// In place of the source's own line («غير متاح الآن»).
+    /// An app's name, in place of the source's own title.
+    var title: String? = nil
+    /// In place of the source's own line (an app's ways in).
     var subtitle: String? = nil
 
     var body: some View {
         Label {
             VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
-                Text(ImportText.title(forSource: id, label: label))
+                Text(title ?? ImportText.title(forSource: id, label: label))
                     .font(ZimamType.body)
                 let line = self.subtitle ?? ImportText.subtitle(forSource: id)
                 if !line.isEmpty {
@@ -184,5 +205,50 @@ private struct HistoryRow: View {
         .padding(.vertical, ZimamSpacing.space1)
         .frame(minHeight: ZimamSpacing.space11)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// «الطريقة»: an app's ways in, the easiest first, each opening its own screen.
+private struct ImportMethodsView<Destination: View>: View {
+    let app: ImportCatalog.App
+    @ViewBuilder let destination: (ImportSource) -> Destination
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(app.methods) { source in
+                    NavigationLink {
+                        destination(source)
+                    } label: {
+                        VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
+                            HStack(spacing: ZimamSpacing.space2) {
+                                Text(ImportCatalog.methodTitle(source))
+                                    .font(ZimamType.body)
+                                if source.id == app.methods.first?.id, source.input == .oauth {
+                                    Text(ImportCatalog.easiest)
+                                        .font(ZimamType.caption)
+                                        .foregroundStyle(ZimamColor.success)
+                                        .padding(.horizontal, ZimamSpacing.space2)
+                                        .overlay(Capsule().strokeBorder(ZimamColor.success))
+                                }
+                            }
+                            Text(ImportText.subtitle(forSource: source.id))
+                                .font(ZimamType.caption)
+                                .foregroundStyle(ZimamColor.inkMuted)
+                        }
+                        .frame(minHeight: ZimamSpacing.space11)
+                    }
+                }
+            } header: {
+                Text("الطريقة")
+            } footer: {
+                if app.methods.first?.input == .oauth {
+                    Text("الربط بالحساب أسهل: تأذن لزمام من صفحة \(app.name) نفسها، دون ملف ولا رمز.")
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(ZimamColor.surface)
+        .navigationTitle(app.name)
     }
 }

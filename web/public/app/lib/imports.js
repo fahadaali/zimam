@@ -124,6 +124,74 @@ const SOURCES = {
   },
 };
 
+/**
+ * The import screen lists apps, not ways in: each app once, in its group, with its ways in the
+ * easiest first (connecting the account, then a file or a token). The Apple app has the same list
+ * (ZimamKit, ImportCatalog). Apple Reminders and Apple Calendar are the Apple app's own, on the device.
+ */
+export const IMPORT_GROUPS = [
+  {
+    id: "tasks",
+    title: "تطبيقات المهام",
+    apps: [
+      { id: "todoist", name: "Todoist", methods: ["todoist-oauth", "todoist-api", "todoist-csv"] },
+      { id: "ticktick", name: "TickTick", methods: ["ticktick-api", "ticktick-csv"] },
+      { id: "google-tasks", name: "Google Tasks", methods: ["google-tasks-api", "google-tasks"] },
+      { id: "microsoft-todo", name: "Microsoft To Do", methods: ["microsoft-todo"] },
+    ],
+  },
+  {
+    id: "projects",
+    title: "المشاريع والفرق",
+    apps: [
+      { id: "asana", name: "Asana", methods: ["asana"] },
+      { id: "trello", name: "Trello", methods: ["trello"] },
+      { id: "clickup", name: "ClickUp", methods: ["clickup"] },
+      { id: "notion", name: "Notion", methods: ["notion"] },
+      { id: "jira", name: "Jira", methods: ["jira"] },
+      { id: "linear", name: "Linear", methods: ["linear"] },
+      { id: "monday", name: "monday.com", methods: ["monday"] },
+      { id: "planner", name: "Microsoft Planner", methods: ["planner"] },
+    ],
+  },
+  { id: "calendars", title: "التقاويم", apps: [{ id: "google-calendar", name: "Google Calendar", methods: ["google-calendar"] }] },
+  { id: "files", title: "ملف", apps: [{ id: "csv", name: "ملف CSV", methods: ["csv"] }] },
+];
+
+/**
+ * The groups with what the server can do now: a way in it lists as available, under its app.
+ * A way in the server lacks the secrets for is left out, and an app with none left is not listed;
+ * a source the list does not know yet comes last, under «أخرى».
+ */
+export function importCatalog(sources = []) {
+  const ready = new Map(usableSources(sources).filter(isAvailable).map((s) => [s.id, s]));
+  const placed = new Set();
+  const groups = IMPORT_GROUPS.map((group) => ({
+    id: group.id,
+    title: group.title,
+    apps: group.apps
+      .map((app) => {
+        const methods = app.methods.map((id) => ready.get(id)).filter(Boolean);
+        for (const m of methods) placed.add(m.id);
+        return { id: app.id, name: app.name, methods };
+      })
+      .filter((app) => app.methods.length > 0),
+  }));
+  const rest = [...ready.values()].filter((s) => !placed.has(s.id));
+  if (rest.length) groups.push({ id: "other", title: "أخرى", apps: rest.map((s) => ({ id: s.id, name: s.label ?? s.id, methods: [s] })) });
+  return groups.filter((group) => group.apps.length > 0);
+}
+
+/** A way into an app, in two words: «الربط بالحساب», «من ملف», «برمز API». */
+export function methodTitle(source) {
+  return { oauth: "الربط بالحساب", token: "برمز API", file: "من ملف" }[source?.input] ?? sourceTitle(source);
+}
+
+/** Under an app's name: its ways in, or what its one way brings. */
+export function appSubtitle(app) {
+  return app.methods.length > 1 ? app.methods.map(methodTitle).join(" أو ") : sourceSubtitle(app.methods[0]?.id);
+}
+
 /** Sources this page can start: files, tokens and OAuth flows. Inputs it does not know are left out. */
 export function usableSources(sources = []) {
   return sources.filter((s) => s.input === "file" || s.input === "token" || s.input === "oauth");

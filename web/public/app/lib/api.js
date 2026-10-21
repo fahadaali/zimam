@@ -176,6 +176,10 @@ export const api = {
   projects: () => request("GET", "/v1/projects"),
   project: (id) => request("GET", `/v1/projects/${encodeURIComponent(id)}`),
   createProject: (name) => request("POST", "/v1/projects", { name }),
+  /** `{ name }` or `{ archivedAt }` (a time, or null to restore): owners and editors. */
+  updateProject: (id, fields) => request("PATCH", `/v1/projects/${encodeURIComponent(id)}`, fields),
+  /** The owner only; its tasks, sections and reminders go with it, for every member. */
+  deleteProject: (id) => request("DELETE", `/v1/projects/${encodeURIComponent(id)}`),
   task: (id) => request("GET", `/v1/tasks/${encodeURIComponent(id)}`),
   tasks: (params = {}) => allTasks(params),
   createTask: (task) => request("POST", "/v1/tasks", task),

@@ -1,5 +1,6 @@
-// Swiping a task row toward the inline start on phones (to the right in Arabic) uncovers «حذف» at
-// its inline end, as the app's trailing swipe action (TaskListItem.swift). The row follows the finger one to one from where it was grabbed,
+// Swiping a row on phones uncovers its actions, as the app's swipe actions: toward the inline start
+// (to the right in Arabic) the ones at its inline end, such as «حذف» on a task (TaskListItem.swift);
+// toward the inline end the ones at its inline start, such as «إعادة التسمية» on a project. The row follows the finger one to one from where it was grabbed,
 // resists past the button (rubber band), and on release goes where the gesture was heading: the
 // release velocity is projected forward (Designing Fluid Interfaces) to choose open or closed.
 // A tap elsewhere, or a swipe back, closes it. With Reduce Motion the row moves without easing.
@@ -33,28 +34,46 @@ document.addEventListener(
 );
 
 /**
- * Makes `li` (a .task-item holding a .zm-task row) swipeable on phones. `isCompact()` says whether
- * the phone layout is showing; `onDelete()` deletes the task when «حذف» is pressed.
+ * Makes `li` swipeable on phones: `row` (inside it) slides and uncovers `end` actions at its inline
+ * end or `start` actions at its inline start. Each action is { label, ariaLabel, tone, onClick }:
+ * tone "danger" (red), "neutral" (grey) or the brand colour; onClick may return a promise, and
+ * the row closes when it settles. `isCompact()` says whether the phone layout is showing.
  */
-export function swipeToDelete(li, { isCompact, onDelete, label }) {
-  const row = li.querySelector(".zm-task");
-  if (!row) return;
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "swipe-delete callout";
-  button.textContent = "حذف";
-  button.setAttribute("aria-label", `حذف المهمة: ${label}`);
-  // Only reachable once the row is swiped open; keyboard users delete from the task's page.
-  button.tabIndex = -1;
-  button.addEventListener("click", () => {
-    button.disabled = true;
-    onDelete().finally(() => {
-      button.disabled = false;
-      close(li);
-    });
-  });
-  li.prepend(button);
+export function swipeActions(li, { row: rowSelector = ".zm-task", isCompact, start: startActions = [], end: endActions = [] }) {
+  const row = li.querySelector(rowSelector);
+  if (!row || (startActions.length === 0 && endActions.length === 0)) return;
+  row.classList.add("swipe-row");
+
+  const tray = (actions, side) => {
+    if (actions.length === 0) return null;
+    const el = document.createElement("div");
+    el.className = `swipe-tray swipe-tray-${side}`;
+    for (const action of actions) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `swipe-action callout${action.tone ? ` swipe-${action.tone}` : ""}`;
+      button.textContent = action.label;
+      if (action.ariaLabel) button.setAttribute("aria-label", action.ariaLabel);
+      // Only reachable once the row is swiped open; keyboard users have the same actions elsewhere.
+      button.tabIndex = -1;
+      button.addEventListener("click", () => {
+        button.disabled = true;
+        Promise.resolve(action.onClick()).finally(() => {
+          button.disabled = false;
+          close(li);
+        });
+      });
+      el.append(button);
+    }
+    li.prepend(el);
+    return el;
+  };
+  const endTray = tray(endActions, "end");
+  const startTray = tray(startActions, "start");
   li.classList.add("is-swipeable");
+  const focusable = (open) => {
+    for (const button of li.querySelectorAll(".swipe-action")) button.tabIndex = open && open.contains(button) ? 0 : -1;
+  };
 
   // In Arabic the inline start is the right: a swipe toward it is a positive x.
   const startSign = () => (getComputedStyle(li).direction === "rtl" ? 1 : -1);
@@ -63,7 +82,7 @@ export function swipeToDelete(li, { isCompact, onDelete, label }) {
   li.addEventListener(
     "click",
     (event) => {
-      if (event.timeStamp > suppressUntil || event.target.closest(".swipe-delete")) return;
+      if (event.timeStamp > suppressUntil || event.target.closest(".swipe-action")) return;
       event.stopPropagation();
       event.preventDefault();
     },
@@ -97,11 +116,12 @@ export function swipeToDelete(li, { isCompact, onDelete, label }) {
     }
     start.samples.push({ x: event.clientX, t: event.timeStamp });
     if (start.samples.length > 5) start.samples.shift();
-    const width = button.offsetWidth;
-    // Distance toward the inline start, 0 when closed and `width` when open.
+    // Toward the inline start is positive (up to the end tray's width), toward the end negative.
+    const max = endTray?.offsetWidth ?? 0;
+    const min = -(startTray?.offsetWidth ?? 0);
     let along = start.base + dx * startSign();
-    if (along < 0) along = rubberband(along, width);
-    else if (along > width) along = width + rubberband(along - width, width);
+    if (along > max) along = max + rubberband(along - max, Math.max(max, 1));
+    else if (along < min) along = min + rubberband(along - min, Math.max(-min, 1));
     li.style.setProperty("--swipe", `${along}px`);
   });
 
@@ -112,23 +132,35 @@ export function swipeToDelete(li, { isCompact, onDelete, label }) {
     start = null;
     li.classList.remove("is-dragging-swipe");
     if (!claimed) return;
-    // The swipe is over: the click the browser sends right after it must not open the task.
+    // The swipe is over: the click the browser sends right after it must not open the row.
     suppressUntil = event.timeStamp + 350;
     const first = samples[0];
     const last = samples.at(-1);
     const velocity = last.t > first.t ? ((last.x - first.x) / (last.t - first.t)) * startSign() : 0;
     const along = parseFloat(li.style.getPropertyValue("--swipe")) || 0;
     const resting = along + project(velocity);
-    if (resting > button.offsetWidth / 2) {
+    const max = endTray?.offsetWidth ?? 0;
+    const min = -(startTray?.offsetWidth ?? 0);
+    if (max && resting > max / 2) {
       li.classList.add("is-swiped");
-      li.style.setProperty("--swipe", `${button.offsetWidth}px`);
+      li.style.setProperty("--swipe", `${max}px`);
       openRow = li;
-      button.tabIndex = 0;
+      focusable(endTray);
+    } else if (min && resting < min / 2) {
+      li.classList.add("is-swiped");
+      li.style.setProperty("--swipe", `${min}px`);
+      openRow = li;
+      focusable(startTray);
     } else {
-      button.tabIndex = -1;
+      focusable(null);
       close(li);
     }
   };
   row.addEventListener("pointerup", release);
   row.addEventListener("pointercancel", release);
+}
+
+/** A task row: «حذف» at its inline end. `onDelete()` deletes the task. */
+export function swipeToDelete(li, { isCompact, onDelete, label }) {
+  swipeActions(li, { isCompact, end: [{ label: "حذف", ariaLabel: `حذف المهمة: ${label}`, tone: "danger", onClick: onDelete }] });
 }

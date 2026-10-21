@@ -22,13 +22,14 @@ import {
   confirmQuestion,
   connectLabel,
   countRows,
+  appSubtitle,
   extensionsText,
-  firstAvailable,
+  importCatalog,
   importErrorText,
-  isAvailable,
   isFinished,
   jobDate,
   limitText,
+  methodTitle,
   nextPollDelay,
   oauthErrorText,
   oauthReturn,
@@ -42,7 +43,6 @@ import {
   statusText,
   storedPending,
   summaryText,
-  usableSources,
 } from "./lib/imports.js";
 import { arabicNumber } from "./lib/numbers.js";
 
@@ -116,7 +116,9 @@ export async function viewImport(ctx) {
   const [sourcesResult, listResult] = await Promise.allSettled([importsApi.sources(), importsApi.list()]);
   if (sourcesResult.status === "rejected") throw sourcesResult.reason;
   const { maxFileBytes = DEFAULT_MAX_BYTES, sources: all = [] } = sourcesResult.value ?? {};
-  const sources = usableSources(all);
+  // Each app once, in its group; its ways in under it (lib/imports.js, importCatalog).
+  const catalog = importCatalog(all);
+  const apps = catalog.flatMap((group) => group.apps);
   let history = listResult.status === "fulfilled" ? listResult.value?.jobs ?? [] : [];
 
   const header = h(
@@ -126,32 +128,60 @@ export async function viewImport(ctx) {
     h("p", { className: "callout muted" }, "انقل مهامك من تطبيق آخر إلى زمام. إعادة استيراد البيانات نفسها تحدّث ما تغيّر ولا تكرر المهام."),
   );
 
-  // ——— Choosing a source ———
+  // ——— Choosing an app, then its way in ———
 
-  let selected = firstAvailable(sources);
-  const choices = h("div", { className: "choices import-sources" });
-  for (const source of sources) {
-    // An OAuth source whose secrets the server lacks: shown, greyed, and not selectable.
-    const available = isAvailable(source);
-    const input = h("input", { type: "radio", name: "import-source", value: source.id, checked: source === selected, disabled: !available });
-    input.addEventListener("change", () => {
-      selected = source;
-      showSource();
-    });
-    choices.append(
-      h(
-        "label",
-        { className: `choice import-choice${available ? "" : " import-choice-unavailable"}` },
-        input,
+  let selectedApp = apps[0] ?? null;
+  let selected = selectedApp?.methods[0] ?? null;
+  const choices = h("div", { className: "import-groups" });
+  for (const group of catalog) {
+    const list = h("div", { className: "choices import-apps" });
+    for (const app of group.apps) {
+      const input = h("input", { type: "radio", name: "import-app", value: app.id, checked: app === selectedApp });
+      input.addEventListener("change", () => {
+        selectedApp = app;
+        selected = app.methods[0];
+        showMethods();
+        showSource();
+      });
+      list.append(
         h(
-          "span",
-          { className: "import-choice-text" },
-          h("span", { className: "callout" }, sourceTitle(source)),
-          h("span", { className: "caption muted" }, available ? sourceSubtitle(source.id) : "غير متاح الآن"),
+          "label",
+          { className: "choice import-choice" },
+          input,
+          h("span", { className: "import-choice-text" }, h("span", { className: "callout" }, app.name), h("span", { className: "caption muted" }, appSubtitle(app))),
         ),
-      ),
+      );
+    }
+    choices.append(h("fieldset", { className: "import-group" }, h("legend", { className: "caption muted import-group-title" }, group.title), list));
+  }
+
+  // «الطريقة»: only for an app with more than one way in, the easiest first.
+  const methodList = h("div", { className: "choices import-methods-list" });
+  const methods = h("fieldset", { className: "field import-methods" }, h("legend", { className: "headline" }, "الطريقة"), methodList);
+  function showMethods() {
+    methods.hidden = !selectedApp || selectedApp.methods.length < 2;
+    methodList.replaceChildren(
+      ...(selectedApp?.methods ?? []).map((source, index) => {
+        const input = h("input", { type: "radio", name: "import-method", value: source.id, checked: source === selected });
+        input.addEventListener("change", () => {
+          selected = source;
+          showSource();
+        });
+        return h(
+          "label",
+          { className: "choice import-choice" },
+          input,
+          h(
+            "span",
+            { className: "import-choice-text" },
+            h("span", { className: "callout" }, methodTitle(source), index === 0 && source.input === "oauth" ? h("span", { className: "caption import-easiest" }, "الأسهل") : null),
+            h("span", { className: "caption muted" }, sourceSubtitle(source.id)),
+          ),
+        );
+      }),
     );
   }
+  showMethods();
 
   const howTo = h("p", { className: "callout muted import-howto", id: "import-howto" });
   const fileInput = h("input", { className: "input body", id: "import-file", type: "file", "aria-describedby": "import-file-hint import-howto" });
@@ -312,11 +342,10 @@ export async function viewImport(ctx) {
     "section",
     { className: "list-section import-section", "aria-labelledby": "import-source-title" },
     h("h2", { className: "headline section-title", id: "import-source-title" }, "من أين تنقل مهامك؟"),
-    sources.length
-      ? h("fieldset", { className: "field" }, h("legend", { className: "visually-hidden" }, "المصدر"), choices)
-      : h("p", { className: "body muted" }, "لا مصادر متاحة الآن."),
+    apps.length ? choices : h("p", { className: "body muted" }, "لا مصادر متاحة الآن."),
+    apps.length ? methods : null,
     howTo,
-    sources.length ? form : null,
+    apps.length ? form : null,
     h("p", { className: "caption muted import-note" }, "تذكيرات أبل تُستورد من تطبيق زمام على الآيفون أو الآيباد أو الماك: «الإعدادات» ثم «استيراد المهام»."),
   );
 

@@ -10,6 +10,28 @@ struct ImportsTests {
 
     let ar = Locale(identifier: "ar-SA")
 
+    @Test func listsEachAppOnceInItsGroupWithItsWaysInTheEasiestFirst() {
+        let s = { (id: String, input: ImportSource.Input, available: Bool) in ImportSource(id: id, label: id, input: input, available: available) }
+        let sources = [
+            s("todoist-csv", .file, true), s("todoist-api", .token, true), s("ticktick-csv", .file, true),
+            s("google-tasks", .file, true), s("csv", .file, true), s("todoist-oauth", .oauth, true),
+            s("google-tasks-api", .oauth, false), s("asana", .oauth, true), s("jira", .oauth, false),
+            s("someday", .oauth, true),
+        ]
+        let groups = ImportCatalog.groups(from: sources, keeping: ["calendars"])
+        #expect(groups.map(\.title) == ["تطبيقات المهام", "المشاريع والفرق", "التقاويم", "ملف", "أخرى"])
+        #expect(groups[0].apps.map(\.name) == ["Todoist", "TickTick", "Google Tasks"])
+        #expect(groups[0].apps[0].methods.map(\.id) == ["todoist-oauth", "todoist-api", "todoist-csv"])
+        // A way in the server cannot start is left out; an app with none (Jira) is not listed.
+        #expect(groups[0].apps[2].methods.map(\.id) == ["google-tasks"])
+        #expect(groups[1].apps.map(\.id) == ["asana"])
+        // «التقاويم» stays for Apple Calendar, which the app adds on the device.
+        #expect(groups[2].apps.isEmpty)
+        #expect(groups[4].apps.map(\.id) == ["someday"])
+        #expect(ImportCatalog.subtitle(of: groups[0].apps[0]) == "الربط بالحساب أو برمز API أو من ملف")
+        #expect(ImportCatalog.groups(from: []).isEmpty)
+    }
+
     @Test func decodesSourcesInTheServerShape() throws {
         let json = """
         {"maxFileBytes":5242880,"sources":[

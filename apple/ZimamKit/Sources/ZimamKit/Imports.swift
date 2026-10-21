@@ -57,6 +57,87 @@ public struct ImportSource: Decodable, Equatable, Hashable, Identifiable, Sendab
     }
 }
 
+/// The import screen lists apps, not ways in: each app once, in its group, with its ways in the
+/// easiest first (connecting the account, then a file or a token). The web app has the same list
+/// (web/public/app/lib/imports.js, IMPORT_GROUPS). Apple Reminders and Apple Calendar are read on
+/// the device, so the app adds them to «تطبيقات المهام» and «التقاويم» itself.
+public enum ImportCatalog {
+    public struct App: Identifiable, Equatable, Sendable {
+        public let id: String
+        public let name: String
+        /// The ways in the server can start now, the easiest first.
+        public let methods: [ImportSource]
+    }
+
+    public struct Group: Identifiable, Equatable, Sendable {
+        public let id: String
+        public let title: String
+        public let apps: [App]
+    }
+
+    private static let layout: [(id: String, title: String, apps: [(id: String, name: String, methods: [String])])] = [
+        ("tasks", "تطبيقات المهام", [
+            ("todoist", "Todoist", ["todoist-oauth", "todoist-api", "todoist-csv"]),
+            ("ticktick", "TickTick", ["ticktick-api", "ticktick-csv"]),
+            ("google-tasks", "Google Tasks", ["google-tasks-api", "google-tasks"]),
+            ("microsoft-todo", "Microsoft To Do", ["microsoft-todo"]),
+        ]),
+        ("projects", "المشاريع والفرق", [
+            ("asana", "Asana", ["asana"]),
+            ("trello", "Trello", ["trello"]),
+            ("clickup", "ClickUp", ["clickup"]),
+            ("notion", "Notion", ["notion"]),
+            ("jira", "Jira", ["jira"]),
+            ("linear", "Linear", ["linear"]),
+            ("monday", "monday.com", ["monday"]),
+            ("planner", "Microsoft Planner", ["planner"]),
+        ]),
+        ("calendars", "التقاويم", [("google-calendar", "Google Calendar", ["google-calendar"])]),
+        ("files", "ملف", [("csv", "ملف CSV", ["csv"])]),
+    ]
+
+    /// The groups with what the server can start now. A way in it is not set up for is left out,
+    /// and an app with none left is not listed; a source this version does not know comes last,
+    /// under «أخرى». Groups in `keeping` stay even when empty (the device's own sources go there).
+    public static func groups(from sources: [ImportSource], keeping: Set<String> = []) -> [Group] {
+        let ready = sources.filter { $0.available && $0.input != .unsupported }
+        let byId = Dictionary(ready.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var placed = Set<String>()
+        var groups = layout.map { group in
+            Group(id: group.id, title: group.title, apps: group.apps.compactMap { app in
+                let methods = app.methods.compactMap { byId[$0] }
+                placed.formUnion(methods.map(\.id))
+                return methods.isEmpty ? nil : App(id: app.id, name: app.name, methods: methods)
+            })
+        }
+        let rest = ready.filter { !placed.contains($0.id) }
+        if !rest.isEmpty {
+            groups.append(Group(id: "other", title: "أخرى", apps: rest.map { App(id: $0.id, name: $0.label, methods: [$0]) }))
+        }
+        return groups.filter { !$0.apps.isEmpty || keeping.contains($0.id) }
+    }
+
+    /// A way into an app, in two words.
+    public static func methodTitle(_ source: ImportSource) -> String {
+        switch source.input {
+        case .oauth: "الربط بالحساب"
+        case .token: "برمز API"
+        case .file: "من ملف"
+        case .unsupported: source.label
+        }
+    }
+
+    /// Under an app's name: its ways in, or what its one way brings.
+    public static func subtitle(of app: App) -> String {
+        app.methods.count > 1
+            ? app.methods.map(methodTitle).joined(separator: " أو ")
+            : ImportText.subtitle(forSource: app.methods.first?.id ?? "")
+    }
+
+    /// Beside the easiest way in.
+    public static let easiest = "الأسهل"
+}
+
 /// Where the server's OAuth callback returns: `zimam://import-callback?pending=<id>&source=<id>`
 /// when the provider agreed, or `?error=<code>` when it did not (`denied`, `provider_error`).
 /// Nothing has started yet: the app asks whether to import into the signed-in account

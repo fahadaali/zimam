@@ -486,6 +486,13 @@
   color: var(--priority-high);
 }
 
+/* Before a destructive row: «حذف المشروع» sits apart (project-menu.js). */
+.menu-separator {
+  block-size: 1px;
+  margin-block: var(--space-1);
+  background: var(--line);
+}
+
 /* ——— Sidebar (regular) ——— */
 
 .sidebar-toolbar {
@@ -693,8 +700,9 @@
   }
 }
 
-/* A button with an icon and its word, such as «مشاركة». */
-.project-tools .zm-btn {
+/* A button with an icon and its word, such as «مشاركة» and «استرجاع». */
+.project-tools .zm-btn,
+.archived-row .zm-btn {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);

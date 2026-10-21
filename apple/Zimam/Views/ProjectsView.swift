@@ -5,6 +5,7 @@ import ZimamKit
 struct ProjectsView: View {
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
+    @Environment(SessionStore.self) private var session
     // Kept simple: a compound predicate with two sort keys is too slow for the type checker.
     @Query(filter: #Predicate<ProjectItem> { !$0.pendingDelete }, sort: \ProjectItem.sortOrder)
     private var allProjects: [ProjectItem]
@@ -13,11 +14,16 @@ struct ProjectsView: View {
     @State private var newName = ""
     @State private var joining = false
     @State private var sharing: ShareTarget?
+    @State private var action: ProjectAction?
 
     init() {}
 
     private var projects: [ProjectItem] {
-        allProjects.filter { $0.kindRaw == "project" }
+        allProjects.filter { $0.kindRaw == "project" && $0.archivedAt == nil }
+    }
+
+    private var archived: [ProjectItem] {
+        allProjects.filter { $0.kindRaw == "project" && $0.archivedAt != nil }
     }
 
     var body: some View {
@@ -48,13 +54,20 @@ struct ProjectsView: View {
                     }
                     .contextMenu {
                         Button("مشاركة", systemImage: "person.2") { sharing = ShareTarget(id: project.id) }
+                        if projectPermissions(project, me: session.user?.id).any {
+                            Divider()
+                            ProjectOptionsItems(project: project, action: $action)
+                        }
                     }
+                    .projectSwipeActions(project, action: $action)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 }
             }
+            ArchivedProjectsSection(projects: archived, action: $action)
         }
         .zimamList()
+        .projectActions($action)
         .navigationDestination(for: UUID.self) { ProjectDetailView(projectId: $0) }
         .navigationDestination(for: OverviewRoute.self) { OverviewScreen(route: $0) }
         .toolbar {
@@ -96,8 +109,11 @@ struct ProjectDetailView: View {
     @Environment(SyncEngine.self) private var sync
     @Environment(\.taskSelection) private var taskSelection
     @Environment(\.projectOpened) private var projectOpened
+    @Environment(\.projectClosed) private var projectClosed
+    @Environment(SessionStore.self) private var session
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var sharing = false
+    @State private var action: ProjectAction?
 
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder), SortDescriptor(\TaskItem.createdAt)])
     private var tasks: [TaskItem]
@@ -156,7 +172,15 @@ struct ProjectDetailView: View {
             ToolbarItem {
                 Button("مشاركة", systemImage: "person.2") { sharing = true }
             }
+            ToolbarItem {
+                if sectionId == nil, let project, projectPermissions(project, me: session.user?.id).any {
+                    Menu("خيارات المشروع", systemImage: "ellipsis.circle") {
+                        ProjectOptionsItems(project: project, action: $action, onArchived: close)
+                    }
+                }
+            }
         }
+        .projectActions($action, onDeleted: close)
         // Leaving the project closes this screen too; its tasks leave with the next pull.
         .sheet(isPresented: $sharing) { ShareProjectView(projectId: projectId, onLeft: { dismiss() }) }
         .onAppear { projectOpened?(projectId) }
@@ -229,6 +253,12 @@ struct ProjectDetailView: View {
         } else {
             opened = TaskRoute(id: taskId)
         }
+    }
+
+    /// Deleted or archived from here: back to the projects on the iPhone, to the inbox in the sidebar.
+    private func close() {
+        projectClosed?(projectId)
+        dismiss()
     }
 
     private func linger(_ id: UUID) {

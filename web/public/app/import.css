@@ -17,10 +17,51 @@
   padding: var(--space-4);
 }
 
-/* Sources: one choice per row, with the source's name above a short line on what it takes. */
-.import-sources {
+/* Apps, in groups («تطبيقات المهام»، «المشاريع والفرق»…): each a small card with its name above its
+   ways in. Then «الطريقة» for an app with more than one, one per row (import-view.js). */
+.import-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.import-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.import-group-title {
+  margin-block-end: var(--space-2);
+  padding: 0;
+}
+
+.import-apps {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--space-11) * 3.5)), 1fr));
+}
+
+.import-methods {
+  margin-block-start: var(--space-6);
+}
+
+.import-methods[hidden] {
+  display: none;
+}
+
+.import-methods-list {
   flex-direction: column;
   align-items: stretch;
+  margin-block-start: var(--space-2);
+}
+
+.import-easiest {
+  margin-inline-start: var(--space-2);
+  padding-inline: var(--space-2);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  color: var(--success);
 }
 
 .import-choice {
@@ -34,14 +75,6 @@
 
 .import-choice:has(input:checked) .muted {
   color: var(--brand-ink);
-}
-
-/* An OAuth source the server cannot start yet (its secrets are not set): greyed, «غير متاح الآن». */
-.import-choice-unavailable {
-  border-color: var(--line);
-  background: var(--surface-sunken);
-  color: var(--ink-muted);
-  cursor: not-allowed;
 }
 
 .import-howto {
