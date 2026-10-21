@@ -6,7 +6,8 @@
     "build": "node scripts/copy-design.mjs",
     "test": "node --test \"test/*.test.mjs\"",
     "dev": "npm run build && wrangler dev",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "screenshots": "npm run build && node scripts/screenshots.mjs"
   },
   "devDependencies": {
     "wrangler": "4.150.0"
