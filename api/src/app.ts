@@ -32,7 +32,7 @@ export function createApp(deps: Deps) {
     cors({
       origin: (origin, c) => (c.env.ALLOWED_ORIGINS.split(",").map((o: string) => o.trim()).includes(origin) ? origin : null),
       allowHeaders: ["Authorization", "Content-Type"],
-      allowMethods: ["GET", "POST", "PATCH", "DELETE"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
       maxAge: 86_400,
     }),
   );

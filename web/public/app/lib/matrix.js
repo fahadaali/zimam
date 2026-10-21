@@ -1,8 +1,8 @@
 // «المصفوفة»: open tasks in four quadrants by importance and urgency, the same rules as the Apple
 // app and the widgets:
 //   important := priority ≥ 2 (medium or high)
-//   urgent    := a due date on or before tomorrow (overdue included), in the user's time zone
-//                (settings.timeZone)
+//   urgent    := a due date on or before tomorrow (overdue included); on the web «today» is the
+//                device's day, as in every other view (main.js state.today)
 // Done tasks are in no quadrant.
 //
 // Moving a task between quadrants changes the fewest fields that put it there:

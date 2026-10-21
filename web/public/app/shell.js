@@ -2,6 +2,7 @@
 // which layout the width calls for, the current tab or sidebar row, the sidebar's projects and
 // counts, dropping a task on «صندوق المهام» or a project, the tab bar that shrinks on scroll, the
 // account menu, and the «مشروع جديد» and «الانضمام بدعوة» dialogs.
+import { avatarView } from "./avatar.js";
 import { api, errorText } from "./lib/api.js";
 import { IconButton, h } from "./lib/components.js";
 import { boardApi } from "./lib/feature-api.js";
@@ -9,7 +10,7 @@ import { hydrateIcons, icon } from "./lib/icons.js";
 import { appJoinHash, extractInviteCode } from "./lib/invites.js";
 import { arabicNumber } from "./lib/numbers.js";
 import { sidebarItemFor, tabFor } from "./lib/routes.js";
-import { avatarInitial, canEdit } from "./lib/sharing.js";
+import { canEdit } from "./lib/sharing.js";
 import { sidebarCounts, sidebarProjects } from "./lib/sidebar.js";
 import { taskCount } from "./lib/tasks.js";
 
@@ -188,8 +189,18 @@ export function createShell(ctx) {
     renderProjects();
   }
 
+  /**
+   * The project list carries each project's sections; a server older than that field leaves it out,
+   * so only those projects are read one by one, a few at a time.
+   */
   async function fetchSections() {
-    const queue = ctx.state.projects.filter((p) => p.kind !== "folder" && !p.archivedAt).map((p) => p.id);
+    const queue = [];
+    for (const project of ctx.state.projects) {
+      if (project.kind === "folder" || project.archivedAt) continue;
+      if (Array.isArray(project.sections)) sections.set(project.id, project.sections);
+      else queue.push(project.id);
+    }
+    if (queue.length === 0) return;
     const worker = async () => {
       while (queue.length) {
         const id = queue.shift();
@@ -282,7 +293,7 @@ export function createShell(ctx) {
     const button = h(
       "button",
       { type: "button", className: "account-button", "aria-label": "الحساب والمزامنة", title: "الحساب والمزامنة", popovertarget: "account-menu" },
-      h("span", { className: "avatar callout", "aria-hidden": "true" }, avatarInitial(me?.name)),
+      avatarView(me, "callout"),
     );
     button.popoverTargetElement = menu;
     button.addEventListener("pointerdown", () => (menuButton = button));

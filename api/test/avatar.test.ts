@@ -65,6 +65,24 @@ describe("Avatar", () => {
     expect((await upload(token, large)).status).toBe(413);
   });
 
+  it("lets the website upload across origins", async () => {
+    const origin = env.ALLOWED_ORIGINS.split(",")[0]!.trim();
+    const response = await app.fetch(
+      new Request("https://api.zimam.test/v1/me/avatar", {
+        method: "OPTIONS",
+        headers: {
+          Origin: origin,
+          "Access-Control-Request-Method": "PUT",
+          "Access-Control-Request-Headers": "authorization,content-type",
+        },
+      }),
+      env,
+    );
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(origin);
+    expect(response.headers.get("Access-Control-Allow-Methods")?.split(",")).toContain("PUT");
+  });
+
   it("goes with the account", async () => {
     const { token, userId } = await signIn();
     await upload(token, JPEG);

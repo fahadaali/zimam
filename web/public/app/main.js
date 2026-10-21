@@ -47,6 +47,7 @@ import { createTaskPane } from "./task-pane.js";
 import { swipeToDelete } from "./swipe.js";
 import { createPrayers } from "./prayer-view.js";
 import { openSettings } from "./settings-view.js";
+import { showTaskMenu } from "./move-sheet.js";
 
 const APPLE_CLIENT_ID = "app.zimam.ios.web";
 // Google OAuth web client ID (public). Empty hides the Google button. Keep it in the API's GOOGLE_CLIENT_IDS.
@@ -399,6 +400,9 @@ function busy() {
   return !!active && els.view.contains(active) && active.matches("input, select, textarea, :focus-visible");
 }
 
+/** What of the account the screens show, to tell whether another device changed it. */
+const accountKey = (me) => JSON.stringify([me?.settings ?? null, me?.name ?? null, me?.avatarVersion ?? null]);
+
 async function liveRefresh() {
   if (els.shell.hidden) return;
   if (document.hidden) {
@@ -409,7 +413,12 @@ async function liveRefresh() {
     liveTimer = setTimeout(liveRefresh, LIVE_RETRY);
     return;
   }
-  await refreshProjects();
+  // The account too: settings, name or photo changed on another device.
+  const [, me] = await Promise.all([refreshProjects(), api.me().catch(() => null)]);
+  if (me && accountKey(me) !== accountKey(state.me)) {
+    state.me = me;
+    prayers.load();
+  }
   frame.refreshSidebar();
   refreshOpenTask();
   // The import view follows its job itself; re-rendering would reset the form mid-way. The invite
@@ -539,6 +548,11 @@ $("settings-button").addEventListener("click", () =>
     me: () => state.me,
     today: () => state.today,
     saveMe,
+    // The photo changed (settings-view.js): the account button in the toolbar follows.
+    setMe: (me) => {
+      state.me = me;
+      render({ focus: false });
+    },
     openPrayers: () => prayers.openSheet(),
     sync: syncNow,
     signOut: () => els.signout.click(),
@@ -778,6 +792,13 @@ function taskItem(task, options) {
       document.body.classList.add("is-dragging");
     });
     li.addEventListener("dragend", () => document.body.classList.remove("is-dragging"));
+    // «نقل إلى مشروع…» from a context menu: right-click, the Menu key or Shift+F10 (TaskListItem.swift).
+    li.addEventListener("contextmenu", (event) => {
+      if (event.target.closest?.("input, textarea, select, [contenteditable]")) return;
+      event.preventDefault();
+      const returnFocus = event.target.closest?.("button") ?? li.querySelector(".zm-task-open");
+      showTaskMenu(event, task, { projects: () => state.projects, move: moveTask, returnFocus });
+    });
   }
   // In lists on phones, a swipe toward the inline end shows «حذف» (swipe.js).
   if (options.swipe && canEdit(roleFor(task))) {

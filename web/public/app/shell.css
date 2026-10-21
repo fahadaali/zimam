@@ -397,7 +397,7 @@
   cursor: pointer;
 }
 
-/* AvatarView: the initial in brand-ink on brand-soft, with a line border. */
+/* AvatarView: the photo (avatar.js), or the initial in brand-ink on brand-soft, with a line border. */
 .avatar {
   display: inline-grid;
   place-items: center;
@@ -407,6 +407,28 @@
   border-radius: var(--radius-pill);
   background: var(--brand-soft);
   color: var(--brand-ink);
+  overflow: hidden;
+}
+
+.avatar img {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-pill);
+}
+
+/* «تغيير الصورة» and «إزالة الصورة» under the name in «الإعدادات» (settings-view.js). */
+.avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-block-start: var(--space-1);
+}
+
+/* «أستمع…» under «إملاء» in the add sheet (assistant-view.js), only while listening. */
+.dictate-status:empty {
+  display: none;
 }
 
 .account-menu {

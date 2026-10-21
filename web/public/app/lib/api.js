@@ -79,16 +79,19 @@ export async function request(method, path, body) {
   const headers = { Accept: "application/json" };
   const token = currentToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  // A FormData body (a file upload) sets its own multipart Content-Type with the boundary.
+  // A FormData body (a file upload) sets its own multipart Content-Type with the boundary. A Blob
+  // (the account photo) goes as its raw bytes, with its own type.
   const form = typeof FormData !== "undefined" && body instanceof FormData;
-  if (body !== undefined && !form) headers["Content-Type"] = "application/json";
+  const raw = typeof Blob !== "undefined" && body instanceof Blob;
+  if (raw) headers["Content-Type"] = body.type || "application/octet-stream";
+  else if (body !== undefined && !form) headers["Content-Type"] = "application/json";
 
   let response;
   try {
     response = await fetch(apiBase() + path, {
       method,
       headers,
-      body: body === undefined ? undefined : form ? body : JSON.stringify(body),
+      body: body === undefined ? undefined : form || raw ? body : JSON.stringify(body),
       credentials: "omit",
     });
   } catch {
@@ -135,6 +138,28 @@ const query = (params) => {
   return text ? `?${text}` : "";
 };
 
+/** The largest page GET /v1/tasks answers, and how many pages a list reads before it stops. */
+export const TASK_PAGE_SIZE = 500;
+export const TASK_PAGE_LIMIT = 20;
+
+/**
+ * Reads a paged list to its end: asks `fetchPage(offset)` for `{ tasks }` pages while a page comes
+ * back full, up to `maxPages`, and returns `{ tasks }` with every page joined in order.
+ */
+export async function fetchAllPages(fetchPage, { pageSize = TASK_PAGE_SIZE, maxPages = TASK_PAGE_LIMIT } = {}) {
+  const tasks = [];
+  for (let page = 0; page < maxPages; page += 1) {
+    const { tasks: batch = [] } = (await fetchPage(page * pageSize)) ?? {};
+    tasks.push(...batch);
+    if (batch.length < pageSize) break;
+  }
+  return { tasks };
+}
+
+/** Every task matching `params`, read from GET /v1/tasks a full page at a time. */
+export const allTasks = (params = {}) =>
+  fetchAllPages((offset) => request("GET", `/v1/tasks${query({ ...params, limit: TASK_PAGE_SIZE, offset })}`));
+
 export const api = {
   /** `authorizationCode` and `redirectUri` let the API keep Apple's refresh token, revoked when the account is deleted. */
   signIn: (identityToken, nonce, { authorizationCode, redirectUri } = {}) =>
@@ -144,11 +169,16 @@ export const api = {
   me: () => request("GET", "/v1/me"),
   updateMe: (fields) => request("PATCH", "/v1/me", fields),
   deleteMe: () => request("DELETE", "/v1/me"),
+  /** The account photo: JPEG or PNG bytes up to 1 MB (avatar.js makes a 512×512 JPEG); answers the user. */
+  uploadAvatar: (blob) => request("PUT", "/v1/me/avatar", blob.type ? blob : new Blob([blob], { type: "image/jpeg" })),
+  removeAvatar: () => request("DELETE", "/v1/me/avatar"),
+  /** The photo's bytes as a Blob; ApiError 404 when there is none. `version` (avatarVersion) only busts the browser's cache. */
+  avatar: (version) => requestBlob(`/v1/me/avatar${query({ v: version })}`),
   projects: () => request("GET", "/v1/projects"),
   project: (id) => request("GET", `/v1/projects/${encodeURIComponent(id)}`),
   createProject: (name) => request("POST", "/v1/projects", { name }),
   task: (id) => request("GET", `/v1/tasks/${encodeURIComponent(id)}`),
-  tasks: (params = {}) => request("GET", `/v1/tasks${query({ limit: 500, ...params })}`),
+  tasks: (params = {}) => allTasks(params),
   createTask: (task) => request("POST", "/v1/tasks", task),
   completeTask: (id) => request("POST", `/v1/tasks/${encodeURIComponent(id)}/complete`),
   patchTask: (id, fields) => request("PATCH", `/v1/tasks/${encodeURIComponent(id)}`, fields),
