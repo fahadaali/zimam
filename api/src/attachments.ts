@@ -102,10 +102,27 @@ export function storageLimit(env: QuotaVars, plan: Plan["plan"]): number {
   return mb * MB;
 }
 
-/** Bytes of the user's live uploads, on any task. */
+/** Whether the attachment's uploader still sees its task: a member of its project, or the inbox task's owner. */
+const UPLOADER_SEES = `(
+  (a.project_id IS NULL AND EXISTS (SELECT 1 FROM tasks t WHERE t.id = a.task_id AND t.owner_id = a.user_id))
+  OR EXISTS (SELECT 1 FROM project_members m WHERE m.project_id = a.project_id AND m.user_id = a.user_id))`;
+
+/**
+ * Bytes of live attachments the user pays for: their own uploads on tasks they still see, and the
+ * uploads they now own on their projects' and inbox tasks after the uploader lost sight of them
+ * (left or was removed from the project, or the task moved). The owner can delete those files, the
+ * uploader no longer can, so they count against the owner.
+ */
 export async function storageUsed(db: D1Database, userId: string): Promise<number> {
   const row = await db
-    .prepare(`SELECT COALESCE(SUM(size), 0) AS used FROM attachments WHERE user_id = ? AND deleted_at IS NULL`)
+    .prepare(
+      `SELECT COALESCE(SUM(size), 0) AS used FROM attachments a
+       WHERE a.deleted_at IS NULL AND (
+         (a.user_id = ?1 AND ${UPLOADER_SEES})
+         OR (a.user_id <> ?1 AND NOT ${UPLOADER_SEES} AND (
+           a.project_id IN (SELECT id FROM projects WHERE owner_id = ?1 AND deleted_at IS NULL)
+           OR (a.project_id IS NULL AND a.task_id IN (SELECT id FROM tasks WHERE owner_id = ?1 AND project_id IS NULL)))))`,
+    )
     .bind(userId)
     .first<{ used: number }>();
   return row?.used ?? 0;
