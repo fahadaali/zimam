@@ -127,7 +127,7 @@ struct AddTaskButton: View {
         }
         // Brand glass on iOS and macOS 26, the brand circle before (Components/ZimamGlass.swift).
         .zimamFloatingActionStyle()
-        .keyboardShortcut("n", modifiers: .command)
+        // ⌘N is the menu's «مهمة جديدة» (ZimamCommands), which adds where this button does.
         .accessibilityLabel("إضافة مهمة")
         .padding(ZimamSpacing.space4)
     }

@@ -28,7 +28,7 @@ struct WatchTodayView: View {
                     }
                     ForEach(model.tasks, id: \.id) { task in
                         WatchTaskRow(title: task.title, isDone: model.finishing.contains(task.id)) {
-                            Task { await model.complete(task) }
+                            model.toggle(task)
                         }
                     }
                 } header: {
@@ -62,9 +62,18 @@ struct WatchTodayView: View {
             .animation(.zimam(reduceMotion: reduceMotion), value: model.tasks.map(\.id))
             .navigationTitle("اليوم")
         }
-        .task { await model.refresh() }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.refresh() } }
+        // One trigger for launch and each return, so a launch does not fetch twice. Leaving for
+        // the background asks for the next wake that keeps the complications current.
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            switch phase {
+            case .active:
+                WatchRefresh.schedule()
+                Task { await model.refresh() }
+            case .background:
+                WatchRefresh.schedule()
+            default:
+                break
+            }
         }
     }
 
@@ -86,12 +95,7 @@ private struct WatchPrayerRow: View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             if let state = PrayerClock(schedule: schedule).state(at: context.date) {
                 VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
-                    switch state {
-                    case .since(let prayer, _):
-                        Text("مضى على أذان \(prayer.arabicName)")
-                    case .until(let prayer, _):
-                        Text("المتبقي على \(prayer.arabicName)")
-                    }
+                    Text(state.title)
                     Text(state.time, style: .timer)
                         .font(ZimamType.title)
                         .monospacedDigit()
@@ -130,9 +134,8 @@ private struct WatchTaskRow: View {
             .frame(minHeight: ZimamSpacing.space11)
             .animation(.zimamComplete, value: isDone)
         }
-        .disabled(isDone)
-        // Only the tap turns isDone on (a failed push turns it back off), so the haptic
-        // plays on the same frame as the circle fills.
+        // The tap turns isDone on; a second tap within the linger, or a failed push, turns it back
+        // off. The haptic plays only when it turns on, on the same frame as the circle fills.
         .sensoryFeedback(trigger: isDone) { _, done in done ? .success : nil }
         .accessibilityLabel(label)
     }

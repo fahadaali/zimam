@@ -1,4 +1,5 @@
 import Foundation
+import ZimamKit
 
 /// What the Lock Screen widgets (iPhone) and the watch complications show: today's open
 /// tasks in brief, how many are open and how many are done.
@@ -27,10 +28,15 @@ struct GlanceSnapshot: Codable, Equatable {
     var openCount: Int
     /// Top-level tasks due today and already done.
     var doneCount: Int
-    /// The first open tasks, in the Today screen's order. A few are enough to pick the next one.
+    /// What `next(at:)` needs of today's open tasks, in the Today screen's order (`kept`).
     var items: [Item]
 
-    static let maxItems = 8
+    /// What a snapshot keeps of today's open tasks, in the Today order: the first (shown when
+    /// nothing has a time ahead) and every one with a time today, so the soonest is never cut
+    /// however many overdue or untimed tasks come before it.
+    static func kept(_ items: [Item]) -> [Item] {
+        items.enumerated().compactMap { index, item in index == 0 || item.time != nil ? item : nil }
+    }
 
     static func signedOut(day: String) -> GlanceSnapshot {
         GlanceSnapshot(isSignedIn: false, calendar: "hijri", day: day, openCount: 0, doneCount: 0, items: [])
@@ -66,8 +72,16 @@ struct GlanceSnapshot: Codable, Equatable {
 
     /// The moments the next task changes today, for the widget timeline.
     func changeTimes(after date: Date, before end: Date) -> [Date] {
-        let times = Set(items.compactMap(\.time).filter { $0 > date && $0 < end })
-        return Array(times.sorted().prefix(10))
+        Set(items.compactMap(\.time).filter { $0 > date && $0 < end }).sorted()
+    }
+
+    /// A timeline's entry dates (now, then up to `limit` changes) and when to ask for the next
+    /// one: midnight, or the last entry when a busy day has more changes than fit.
+    func timeline(from now: Date, until midnight: Date, limit: Int = 10) -> (dates: [Date], reload: Date) {
+        let times = changeTimes(after: now, before: midnight)
+        let shown = Array(times.prefix(limit))
+        let reload = times.count > shown.count ? (shown.last ?? midnight) : midnight
+        return ([now] + shown, reload)
     }
 
     /// The snapshot as it reads on `day`. One saved on an earlier day still lists open tasks
@@ -121,9 +135,8 @@ extension GlanceSnapshot {
         guard let hhmm else { return nil }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        let clock = hhmm.split(separator: ":").compactMap { Int($0) }
         let date = day.split(separator: "-").compactMap { Int($0) }
-        guard clock.count >= 2, date.count == 3 else { return nil }
-        return calendar.date(from: DateComponents(year: date[0], month: date[1], day: date[2], hour: clock[0], minute: clock[1]))
+        guard let clock = TaskTiming.clockParts(hhmm), date.count == 3 else { return nil }
+        return calendar.date(from: DateComponents(year: date[0], month: date[1], day: date[2], hour: clock.hour, minute: clock.minute))
     }
 }

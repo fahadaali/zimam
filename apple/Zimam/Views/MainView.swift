@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 import ZimamKit
 
-/// The signed-in app. On the iPhone (compact width) the four tabs; on the iPad and the Mac
+/// The signed-in app. On the iPhone (compact width) the five tabs; on the iPad and the Mac
 /// (regular width) two columns, the sidebar and the content across the rest of the window, with
 /// the task's details in an inspector that slides in only while a task is open (on the
 /// trailing side, the left in Arabic), so lists, boards and the timeline get the full width. Where the user is lives here, above both layouts, so it
@@ -14,7 +14,6 @@ struct MainView: View {
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
 
-
     @SceneStorage("main.sidebar") private var sidebar: SidebarItem = .today
     @SceneStorage("main.tab") private var tab: MainTab = .today
     @SceneStorage("main.task") private var selectedTaskId = ""
@@ -25,6 +24,12 @@ struct MainView: View {
     @State private var projectsPath = NavigationPath()
     @State private var searchPath = NavigationPath()
     @State private var newTask: NewTaskRequest?
+    /// ⌘F or «بحث» asked for the search field: `SearchView` focuses it and clears this.
+    @State private var searchFocusPending = false
+    /// The calendar's selected day, for «مهمة جديدة» (⌘N) while the calendar shows.
+    @State private var calendarDay: String?
+    /// ⌫ on the Mac asked to delete the selected task: the same confirmation as its details.
+    @State private var confirmingDelete = false
 
     init() {}
 
@@ -60,14 +65,15 @@ struct MainView: View {
             TaskOpener.shared.pending = nil
             open(taskId: id)
         }
-        // «اليوم», «التقويم» or a day, opened from a widget (App/AppLinks.swift).
+        // «اليوم», «التقويم», a day or «المصفوفة», opened from a widget (App/AppLinks.swift).
         .onChange(of: PlaceOpener.shared.pending, initial: true) { _, link in
             guard let link else { return }
             open(place: link)
         }
         .sheet(item: $newTask) { request in
-            AddTaskView(due: request.due, projectId: request.projectId, sectionId: request.sectionId)
+            AddTaskView(due: request.due, projectId: request.projectId, sectionId: request.sectionId, date: request.date)
         }
+        .environment(\.calendarDayChanged, { day in calendarDay = day })
         #if os(macOS)
         .frame(minWidth: ZimamLayout.windowMinWidth, minHeight: ZimamLayout.windowMinHeight)
         #endif
@@ -85,8 +91,19 @@ struct MainView: View {
             // a kanban card and a timeline bar through `\.taskSelection`. The stack's path is
             // always empty, and a route appended to it becomes the selection.
             NavigationStack(path: contentPath) {
-                ContentColumn(item: sidebar)
+                ContentColumn(item: sidebar, searchFocusPending: $searchFocusPending)
                     .environment(\.taskSelection, selectedTask)
+                    #if os(macOS)
+                    // ⌫ (or Edit › Delete) on the selected task, while the list or the content has
+                    // the focus; a text field keeps ⌫ for itself.
+                    .onDeleteCommand(perform: selectedTask.wrappedValue == nil ? nil : { confirmingDelete = true })
+                    #endif
+            }
+            .confirmationDialog("حذف المهمة؟", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("حذف", role: .destructive, action: deleteSelected)
+                Button("إلغاء", role: .cancel) {}
+            } message: {
+                Text("تُحذف معها مهامها الفرعية وتذكيراتها.")
             }
             .inspector(isPresented: inspectorShown) {
                 TaskInspector(route: selectedTask.wrappedValue, onToggleDone: toggleSelectedDone) {
@@ -154,7 +171,9 @@ struct MainView: View {
                 NavigationStack(path: $projectsPath) { ProjectsView().compactTaskDestination(selectedTask, path: $projectsPath) }
             }
             Tab(value: MainTab.search, role: .search) {
-                NavigationStack(path: $searchPath) { SearchView().compactTaskDestination(selectedTask, path: $searchPath) }
+                NavigationStack(path: $searchPath) {
+                    SearchView(focusPending: $searchFocusPending).compactTaskDestination(selectedTask, path: $searchPath)
+                }
             }
         }
         .tabViewStyle(.sidebarAdaptable)
@@ -165,7 +184,7 @@ struct MainView: View {
 
     // MARK: Changing width
 
-    /// iPhone layout to three columns: the sidebar follows the tab. On the projects tab it
+    /// iPhone layout to the split view: the sidebar follows the tab. On the projects tab it
     /// already names the project opened last (`projectOpened`).
     private func widen() {
         if let item = tab.sidebarItem, sidebar.tab != tab {
@@ -173,7 +192,7 @@ struct MainView: View {
         }
     }
 
-    /// Three columns to the iPhone layout: the tab follows the sidebar, and the open project (or
+    /// The split view to the iPhone layout: the tab follows the sidebar, and the open project (or
     /// the inbox, the timeline or the matrix) and task are pushed onto its stack.
     private func narrow() {
         tab = sidebar.tab
@@ -202,6 +221,8 @@ struct MainView: View {
             let toggleAction: @MainActor () -> Void = { toggleSelectedDone() }
             actions.toggleSelectedDone = toggleAction
         }
+        let syncAction: @MainActor () -> Void = { Task { await sync.sync() } }
+        actions.syncNow = syncAction
         return actions
     }
 
@@ -211,18 +232,30 @@ struct MainView: View {
         } else {
             tab = .search
         }
+        searchFocusPending = true
     }
 
-    /// A new task where the user is: due today in «اليوم», tomorrow in «القادم», in the open
-    /// project or section.
+    /// A new task where the user is: due today in «اليوم» and the timeline (a project's timeline
+    /// too, so it shows as a bar), tomorrow in «القادم», on the calendar's selected day, in the
+    /// open project or section.
     private func newTaskRequest() -> NewTaskRequest {
-        let place: SidebarItem = isRegular ? sidebar : (tab.sidebarItem ?? .inbox)
+        // On the iPhone's projects tab, the project (or inbox, timeline, matrix) opened on it
+        // names itself in `sidebar` (`projectOpened`, `overviewOpened`).
+        let place: SidebarItem = isRegular ? sidebar : (tab.sidebarItem ?? (projectsPath.isEmpty ? .inbox : sidebar))
         switch place {
-        case .today: return NewTaskRequest(due: .today, projectId: nil)
+        case .today, .timeline: return NewTaskRequest(due: .today, projectId: nil)
         case .upcoming: return NewTaskRequest(due: .tomorrow, projectId: nil)
-        case .project(let id): return NewTaskRequest(due: .unscheduled, projectId: id)
+        case .project(let id):
+            let descriptor = FetchDescriptor<ProjectItem>(predicate: #Predicate { $0.id == id })
+            let layout = (try? context.fetch(descriptor).first)?.layoutRaw
+            let due: AddTaskView.Due = layout == ProjectRecord.Layout.timeline.rawValue ? .today : .unscheduled
+            return NewTaskRequest(due: due, projectId: id)
         case .section(let id, let section): return NewTaskRequest(due: .unscheduled, projectId: id, sectionId: section)
-        case .inbox, .calendar, .timeline, .matrix, .search: return NewTaskRequest(due: .unscheduled, projectId: nil)
+        case .calendar:
+            guard let calendarDay else { return NewTaskRequest(due: .today, projectId: nil) }
+            let new = CalendarView.newTask(on: calendarDay, formatter: DualDateFormatter())
+            return NewTaskRequest(due: new.due, projectId: nil, date: new.date)
+        case .inbox, .matrix, .search: return NewTaskRequest(due: .unscheduled, projectId: nil)
         }
     }
 
@@ -242,10 +275,14 @@ struct MainView: View {
         }
     }
 
-    /// Goes to «اليوم» or «التقويم» for a widget link. A day stays pending until `CalendarView`
-    /// selects it.
+    /// Goes to «اليوم», «التقويم» or «المصفوفة» for a widget link. A day stays pending until
+    /// `CalendarView` selects it.
     private func open(place link: AppLink) {
-        let item: SidebarItem = link == .today || link == .prayer ? .today : .calendar
+        let item: SidebarItem = switch link {
+        case .today, .prayer: .today
+        case .matrix: .matrix
+        default: .calendar
+        }
         if PlaceOpener.shared.pendingDay == nil, link != .prayer {
             PlaceOpener.shared.pending = nil
         }
@@ -254,7 +291,25 @@ struct MainView: View {
             return
         }
         tab = item.tab
-        if item == .today { todayPath = NavigationPath() } else { calendarPath = NavigationPath() }
+        switch item {
+        case .today: todayPath = NavigationPath()
+        case .matrix:
+            // On the iPhone the matrix sits at the top of the projects tab (`OverviewRoute`).
+            var path = NavigationPath()
+            path.append(OverviewRoute.matrix)
+            projectsPath = path
+            sidebar = .matrix
+        default: calendarPath = NavigationPath()
+        }
+    }
+
+    /// Deletes the selected task once confirmed, as «حذف المهمة» in its details, and closes the inspector.
+    private func deleteSelected() {
+        guard let id = selectedTask.wrappedValue?.id else { return }
+        let descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.id == id })
+        guard let task = try? context.fetch(descriptor).first, !task.pendingDelete else { return }
+        Store(context: context, sync: sync).delete(task)
+        selectedTaskId = ""
     }
 
     private func toggleSelectedDone() {
@@ -273,11 +328,14 @@ struct NewTaskRequest: Identifiable {
     let due: AddTaskView.Due
     let projectId: UUID?
     var sectionId: UUID? = nil
+    /// The day a `.pickedDate` opens on: the calendar's selected day.
+    var date: Date = Date()
 }
 
 /// The middle column for the sidebar's choice.
 private struct ContentColumn: View {
     let item: SidebarItem
+    @Binding var searchFocusPending: Bool
 
     var body: some View {
         switch item {
@@ -287,7 +345,7 @@ private struct ContentColumn: View {
         case .calendar: CalendarView()
         case .timeline: GanttView(projectId: nil)
         case .matrix: MatrixView()
-        case .search: SearchView()
+        case .search: SearchView(focusPending: $searchFocusPending)
         case .project(let id): ProjectDetailView(projectId: id).id(item)
         case .section(let project, let section): ProjectDetailView(projectId: project, sectionId: section).id(item)
         }
@@ -338,8 +396,9 @@ private struct TaskDetailBody: View {
     }
 }
 
-/// «إنجاز» or «إلغاء الإنجاز» in the toolbar of a task's details, with ⌘↩. The inspector passes
-/// its own action (the menu's «إنجاز المهمة المحددة»); elsewhere the button completes the task.
+/// «إنجاز» or «إلغاء الإنجاز» in the toolbar of a task's details. The inspector passes its own
+/// action, whose ⌘↩ is the menu's «إنجاز المهمة المحددة»; elsewhere (the details pushed on the
+/// iPhone, where the menu has no selected task) the button completes the task and carries ⌘↩.
 struct CompleteToolbarButton: View {
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
@@ -363,7 +422,7 @@ struct CompleteToolbarButton: View {
                 }
             }
             .zimamProminentToolbarAction()
-            .keyboardShortcut(.return, modifiers: .command)
+            .keyboardShortcut(action == nil ? KeyboardShortcut(.return, modifiers: .command) : nil)
         }
     }
 

@@ -34,6 +34,8 @@ struct TodayWidgetView: View {
         .font(ZimamType.body)
         .foregroundStyle(ZimamColor.ink)
         .containerBackground(ZimamColor.surfaceRaised, for: .widget)
+        // Outside a task's title (which opens the task), a tap opens «اليوم», not the last screen.
+        .widgetURL(AppLink.today.url)
     }
 }
 
@@ -53,8 +55,9 @@ private struct SmallTodayView: View {
                 .lineLimit(1)
                 .widgetAccentable()
             Spacer(minLength: 0)
-            if let next = entry.tasks.first {
-                WidgetTaskRow(task: next, tone: tone, lineLimit: 2)
+            if let next = entry.next {
+                // The small size opens only through `widgetURL`, so the title is not a link.
+                WidgetTaskRow(task: next, tone: tone, lineLimit: 2, opensTask: false)
             } else {
                 Text("يومك لك.")
                     .font(ZimamType.callout)
@@ -138,7 +141,9 @@ private struct LargeTodayView: View {
 
             if let next, let prayer = next.prayer {
                 VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
-                    WidgetPrayerChip(text: PrayerPhrase.text(prayer, offsetMinutes: next.prayerOffset, locale: formatter.locale),
+                    let phrase = PrayerPhrase.text(prayer, offsetMinutes: next.prayerOffset, locale: formatter.locale)
+                    // «بعد العصر بـ٢٠ د، ٣:٤٥ م», as on the Lock Screen; the phrase alone without a place.
+                    WidgetPrayerChip(text: entry.nextPrayerTime.map { "\(phrase)، \(formatter.time($0))" } ?? phrase,
                                      tone: tone)
                     WidgetTaskRow(task: next, tone: tone)
                 }
@@ -169,11 +174,12 @@ private struct LargeTodayView: View {
 }
 
 /// A simplified task row: the completion circle (an App Intent button, so it works without
-/// opening the app) and the title.
+/// opening the app) and the title, which opens the task where the size allows links.
 struct WidgetTaskRow: View {
     let task: WidgetTask
     let tone: WidgetTone
     var lineLimit = 1
+    var opensTask = true
 
     var body: some View {
         HStack(spacing: ZimamSpacing.space1) {
@@ -187,13 +193,22 @@ struct WidgetTaskRow: View {
             .buttonStyle(.plain)
             .accessibilityLabel("إنجاز \(task.title)")
 
-            Text(task.title)
-                .font(ZimamType.callout)
-                .foregroundStyle(tone.ink)
-                .lineLimit(lineLimit)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if opensTask {
+                Link(destination: AppLink.task(task.id).url) { title }
+            } else {
+                title
+            }
         }
         .frame(minHeight: ZimamSpacing.space11)
+    }
+
+    private var title: some View {
+        Text(task.title)
+            .font(ZimamType.callout)
+            .foregroundStyle(tone.ink)
+            .lineLimit(lineLimit)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
     }
 }
 

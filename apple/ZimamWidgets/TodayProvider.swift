@@ -19,8 +19,13 @@ struct TodayEntry: TimelineEntry {
     let calendar: CalendarKind
     /// Today's open tasks, overdue ones first.
     let tasks: [WidgetTask]
+    /// The small widget's next task, by the Lock Screen's rule (`GlanceSnapshot.next(at:)`): the
+    /// soonest time still ahead today, otherwise the first in the Today order.
+    let next: WidgetTask?
     /// The prayer-anchored task due next today, for the large widget's prayer chip.
     let nextPrayerTask: WidgetTask?
+    /// That task's prayer time, when the place is known: the chip shows it after the phrase.
+    var nextPrayerTime: Date? = nil
 
     static let placeholder = TodayEntry(
         date: Date(),
@@ -32,13 +37,15 @@ struct TodayEntry: TimelineEntry {
             WidgetTask(id: UUID(), title: "شراء هدية", prayer: nil, prayerOffset: nil, isOverdue: false),
             WidgetTask(id: UUID(), title: "قراءة ورد اليوم", prayer: .fajr, prayerOffset: 0, isOverdue: false),
         ],
+        next: WidgetTask(id: UUID(), title: "مراجعة العقد", prayer: .asr, prayerOffset: 20, isOverdue: false),
         nextPrayerTask: WidgetTask(id: UUID(), title: "مراجعة العقد", prayer: .asr, prayerOffset: 20, isOverdue: false)
     )
 }
 
-/// Builds the timeline from the shared store: one entry now, one at each prayer-anchored
-/// task's time today (so the large widget moves to the next one), and a new timeline at
-/// midnight. The app reloads it after every change.
+/// Builds the timeline from the shared store: one entry now, one at each task's time today, by
+/// the clock or its prayer (so the small widget's next task and the large widget's prayer task
+/// move on), and a new timeline at midnight, or at the last entry on a day with more times than
+/// one timeline holds. The app reloads it after every change.
 struct TodayProvider: TimelineProvider {
     func placeholder(in context: Context) -> TodayEntry {
         .placeholder
@@ -56,9 +63,11 @@ struct TodayProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<TodayEntry>) -> Void) {
         let now = Date()
         let data = TodayData.load(now: now)
-        let dates = [now] + data.upcomingTimes(after: now)
-        let entries = dates.map { data.entry(at: $0) }
-        completion(Timeline(entries: entries, policy: .after(data.nextMidnight)))
+        let times = data.upcomingTimes(after: now)
+        let shown = Array(times.prefix(TodayData.maxTimes))
+        let entries = ([now] + shown).map { data.entry(at: $0) }
+        let reload = times.count > shown.count ? (shown.last ?? data.nextMidnight) : data.nextMidnight
+        completion(Timeline(entries: entries, policy: .after(reload)))
     }
 }
 
@@ -69,7 +78,12 @@ struct TodayData {
     let tasks: [WidgetTask]
     /// When each of today's prayer-anchored tasks falls, when the place is known.
     let prayerTimes: [UUID: Date]
+    /// When each of today's tasks with a clock time falls.
+    let clockTimes: [UUID: Date]
     let nextMidnight: Date
+
+    /// How many times ahead one timeline holds.
+    static let maxTimes = 10
 
     static func load(now: Date) -> TodayData {
         let today = TodayTasks.todayString(now)
@@ -82,27 +96,45 @@ struct TodayData {
 
         var times: [UUID: Date] = [:]
         if let schedule = SharedSettings.prayerSchedule() {
+            let noon = Calendar.current.startOfDay(for: now).addingTimeInterval(12 * 3600)
             for task in tasks where !task.isOverdue {
                 guard let prayer = task.prayer else { continue }
-                times[task.id] = schedule.time(of: prayer, on: now, offsetMinutes: task.prayerOffset ?? 0)
+                times[task.id] = schedule.time(of: prayer, on: noon, offsetMinutes: task.prayerOffset ?? 0)
             }
+        }
+        var clock: [UUID: Date] = [:]
+        for item in items where item.duePrayer == nil && (item.dueDate ?? today) >= today {
+            if let time = GlanceSnapshot.time(item.dueTime, onDay: today) { clock[item.id] = time }
         }
 
         let user = SharedSettings.user()
         let calendar = Calendar.current
         let midnight = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now.addingTimeInterval(3600)
         return TodayData(isSignedIn: user != nil, calendar: user?.settings.calendar ?? .hijri, tasks: tasks,
-                         prayerTimes: times, nextMidnight: midnight)
+                         prayerTimes: times, clockTimes: clock, nextMidnight: midnight)
     }
 
-    /// Today's prayer-anchored times still ahead, each a moment the next prayer task changes.
+    /// Today's task times still ahead, by the clock or a prayer: each a moment the next task changes.
     func upcomingTimes(after now: Date) -> [Date] {
-        let ahead = Set(prayerTimes.values.filter { $0 > now && $0 < nextMidnight })
-        return Array(ahead.sorted().prefix(10))
+        Set((Array(prayerTimes.values) + clockTimes.values).filter { $0 > now && $0 < nextMidnight }).sorted()
     }
 
     func entry(at date: Date) -> TodayEntry {
-        TodayEntry(date: date, isSignedIn: isSignedIn, calendar: calendar, tasks: tasks, nextPrayerTask: nextPrayerTask(at: date))
+        let prayerTask = nextPrayerTask(at: date)
+        return TodayEntry(date: date, isSignedIn: isSignedIn, calendar: calendar, tasks: tasks, next: next(at: date),
+                          nextPrayerTask: prayerTask, nextPrayerTime: prayerTask.flatMap { prayerTimes[$0.id] })
+    }
+
+    /// As `GlanceSnapshot.next(at:)`, ties included (the tasks are in the Today order): the
+    /// soonest time still ahead, otherwise the first task.
+    private func next(at date: Date) -> WidgetTask? {
+        let times = prayerTimes.merging(clockTimes) { prayer, _ in prayer }
+        var best: (task: WidgetTask, time: Date)?
+        for task in tasks {
+            guard let time = times[task.id], time > date else { continue }
+            if best == nil || time < best!.time { best = (task, time) }
+        }
+        return best?.task ?? tasks.first
     }
 
     /// The prayer-anchored task due next. Without a saved place, the first by prayer order.

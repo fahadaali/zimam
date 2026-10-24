@@ -95,6 +95,9 @@ struct AddTaskFromSentenceIntent: AppIntent {
         if let spoken = reading.suggestion.place {
             message += " " + (await Self.addPlaceReminder(spoken, to: task, reading: reading, formatter: formatter))
         }
+        // The reminders are replanned and the task sent before Siri answers: the system may
+        // suspend the app right after.
+        await LiveSync.flush?(LiveSync.sentenceWait)
         return message
     }
 

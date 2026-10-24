@@ -149,27 +149,6 @@ struct MatrixView: View {
     }
 }
 
-extension PriorityQuadrant {
-    /// The quadrant's color, never alone: its name and icon go with it.
-    var color: Color {
-        switch self {
-        case .urgentImportant: ZimamColor.quadrantUrgentImportant
-        case .important: ZimamColor.quadrantImportant
-        case .urgent: ZimamColor.quadrantUrgent
-        case .someday: ZimamColor.quadrantSomeday
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .urgentImportant: "flame"
-        case .important: "calendar"
-        case .urgent: "bolt"
-        case .someday: "line.3.horizontal"
-        }
-    }
-}
-
 /// The inbox, the timeline or the matrix pushed on the iPhone's projects tab.
 struct OverviewScreen: View {
     let route: OverviewRoute

@@ -124,6 +124,14 @@ public final class APIClient: Sendable {
         return response.tasks
     }
 
+    /// `GET /v1/tasks/:id/reminders`: the user's own reminders on a task, oldest first. The watch
+    /// reads them to give a recurring task's next occurrence the same reminders.
+    public func taskReminders(_ taskId: UUID) async throws -> [ReminderRecord] {
+        struct Response: Decodable { let reminders: [ReminderRecord] }
+        let response: Response = try await send("GET", "v1/tasks/\(Self.path(taskId))/reminders")
+        return response.reminders
+    }
+
     /// Changes after `cursor`, oldest first. Repeat with the returned cursor while `hasMore`.
     /// `include=timeline`: projects shown as «المخطط الزمني» come as they are, which builds before
     /// it could not decode (the server sends them "list").

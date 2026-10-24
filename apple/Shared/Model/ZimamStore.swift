@@ -112,4 +112,6 @@ enum LiveSync {
     /// How long an intent waits for its edit to go out: Siri and a widget's button answer only
     /// once it returns, and the system ends an intent that takes too long.
     static let intentWait: Duration = .seconds(5)
+    /// Shorter for a task said as a sentence, which may already have waited for the assistant.
+    static let sentenceWait: Duration = .seconds(3)
 }

@@ -105,7 +105,7 @@ struct PrayerAlertSection: View {
                 .frame(minHeight: ZimamSpacing.space11)
             if alert.iqama {
                 Stepper(value: $alert.iqamaMinutes, in: PrayerAlert.iqamaRange, step: 5) {
-                    Text("بعد الأذان بـ\(minutes(alert.iqamaMinutes)) دقيقة")
+                    Text("بعد الأذان بـ\(ArabicCount.minutes(alert.iqamaMinutes, locale: ZimamLocale.current))")
                 }
                 .frame(minHeight: ZimamSpacing.space11)
             }
@@ -114,9 +114,17 @@ struct PrayerAlertSection: View {
         }
         .disabled(session.user == nil)
     }
+}
 
-    private func minutes(_ value: Int) -> String {
-        value.formatted(.number.locale(ZimamLocale.current).grouping(.never))
+extension ArabicCount {
+    /// «٥ دقائق»، «١٠ دقائق»، «١٥ دقيقة»: the iqama wait (`PrayerAlert.iqamaRange`, 5...60), after «بـ».
+    /// One and two are left out: after «بـ» they would read «بدقيقة» and «بدقيقتين».
+    static func minutes(_ count: Int, locale: Locale) -> String {
+        let number = count.formatted(.number.locale(locale).grouping(.never))
+        switch count % 100 {
+        case 3...10: return "\(number) دقائق"
+        default: return "\(number) دقيقة"
+        }
     }
 }
 

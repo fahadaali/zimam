@@ -32,19 +32,29 @@ struct WidgetSnapshot {
         items.first { $0.id == id }
     }
 
+    /// How many task times one timeline holds; a busy day asks for a new one at the last.
+    private static let maxTimes = 12
+
     /// Today's task times still ahead: moments a widget shows something new.
     func timesAhead(of now: Date) -> [Date] {
-        let times = Set(items.compactMap { item -> Date? in
+        Set(items.compactMap { item -> Date? in
             guard item.dueDay == today, let time = item.time, time > now, time < nextMidnight else { return nil }
             return time
-        })
-        return Array(times.sorted().prefix(12))
+        }).sorted()
     }
 
-    /// An entry now, one at each of today's task times ahead when `atTaskTimes`; the timeline
-    /// ends at midnight. The app also reloads the widgets after every change.
+    /// An entry now, one at each of today's task times ahead when `atTaskTimes` (at most
+    /// `maxTimes`); the timeline ends at `reloadDate(now:)`. The app also reloads the widgets
+    /// after every change.
     func entryDates(now: Date, atTaskTimes: Bool) -> [Date] {
-        atTaskTimes ? [now] + timesAhead(of: now) : [now]
+        atTaskTimes ? [now] + timesAhead(of: now).prefix(Self.maxTimes) : [now]
+    }
+
+    /// When to ask for a new timeline: midnight, or the last entry when today has more task
+    /// times ahead than one timeline holds.
+    func reloadDate(now: Date) -> Date {
+        let times = timesAhead(of: now)
+        return times.count > Self.maxTimes ? times[Self.maxTimes - 1] : nextMidnight
     }
 
     // MARK: Reading the store
@@ -142,8 +152,7 @@ private struct DayContext {
             return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
         }
         guard let prayer else { return nil }
-        // Without a place: roughly where each prayer falls, only to keep the order of the day.
-        let approximate: [Prayer: Int] = [.fajr: 300, .dhuhr: 720, .asr: 930, .maghrib: 1080, .isha: 1200]
-        return (approximate[prayer] ?? 0) + (offset ?? 0)
+        // Without a place: the usual time each prayer falls at, as the app's lists order by.
+        return TaskTiming.usualMinute(of: prayer) + (offset ?? 0)
     }
 }

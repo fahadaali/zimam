@@ -154,6 +154,10 @@ private struct TaskCompleteInToolbarKey: EnvironmentKey {
     static let defaultValue = true
 }
 
+private struct CalendarDayChangedKey: EnvironmentKey {
+    static let defaultValue: ((String) -> Void)? = nil
+}
+
 extension EnvironmentValues {
     /// The task shown in the details column on the iPad and the Mac. Lists bind it with
     /// `List(selection:)`, so a row's `NavigationLink(value: TaskRoute)` selects the task
@@ -185,6 +189,13 @@ extension EnvironmentValues {
         set { self[OverviewOpenedKey.self] = newValue }
     }
 
+    /// Told when the calendar's selected day changes, so the menu's «مهمة جديدة» (⌘N) adds on
+    /// that day, as the calendar's own add button does.
+    var calendarDayChanged: ((String) -> Void)? {
+        get { self[CalendarDayChangedKey.self] }
+        set { self[CalendarDayChangedKey.self] = newValue }
+    }
+
     /// Whether a task's details show «إنجاز» in their own toolbar. Off in the inspector on the
     /// iPad and the Mac, whose toolbar has the button that the menu's ⌘↩ also presses.
     var taskCompleteInToolbar: Bool {
@@ -195,14 +206,16 @@ extension EnvironmentValues {
 
 // MARK: Menu commands
 
-/// What the window's menu commands act on (⌘N, ⌘F, ⌘↩), published by `MainView`.
-/// The window's commands for the Mac menu. They change the window's state, so they run on
-/// the main actor, as the menu calls them.
+/// What the window's menu commands act on (⌘N, ⌘F, ⌘↩, ⌘R), published by `MainView`: the menu
+/// bar on the Mac, and on the iPad the keyboard's shortcuts (held ⌘ lists them). They change the
+/// window's state, so they run on the main actor, as the menu calls them.
 struct ZimamSceneActions {
     var newTask: @MainActor () -> Void
     var search: @MainActor () -> Void
     /// Completes or reopens the selected task; nil when no task is selected.
     var toggleSelectedDone: (@MainActor () -> Void)? = nil
+    /// «مزامنة الآن», as in the account menu.
+    var syncNow: (@MainActor () -> Void)? = nil
 }
 
 private struct ZimamActionsKey: FocusedValueKey {
@@ -216,16 +229,18 @@ extension FocusedValues {
     }
 }
 
-/// The Mac menu: «مهمة جديدة» in the File menu in place of «New Window», and a «المهام» menu.
+/// The menu, the one source of the shortcuts on the Mac and the iPad: «مهمة جديدة» in the File
+/// menu (on the Mac in place of «New Window»; on the iPad after it, which stays for a second
+/// window), and a «المهام» menu.
 struct ZimamCommands: Commands {
     @FocusedValue(\.zimamActions) private var actions
 
     var body: some Commands {
-        CommandGroup(replacing: .newItem) {
-            Button("مهمة جديدة") { actions?.newTask() }
-                .keyboardShortcut("n", modifiers: .command)
-                .disabled(actions == nil)
-        }
+        #if os(macOS)
+        CommandGroup(replacing: .newItem) { newTask }
+        #else
+        CommandGroup(after: .newItem) { newTask }
+        #endif
         CommandMenu("المهام") {
             Button("بحث") { actions?.search() }
                 .keyboardShortcut("f", modifiers: .command)
@@ -233,6 +248,15 @@ struct ZimamCommands: Commands {
             Button("إنجاز المهمة المحددة") { actions?.toggleSelectedDone?() }
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(actions?.toggleSelectedDone == nil)
+            Button("مزامنة الآن") { actions?.syncNow?() }
+                .keyboardShortcut("r", modifiers: .command)
+                .disabled(actions?.syncNow == nil)
         }
+    }
+
+    private var newTask: some View {
+        Button("مهمة جديدة") { actions?.newTask() }
+            .keyboardShortcut("n", modifiers: .command)
+            .disabled(actions == nil)
     }
 }

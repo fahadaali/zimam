@@ -21,6 +21,7 @@ struct TodayView: View {
     }
 
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.prayerScheduleZimam) private var schedule
     @Environment(\.taskSelection) private var taskSelection
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder), SortDescriptor(\TaskItem.createdAt)])
@@ -33,12 +34,12 @@ struct TodayView: View {
 
     private var items: [TaskItem] {
         let today = formatter.dayString(from: DayClock.shared.now)
-        return tasks
-            .filter { task in
-                guard task.parentId == nil, let due = task.dueDate, due <= today else { return false }
-                return !task.isDone || lingering.contains(task.id)
-            }
-            .sorted { ($0.dueDate ?? "", $0.dueTime ?? "") < ($1.dueDate ?? "", $1.dueTime ?? "") }
+        let open = tasks.filter { task in
+            guard task.parentId == nil, let due = task.dueDate, due <= today else { return false }
+            return !task.isDone || lingering.contains(task.id)
+        }
+        // By day, then untimed, then by clock or prayer time, as the calendar and the widgets.
+        return TodayTasks.ordered(open, schedule: schedule, formatter: formatter)
     }
 
     private var todayEvents: [ShownEvent] {

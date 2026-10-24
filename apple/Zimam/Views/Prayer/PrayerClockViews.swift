@@ -21,14 +21,8 @@ struct PrayerClockCard: View {
 
     private func content(_ state: PrayerClock.State) -> some View {
         VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
-            switch state {
-            case .since(let prayer, _):
-                Text("مضى على أذان \(prayer.arabicName)")
-                    .font(ZimamType.callout)
-            case .until(let prayer, _):
-                Text("المتبقي على \(prayer.arabicName)")
-                    .font(ZimamType.callout)
-            }
+            Text(state.title)
+                .font(ZimamType.callout)
             Text(state.time, style: .timer)
                 .font(ZimamType.display)
                 .monospacedDigit()

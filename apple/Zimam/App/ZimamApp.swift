@@ -124,6 +124,11 @@ struct ZimamApp: App {
                     .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                         if let url = activity.webpageURL { InviteLinks.shared.open(url) }
                     }
+                    #if os(macOS)
+                    // Widget links, invite links and the import callback go to the open window
+                    // instead of opening a new one.
+                    .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
+                    #endif
             }
         }
         .modelContainer(container)
@@ -132,10 +137,9 @@ struct ZimamApp: App {
             await BackgroundRefresh.run()
         }
         #endif
-        #if os(macOS)
-        // «مهمة جديدة» (⌘N) and the «المهام» menu (AppNavigation.swift).
+        // «مهمة جديدة» (⌘N) and the «المهام» menu (AppNavigation.swift): the Mac's menu bar, and
+        // the iPad's keyboard shortcuts.
         .commands { ZimamCommands() }
-        #endif
 
         #if os(macOS)
         // ⌘, opens the settings in their own window.

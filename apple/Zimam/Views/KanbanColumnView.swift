@@ -28,6 +28,8 @@ struct KanbanColumnView: View {
     @State private var cardHeights: [UUID: CGFloat] = [:]
     /// The card whose «نقل إلى مشروع…» sheet is open.
     @State private var movingToProject: ProjectMoveRequest?
+    /// The cards' full height, which caps the scroll view so the column hugs them.
+    @State private var cardsHeight: CGFloat?
 
     private var store: Store { Store(context: context, sync: sync) }
 
@@ -48,7 +50,7 @@ struct KanbanColumnView: View {
         self.onRename = onRename
     }
 
-    /// The cards, the drop gap and «إضافة مهمة», with or without the column's scroll view.
+    /// The cards, the drop gap and «إضافة مهمة», inside the column's scroll view.
     private var cards: some View {
         VStack(spacing: ZimamSpacing.space2) {
             ForEach(Array(column.tasks.enumerated()), id: \.element.id) { index, task in
@@ -69,10 +71,15 @@ struct KanbanColumnView: View {
             KanbanColumnHeader(column: column, canMoveEarlier: canMoveEarlier, canMoveLater: canMoveLater,
                                onRename: onRename)
             // The column is as tall as its cards, and scrolls only once they outgrow the screen.
-            ViewThatFits(in: .vertical) {
+            // One scroll view, so «إضافة مهمة» keeps its field and focus when the column crosses that height.
+            ScrollView(.vertical) {
                 cards
-                ScrollView(.vertical) { cards }
+                    .onGeometryChange(for: CGFloat.self) { proxy in proxy.size.height } action: { height in
+                        cardsHeight = height
+                    }
             }
+            .frame(maxHeight: cardsHeight)
+            .scrollBounceBehavior(.basedOnSize)
         }
         .padding(ZimamSpacing.space3)
         .frame(width: ZimamLayout.kanbanColumnWidth)

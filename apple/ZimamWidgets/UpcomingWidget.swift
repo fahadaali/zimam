@@ -40,7 +40,7 @@ struct UpcomingProvider: TimelineProvider {
         let now = Date()
         let snapshot = WidgetSnapshot.load(now: now)
         let entries = snapshot.entryDates(now: now, atTaskTimes: true).map { UpcomingEntry(date: $0, snapshot: snapshot) }
-        completion(Timeline(entries: entries, policy: .after(snapshot.nextMidnight)))
+        completion(Timeline(entries: entries, policy: .after(snapshot.reloadDate(now: now))))
     }
 }
 

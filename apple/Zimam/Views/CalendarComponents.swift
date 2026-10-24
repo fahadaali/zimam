@@ -691,13 +691,16 @@ struct SpanLanes: View {
     }
 }
 
-/// A task in a week column: its title, and its prayer chip or clock time.
+/// A task in a week column: its title, and its prayer chip or clock time. The prayer chip shows
+/// the time the prayer gives on the task's day with the phrase, as in a task row; the phrase alone
+/// without a place (design/components/PrayerChip).
 private struct WeekTaskCard: View {
     let task: TaskItem
     let onMove: (UUID) -> Void
     let onComplete: () -> Void
 
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.prayerScheduleZimam) private var schedule
 
     var body: some View {
         TaskOpenLink(taskId: task.id) {
@@ -709,7 +712,13 @@ private struct WeekTaskCard: View {
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
                 if let prayer = task.duePrayer {
-                    PrayerChip(text: PrayerPhrase.text(prayer, offsetMinutes: task.duePrayerOffset, locale: formatter.locale))
+                    let phrase = PrayerPhrase.text(prayer, offsetMinutes: task.duePrayerOffset, locale: formatter.locale)
+                    if let time = TaskTiming.shownTime(of: task.timeMode, dueDay: task.dueDate, schedule: schedule,
+                                                       formatter: formatter) {
+                        PrayerChip(text: formatter.time(time), phrase: phrase)
+                    } else {
+                        PrayerChip(text: phrase)
+                    }
                 } else if let time = clockTime {
                     Text(time)
                         .font(ZimamType.caption)
@@ -727,12 +736,8 @@ private struct WeekTaskCard: View {
 
     /// The task's "15:30" in the locale's clock: «٣:٣٠ م».
     private var clockTime: String? {
-        guard let time = task.dueTime, let dueDate = task.dueDate, let day = formatter.date(fromDay: dueDate) else { return nil }
-        let parts = time.split(separator: ":").compactMap { Int($0) }
-        guard parts.count >= 2 else { return nil }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = formatter.timeZone
-        guard let date = calendar.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: day) else { return nil }
+        guard let time = task.dueTime, let dueDate = task.dueDate,
+              let date = TaskTiming.time(of: .clock(time), on: dueDate, schedule: nil, formatter: formatter) else { return nil }
         return formatter.time(date)
     }
 }

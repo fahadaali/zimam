@@ -19,6 +19,7 @@ struct UpcomingView: View {
     }
 
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.prayerScheduleZimam) private var schedule
     @Environment(\.taskSelection) private var taskSelection
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder)])
@@ -31,7 +32,8 @@ struct UpcomingView: View {
         let today = formatter.dayString(from: DayClock.shared.now)
         let upcoming = tasks.filter { (!$0.isDone || lingering.contains($0.id)) && $0.parentId == nil && ($0.dueDate ?? "") > today }
         return Dictionary(grouping: upcoming) { $0.dueDate ?? "" }
-            .map { DayGroup(day: $0.key, tasks: $0.value) }
+            // Each day as Today orders it: untimed first, then by clock or prayer time.
+            .map { DayGroup(day: $0.key, tasks: TodayTasks.ordered($0.value, schedule: schedule, formatter: formatter)) }
             .sorted { $0.day < $1.day }
     }
 

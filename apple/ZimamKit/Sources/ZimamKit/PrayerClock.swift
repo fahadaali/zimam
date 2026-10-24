@@ -22,6 +22,15 @@ public struct PrayerClock: Sendable {
             case .until(_, let time): time
             }
         }
+
+        /// «المتبقي على العصر» or «مضى على أذان العصر»: the line above the countdown, the same on
+        /// the app's prayer card, the widgets, the Lock Screen and the watch.
+        public var title: String {
+            switch self {
+            case .since(let prayer, _): "مضى على أذان \(prayer.arabicName)"
+            case .until(let prayer, _): "المتبقي على \(prayer.arabicName)"
+            }
+        }
     }
 
     /// How long after the adhan the clock counts up before moving on to the next prayer.

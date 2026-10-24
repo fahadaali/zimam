@@ -68,6 +68,16 @@ enum WidgetQuadrant: String, CaseIterable {
         }
     }
 
+    /// The shared quadrant, whose icon and color the matrix screen uses too (QuadrantStyle.swift).
+    var shared: ZimamKit.PriorityQuadrant {
+        switch self {
+        case .importantUrgent: .urgentImportant
+        case .important: .important
+        case .urgent: .urgent
+        case .someday: .someday
+        }
+    }
+
     var title: String {
         switch self {
         case .importantUrgent: "مهم وعاجل"
@@ -77,24 +87,10 @@ enum WidgetQuadrant: String, CaseIterable {
         }
     }
 
-    var symbol: String {
-        switch self {
-        case .importantUrgent: "flame"
-        case .important: "star"
-        case .urgent: "bolt"
-        case .someday: "tray"
-        }
-    }
+    var symbol: String { shared.systemImage }
 
     /// The quadrant's color: the priority tokens, from the most pressing down; neutral for «يوماً ما».
-    var color: Color {
-        switch self {
-        case .importantUrgent: ZimamColor.quadrantUrgentImportant
-        case .important: ZimamColor.quadrantImportant
-        case .urgent: ZimamColor.quadrantUrgent
-        case .someday: ZimamColor.quadrantSomeday
-        }
-    }
+    var color: Color { shared.color }
 }
 
 /// Arabic text for a priority, so it is never told by color alone.
@@ -107,14 +103,16 @@ func priorityLabel(_ priority: TaskPriority) -> String? {
     }
 }
 
-/// When a task falls, as a list row shows it: its prayer phrase, its time today, a word for a
-/// nearby day, or both calendars further out; «متأخرة» once its day has gone.
+/// When a task falls, as a list row shows it: its prayer phrase with the prayer's computed time
+/// when the place is known (as on the Lock Screen), its time today, a word for a nearby day, or
+/// both calendars further out; «متأخرة» once its day has gone.
 func widgetWhenText(_ item: WidgetItem, snapshot: WidgetSnapshot, now: Date) -> String? {
     guard let due = item.dueDay else { return nil }
     let formatter = snapshot.formatter
     if due < snapshot.today { return "متأخرة" }
     if let prayer = item.prayer {
-        let phrase = PrayerPhrase.text(prayer, offsetMinutes: item.prayerOffset, locale: formatter.locale)
+        var phrase = PrayerPhrase.text(prayer, offsetMinutes: item.prayerOffset, locale: formatter.locale)
+        if let time = item.time { phrase = "\(phrase)، \(formatter.time(time))" }
         if due == snapshot.today { return phrase }
         guard let date = formatter.date(fromDay: due) else { return phrase }
         return "\(formatter.label(for: date, now: now))، \(phrase)"

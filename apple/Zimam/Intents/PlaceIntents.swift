@@ -130,9 +130,11 @@ struct AddPlaceReminderIntent: AppIntent {
         store.addLocationReminder(to: task.id, place: copy, at: at)
 
         let action = LocationReminderPlanner.placeText(copy)
-        if let at {
-            return .result(dialog: "أُضيفت «\(task.title)». سأذكّرك \(action) أو \(formatter.label(for: at)) \(formatter.time(at))، أيهما أسبق.")
-        }
-        return .result(dialog: "أُضيفت «\(task.title)». سأذكّرك \(action).")
+        let message = at.map { "أُضيفت «\(task.title)». سأذكّرك \(action) أو \(formatter.label(for: $0)) \(formatter.time($0))، أيهما أسبق." }
+            ?? "أُضيفت «\(task.title)». سأذكّرك \(action)."
+        // The place is registered and the task sent before Siri answers: the system may suspend
+        // the app right after.
+        await LiveSync.flush?(LiveSync.intentWait)
+        return .result(dialog: "\(message)")
     }
 }

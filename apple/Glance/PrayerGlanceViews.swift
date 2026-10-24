@@ -53,14 +53,6 @@ private struct PrayerGlanceStyle {
     }
 }
 
-/// «المتبقي على العصر» or «مضى على أذان العصر».
-func prayerStateTitle(_ state: PrayerClock.State) -> String {
-    switch state {
-    case .since(let prayer, _): "مضى على أذان \(prayer.arabicName)"
-    case .until(let prayer, _): "المتبقي على \(prayer.arabicName)"
-    }
-}
-
 private let noPlaceText = "حدّد موقعك في زمام"
 
 // MARK: Circular
@@ -85,7 +77,7 @@ private struct PrayerCircular: View {
             }
             .foregroundStyle(style.prayer)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(prayerStateTitle(state))
+            .accessibilityLabel(state.title)
         } else {
             Image(systemName: "moon.stars")
                 .font(ZimamType.title)
@@ -111,7 +103,7 @@ private struct PrayerRectangular: View {
                 HStack(spacing: ZimamSpacing.space1) {
                     Image(systemName: "moon.stars")
                         .accessibilityHidden(true)
-                    Text(prayerStateTitle(state))
+                    Text(state.title)
                         .lineLimit(1)
                 }
                 .font(ZimamType.caption)
@@ -173,7 +165,7 @@ private struct PrayerCorner: View {
                 .font(ZimamType.caption)
                 .monospacedDigit()
                 .widgetAccentable()
-                .widgetLabel(prayerStateTitle(state))
+                .widgetLabel(state.title)
         } else {
             Image(systemName: "moon.stars")
                 .font(ZimamType.title)

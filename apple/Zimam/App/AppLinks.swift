@@ -2,8 +2,8 @@ import SwiftUI
 import ZimamKit
 
 /// Links from the widgets (`AppLink`): `zimam://task/<id>` opens the task through `TaskOpener`,
-/// like Siri and Spotlight; `zimam://today`, `zimam://calendar` and `zimam://day/<day>` go to
-/// that place through `PlaceOpener`. Kept until the main screen exists, so a cold launch (or
+/// like Siri and Spotlight; `zimam://today`, `zimam://calendar`, `zimam://day/<day>` and
+/// `zimam://matrix` go to that place through `PlaceOpener`. Kept until the main screen exists, so a cold launch (or
 /// signing in first) still arrives there.
 enum AppLinks {
     /// Takes the URL if it is one of the widget links; false leaves it to other handlers.
@@ -14,14 +14,14 @@ enum AppLinks {
         switch link {
         case .task(let id):
             TaskOpener.shared.pending = id
-        case .today, .calendar, .day, .prayer:
+        case .today, .calendar, .day, .prayer, .matrix:
             PlaceOpener.shared.pending = link
         }
         return true
     }
 }
 
-/// The place a widget link asked for. `MainView` switches to «اليوم» or «التقويم» and clears it,
+/// The place a widget link asked for. `MainView` switches to «اليوم» or «التقويم» or «المصفوفة» and clears it,
 /// except for a day, which `CalendarView` selects and then clears, and «أوقات الصلاة», which
 /// `TodayView` opens and then clears.
 @MainActor

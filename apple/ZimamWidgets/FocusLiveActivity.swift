@@ -27,7 +27,7 @@ struct FocusLiveActivity: Widget {
                         .zimamActivityEnvironment(dark: true)
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    Text(context.attributes.title)
+                    Text(context.shownTitle)
                         .font(ZimamType.headline)
                         .foregroundStyle(ZimamColor.ink)
                         .lineLimit(1)
@@ -35,13 +35,13 @@ struct FocusLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
-                        if let project = context.attributes.projectName {
+                        if let project = context.shownProject {
                             Text(project)
                                 .font(ZimamType.caption)
                                 .foregroundStyle(ZimamColor.inkMuted)
                                 .lineLimit(1)
                         }
-                        FocusActions(taskId: context.attributes.taskId, title: context.attributes.title)
+                        FocusActions(taskId: context.attributes.taskId, title: context.shownTitle)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .zimamActivityEnvironment(dark: true)
@@ -82,18 +82,18 @@ private struct FocusLockScreenView: View {
                     .frame(maxWidth: ZimamSpacing.space11 * 3, alignment: .trailing)
             }
             VStack(alignment: .leading, spacing: 0) {
-                Text(context.attributes.title)
+                Text(context.shownTitle)
                     .font(ZimamType.headline)
                     .foregroundStyle(ZimamColor.ink)
                     .lineLimit(2)
-                if let project = context.attributes.projectName {
+                if let project = context.shownProject {
                     Text(project)
                         .font(ZimamType.caption)
                         .foregroundStyle(ZimamColor.inkMuted)
                         .lineLimit(1)
                 }
             }
-            FocusActions(taskId: context.attributes.taskId, title: context.attributes.title)
+            FocusActions(taskId: context.attributes.taskId, title: context.shownTitle)
         }
         .padding(ZimamSpacing.space4)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -150,6 +150,13 @@ private struct FocusMark: View {
             .foregroundStyle(ZimamColor.ink)
             .accessibilityLabel("المهمة الجارية")
     }
+}
+
+private extension ActivityViewContext where Attributes == FocusActivityAttributes {
+    /// The task's title: renamed while it runs (`ContentState`), or as it started.
+    var shownTitle: String { state.title ?? attributes.title }
+    /// Its project, from the same place as the title.
+    var shownProject: String? { state.title == nil ? attributes.projectName : state.projectName }
 }
 
 private extension View {

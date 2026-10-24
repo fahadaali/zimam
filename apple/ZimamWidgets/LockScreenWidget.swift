@@ -42,9 +42,9 @@ struct LockScreenProvider: TimelineProvider {
         let snapshot = Self.load(now: now)
         let calendar = Calendar.current
         let midnight = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now.addingTimeInterval(3600)
-        let dates = [now] + snapshot.changeTimes(after: now, before: midnight)
-        let entries = dates.map { GlanceEntry(date: $0, snapshot: snapshot) }
-        completion(Timeline(entries: entries, policy: .after(midnight)))
+        let timeline = snapshot.timeline(from: now, until: midnight)
+        let entries = timeline.dates.map { GlanceEntry(date: $0, snapshot: snapshot) }
+        completion(Timeline(entries: entries, policy: .after(timeline.reload)))
     }
 
     /// Today's open tasks as the Today screen lists them, with each one's time today: its own
@@ -59,7 +59,7 @@ struct LockScreenProvider: TimelineProvider {
         let locale = ZimamLocale.current
         let noon = Calendar.current.startOfDay(for: now).addingTimeInterval(12 * 3600)
 
-        let items = open.prefix(GlanceSnapshot.maxItems).map { task in
+        let items = open.map { task in
             let isOverdue = (task.dueDate ?? today) < today
             var time: Date?
             var prayerText: String?
@@ -78,7 +78,7 @@ struct LockScreenProvider: TimelineProvider {
         let doneCount = all.filter { $0.parentId == nil && $0.isDone && $0.dueDate == today }.count
 
         return GlanceSnapshot(isSignedIn: true, calendar: user.settings.calendar.rawValue, day: today,
-                              openCount: open.count, doneCount: doneCount, items: Array(items))
+                              openCount: open.count, doneCount: doneCount, items: GlanceSnapshot.kept(items))
     }
 }
 #endif

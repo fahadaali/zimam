@@ -22,9 +22,10 @@ struct GlanceView: View {
         content
             .environment(\.layoutDirection, .rightToLeft)
             .environment(\.locale, ZimamLocale.current)
+            // Opens «اليوم» rather than the last screen (the watch app has one screen anyway).
+            .widgetURL(AppLink.today.url)
     }
 
-    #if os(watchOS)
     @ViewBuilder
     private var content: some View {
         switch family {
@@ -34,30 +35,16 @@ struct GlanceView: View {
         case .accessoryInline:
             GlanceInline(entry: entry)
                 .containerBackground(for: .widget) { Color.clear }
+        #if os(watchOS)
         case .accessoryCorner:
             GlanceCorner(entry: entry)
                 .containerBackground(for: .widget) { Color.clear }
+        #endif
         default:
             GlanceRectangular(entry: entry)
                 .containerBackground(for: .widget) { Color.clear }
         }
     }
-    #else
-    @ViewBuilder
-    private var content: some View {
-        switch family {
-        case .accessoryCircular:
-            GlanceCircular(entry: entry)
-                .containerBackground(for: .widget) { AccessoryWidgetBackground() }
-        case .accessoryInline:
-            GlanceInline(entry: entry)
-                .containerBackground(for: .widget) { Color.clear }
-        default:
-            GlanceRectangular(entry: entry)
-                .containerBackground(for: .widget) { Color.clear }
-        }
-    }
-    #endif
 }
 
 /// Colors by rendering mode. The Lock Screen draws accessory widgets "vibrant" (one tone from

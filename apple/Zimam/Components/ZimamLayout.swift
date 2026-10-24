@@ -10,14 +10,11 @@ enum ZimamLayout {
     /// The sidebar on the iPad and the Mac: as on the web at the narrowest.
     static let sidebarMinWidth = ZimamSpacing.space11 * 5
     static let sidebarIdealWidth = ZimamSpacing.space11 * 6
-    /// The task list column: its narrowest and its usual width.
-    static let listColumnMinWidth = ZimamSpacing.space11 * 7
+    /// The task list column's usual width (also the inspector's ideal width).
     static let listColumnIdealWidth = ZimamSpacing.space11 * 9
-    /// The middle column when it shows a project's board: two columns and a half.
-    static let boardColumnIdealWidth = kanbanColumnWidth * 2.5
     /// The task details column at its narrowest.
     static let detailColumnMinWidth = ZimamSpacing.space11 * 7
-    /// The smallest Mac window that still fits the three columns.
+    /// The smallest Mac window that still fits the sidebar, the content and the inspector.
     static let windowMinWidth = ZimamSpacing.space11 * 20
     static let windowMinHeight = ZimamSpacing.space11 * 13
     /// The Mac Settings window.

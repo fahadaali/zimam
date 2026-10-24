@@ -78,9 +78,9 @@ struct WatchGlanceProvider: TimelineProvider {
         let snapshot = Self.load(now: now)
         let calendar = Calendar.current
         let midnight = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now.addingTimeInterval(3600)
-        let dates = [now] + snapshot.changeTimes(after: now, before: midnight)
-        let entries = dates.map { GlanceEntry(date: $0, snapshot: snapshot) }
-        completion(Timeline(entries: entries, policy: .after(midnight)))
+        let timeline = snapshot.timeline(from: now, until: midnight)
+        let entries = timeline.dates.map { GlanceEntry(date: $0, snapshot: snapshot) }
+        completion(Timeline(entries: entries, policy: .after(timeline.reload)))
     }
 
     private static func load(now: Date) -> GlanceSnapshot {

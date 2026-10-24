@@ -47,6 +47,24 @@ struct TaskTimingTests {
         #expect(TaskTiming.shownTime(of: .allDay, dueDay: "2026-10-14", schedule: schedule, formatter: formatter) == nil)
     }
 
+    /// A day's order: no time, then clock and prayer times together by when they fall.
+    @Test func minuteOfDayOrdersClockAndPrayerTogether() {
+        let day = "2026-10-14"
+        #expect(TaskTiming.minuteOfDay(.allDay, on: day, schedule: schedule, formatter: formatter) == nil)
+        #expect(TaskTiming.minuteOfDay(.clock("10:00"), on: day, schedule: schedule, formatter: formatter) == 600)
+        let asr = TaskTiming.minuteOfDay(.prayer(.asr, offsetMinutes: -10), on: day, schedule: schedule, formatter: formatter)
+        let time = TaskTiming.time(of: .prayer(.asr, offsetMinutes: -10), on: day, schedule: schedule, formatter: formatter)!
+        let clock = TaskTiming.clockString(from: time, timeZone: riyadh)
+        #expect(asr == TaskTiming.clockParts(clock).map { $0.hour * 60 + $0.minute })
+        // «قبل العصر» comes after a morning meeting, not before it.
+        #expect(asr! > 600)
+    }
+
+    @Test func minuteOfDayWithoutAPlaceUsesThePrayersUsualTime() {
+        #expect(TaskTiming.minuteOfDay(.prayer(.asr, offsetMinutes: 20), on: "2026-10-14", schedule: nil, formatter: formatter) == 15 * 60 + 20)
+        #expect(TaskTiming.minuteOfDay(.prayer(.isha, offsetMinutes: 0), on: nil, schedule: schedule, formatter: formatter) == 19 * 60 + 30)
+    }
+
     @Test func relativePhrases() {
         let locale = Locale(identifier: "ar-SA")
         #expect(RelativeReminderPhrase.text(0, locale: locale) == "عند الموعد")

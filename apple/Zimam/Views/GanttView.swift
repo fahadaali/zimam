@@ -177,7 +177,8 @@ struct GanttView: View {
     private func sheetContent(_ route: GanttSheet) -> some View {
         switch route {
         case .add:
-            AddTaskView(projectId: projectId)
+            // Due today, so the new task shows as a bar on the timeline.
+            AddTaskView(due: .today, projectId: projectId)
         case .editSpan(let taskId):
             if let task = tasks.first(where: { $0.id == taskId }) {
                 SpanEditSheet(task: task, kind: kind) { span in commit(task, span) }

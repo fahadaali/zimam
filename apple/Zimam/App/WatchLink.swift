@@ -5,9 +5,11 @@ import WatchConnectivity
 import ZimamKit
 
 /// Hands the session to the Apple Watch app, which talks to the API itself, with the place for
-/// prayer times. They travel over WatchConnectivity (encrypted between the paired devices)
-/// on launch, after sign-in and sign-out, when the place or the prayer settings change, and when
-/// the watch asks for them.
+/// prayer times. They travel over WatchConnectivity (encrypted between the paired devices).
+/// The application context, which WatchConnectivity keeps on disk on both devices, carries only
+/// whether the phone is signed in (and as whom, `WatchPayload.account`), the calendar and the place: it is sent on launch, after sign-in
+/// and sign-out, and when the place or the prayer settings change. The token itself goes only in
+/// the reply to the watch's request, which is not kept, and the watch saves it in its Keychain.
 /// WatchConnectivity calls the delegate on its own queue, so this is not tied to the main actor
 /// (with the main actor by default, a call from that queue would stop the app). It keeps no state.
 nonisolated final class WatchLink: NSObject, WCSessionDelegate, Sendable {
@@ -20,26 +22,30 @@ nonisolated final class WatchLink: NSObject, WCSessionDelegate, Sendable {
         WCSession.default.activate()
     }
 
-    /// Sends the current token and calendar; an empty token signs the watch out.
+    /// Sends whether the phone is signed in, and the calendar and place; signed out signs the watch
+    /// out, and signed in makes a watch without a token ask for it.
     nonisolated func sendSession() {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
         guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
         do {
-            try session.updateApplicationContext(Self.payload())
+            try session.updateApplicationContext(Self.payload(includingToken: false))
         } catch {
             // The watch asks for the session when it starts, so it still gets it then.
             Self.logger.error("Sending the session to the watch failed: \(error.localizedDescription)")
         }
     }
 
-    private nonisolated static func payload() -> [String: Any] {
+    private nonisolated static func payload(includingToken: Bool) -> [String: Any] {
         var payload: [String: Any] = [WatchPayload.sentAt: Date().timeIntervalSince1970]
         do {
-            payload[WatchPayload.token] = try Keychain.value(SessionStore.tokenAccount) ?? ""
+            let token = try Keychain.value(SessionStore.tokenAccount)
+            payload[WatchPayload.signedIn] = token != nil
+            if let token { payload[WatchPayload.account] = WatchPayload.account(of: token) }
+            if includingToken { payload[WatchPayload.token] = token ?? "" }
         } catch {
-            // The Keychain cannot answer for now: no token, which the watch ignores, rather than an
-            // empty one, which signs it out.
+            // The Keychain cannot answer for now: neither key, which the watch ignores, rather than
+            // signed out, which signs it out.
         }
         if let calendar = SharedSettings.user()?.settings.calendar {
             payload[WatchPayload.calendar] = calendar.rawValue
@@ -71,7 +77,7 @@ nonisolated final class WatchLink: NSObject, WCSessionDelegate, Sendable {
 
     /// The watch asks for the session when it has none; this wakes the app in the background.
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any], replyHandler: @escaping ([String: Any]) -> Void) {
-        replyHandler(Self.payload())
+        replyHandler(Self.payload(includingToken: true))
     }
 }
 #endif

@@ -123,8 +123,8 @@ struct SidebarView: View {
                 Button("الانضمام بدعوة", systemImage: "person.badge.plus") { joining = true }
             }
             ToolbarItem {
+                // ⌘F is the menu's «بحث» (ZimamCommands), which does the same.
                 Button("بحث", systemImage: "magnifyingglass", action: onSearch)
-                    .keyboardShortcut("f", modifiers: .command)
             }
         }
         .onAppear {
