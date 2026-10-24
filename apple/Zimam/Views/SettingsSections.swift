@@ -114,6 +114,8 @@ struct SettingsSyncSection: View {
             if let error = sync.lastError {
                 Text(error)
                     .foregroundStyle(ZimamColor.priorityHigh)
+            } else if let notice = sync.refusedNotice {
+                Text(notice)
             } else {
                 Text("تتزامن مهامك تلقائياً بين أجهزتك.")
             }
@@ -125,15 +127,16 @@ struct SettingsSyncSection: View {
     }
 }
 
-/// «الحساب»: sign-out and deletion, each confirmed first. The work itself is the settings
-/// screen's (`onSignOut`, `onDeleteAccount`), which closes the whole sheet when it is done.
+/// «الحساب»: sign-out and deletion, each confirmed first. Sign-out is the account menu's
+/// (`signOutConfirmation`), with `onSignOut` closing the whole sheet first; deletion is the
+/// settings screen's (`onDeleteAccount`), which closes the sheet when it is done.
 struct SettingsAccountSection: View {
     let isDeletingAccount: Bool
     let deleteFailed: Bool
     let onSignOut: () -> Void
     let onDeleteAccount: () -> Void
 
-    @State private var confirmingSignOut = false
+    @State private var signingOut = false
     @State private var confirmingDeleteAccount = false
 
     init(isDeletingAccount: Bool, deleteFailed: Bool,
@@ -147,15 +150,11 @@ struct SettingsAccountSection: View {
     var body: some View {
         Section {
             Button("تسجيل الخروج", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
-                confirmingSignOut = true
+                signingOut = true
             }
+            .disabled(signingOut)
             .frame(minHeight: ZimamSpacing.space11)
-            .confirmationDialog("تسجيل الخروج؟", isPresented: $confirmingSignOut, titleVisibility: .visible) {
-                Button("تسجيل الخروج", role: .destructive, action: onSignOut)
-                Button("إلغاء", role: .cancel) {}
-            } message: {
-                Text("تُمسح بيانات زمام من هذا الجهاز، وتبقى محفوظة في حسابك.")
-            }
+            .signOutConfirmation($signingOut, willSignOut: onSignOut)
             Button("حذف الحساب", systemImage: "person.crop.circle.badge.xmark", role: .destructive) {
                 confirmingDeleteAccount = true
             }

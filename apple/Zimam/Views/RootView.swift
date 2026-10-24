@@ -6,6 +6,7 @@ struct RootView: View {
     @Environment(SyncEngine.self) private var sync
     @Environment(NotificationScheduler.self) private var notifications
     @Environment(LocationProvider.self) private var location
+    @Environment(SubscriptionStore.self) private var subscriptions
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -85,8 +86,10 @@ struct RootView: View {
             // Weak: the engine owns this closure. A local, so the weak capture is of it rather than
             // of the strong one this closure already holds.
             let engine = sync
-            engine.onUnauthorized = { [session, weak engine] in
+            engine.onUnauthorized = { [session, subscriptions, weak engine] in
                 session.endSession()
+                // As a sign-out: the next account does not see this one's plan.
+                subscriptions.signedOut()
                 engine?.reset()
             }
         }

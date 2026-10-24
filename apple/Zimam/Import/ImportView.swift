@@ -114,7 +114,10 @@ struct ImportView: View {
     /// Both calendars and the time: «٢ جمادى الأولى، ١٣ أكتوبر، ٣:٠٠ م».
     private func dateText(_ ms: Milliseconds) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let otherYear = !Calendar(identifier: .gregorian).isDate(date, equalTo: Date(), toGranularity: .year)
+        // As the web's dates: the years show when either calendar's year is not this one.
+        let otherYear = [Calendar.Identifier.gregorian, .islamicUmmAlQura].contains {
+            !Calendar(identifier: $0).isDate(date, equalTo: Date(), toGranularity: .year)
+        }
         return "\(formatter.dual(date, withYear: otherYear))، \(formatter.time(date))"
     }
 

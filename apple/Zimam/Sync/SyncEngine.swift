@@ -56,6 +56,14 @@ final class SyncEngine {
 
     /// The account changed under a sync in progress.
     private struct Superseded: Error {}
+    /// The server answered none of a push: the round ends as a failed sync, retried like one.
+    private struct NoProgress: Error {}
+    /// Records whose edit the server refused in this round's push (a viewer's edit, one it found
+    /// invalid): the pull that follows reads from the start and puts back the server's version,
+    /// and removes here what the server does not have.
+    @ObservationIgnored private var refused: Set<UUID> = []
+    /// «لم يقبل الخادم بعض التعديلات…» in the sync status, after such a restore, until new edits go out.
+    private(set) var refusedNotice: String?
 
     init(api: APIClient, context: ModelContext) {
         self.api = api
@@ -102,6 +110,20 @@ final class SyncEngine {
         let run = Task { await runRounds() }
         running = run
         await run.value
+    }
+
+    /// Whether some edits on this device have not reached the account yet (signing out would lose them).
+    var hasUnsentChanges: Bool {
+        func dirty<Item: PersistentModel>(_ type: Item.Type, _ predicate: Predicate<Item>) -> Bool {
+            var descriptor = FetchDescriptor<Item>(predicate: predicate)
+            descriptor.fetchLimit = 1
+            return ((try? context.fetchCount(descriptor)) ?? 0) > 0
+        }
+        return dirty(ProjectItem.self, #Predicate<ProjectItem> { $0.isDirty })
+            || dirty(SectionItem.self, #Predicate<SectionItem> { $0.isDirty })
+            || dirty(TaskItem.self, #Predicate<TaskItem> { $0.isDirty })
+            || dirty(ReminderItem.self, #Predicate<ReminderItem> { $0.isDirty })
+            || dirty(PlaceItem.self, #Predicate<PlaceItem> { $0.isDirty })
     }
 
     /// `sync()`, waited for at most `limit`: for an intent or a background wake, which the system
@@ -323,6 +345,7 @@ final class SyncEngine {
         }
 
         let all = upserts + deletes
+        if !all.isEmpty { refusedNotice = nil }
         var start = 0
         while start < all.count {
             let batch = Array(all[start..<min(start + APIClient.maxPushBatch, all.count)])
@@ -333,7 +356,10 @@ final class SyncEngine {
                 if item.settle(result) { savedChanges = true }
             }
             try context.save()
-            start += batch.count
+            // The server may answer fewer than it was sent (its D1 budget per request,
+            // api/DEVELOPMENT.md «المزامنة»); the rest go next, in order, so a child still follows its parent.
+            guard !results.isEmpty else { throw NoProgress() }
+            start += min(results.count, batch.count)
         }
     }
 
@@ -343,7 +369,8 @@ final class SyncEngine {
         let sentVersion = item.updatedAt
         let sentDelete: Bool
         if case .delete = mutation { sentDelete = true } else { sentDelete = false }
-        return Outgoing(mutation: mutation) { [context] result in
+        let id = mutation.id
+        return Outgoing(mutation: mutation) { [context, weak self] result in
             // As it was sent: neither edited nor deleted since.
             let unchanged = item.updatedAt == sentVersion && item.pendingDelete == sentDelete
             switch result.status {
@@ -390,6 +417,8 @@ final class SyncEngine {
                 }
                 item.isDirty = false
                 item.syncError = result.message ?? result.status.rawValue
+                // The server's version comes back with the pull that follows (`pull`).
+                if !sentDelete { self?.refused.insert(id) }
                 return sentDelete
             }
         }
@@ -414,22 +443,58 @@ final class SyncEngine {
     // MARK: Pull
 
     private func pull(_ started: Int) async throws {
+        // After a refused edit, from the start: every record comes again, so the refused ones
+        // take the server's version, and those it does not send are not the user's to have.
+        let restoring = refused
+        refused = []
+        var from = restoring.isEmpty ? cursor : 0
+        var seen = Set<UUID>()
         var hasMore = true
-        while hasMore {
-            let page = try await api.pull(cursor: cursor)
+        do {
+            while hasMore {
+                let page = try await api.pull(cursor: from)
             guard generation == started else { throw Superseded() }
             // If the lookup fails, nothing of the page is applied and the next pull tries it
             // again whole, rather than insert records it could not find and duplicate them.
-            var records = try localRecords(for: page.changes)
-            var changed = false
-            for change in page.changes {
-                if apply(change, to: &records) { changed = true }
+                var records = try localRecords(for: page.changes)
+                var changed = false
+                for change in page.changes {
+                    seen.insert(change.id)
+                    if apply(change, to: &records) { changed = true }
+                }
+                try context.save()
+                if changed { savedChanges = true }
+                cursor = page.cursor
+                from = page.cursor
+                hasMore = page.hasMore
             }
-            try context.save()
-            if changed { savedChanges = true }
-            cursor = page.cursor
-            hasMore = page.hasMore
+        } catch {
+            refused.formUnion(restoring)
+            throw error
         }
+        guard !restoring.isEmpty else { return }
+        try removeRefused(restoring.subtracting(seen))
+        refusedNotice = "لم يقبل الخادم بعض التعديلات، فأُعيدت إلى آخر نسخة محفوظة."
+        savedChanges = true
+    }
+
+    /// Refused records the server does not send back: created here where the user may not add (or
+    /// invalid), so the server never had them. They go here too, unless edited again since.
+    private func removeRefused(_ ids: Set<UUID>) throws {
+        guard !ids.isEmpty else { return }
+        let list = Array(ids)
+        func remove<Item: SyncedItem>(_ items: [Item]) {
+            for item in items where !item.isDirty {
+                Self.releaseLinks(to: item, in: context)
+                context.delete(item)
+            }
+        }
+        remove(try context.fetch(FetchDescriptor<ReminderItem>(predicate: #Predicate { list.contains($0.id) })))
+        remove(try context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { list.contains($0.id) })))
+        remove(try context.fetch(FetchDescriptor<SectionItem>(predicate: #Predicate { list.contains($0.id) })))
+        remove(try context.fetch(FetchDescriptor<ProjectItem>(predicate: #Predicate { list.contains($0.id) })))
+        remove(try context.fetch(FetchDescriptor<PlaceItem>(predicate: #Predicate { list.contains($0.id) })))
+        try context.save()
     }
 
     /// The local records a page's changes touch, by id.

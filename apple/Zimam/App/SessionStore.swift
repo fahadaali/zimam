@@ -66,7 +66,9 @@ final class SessionStore {
             if (error as? ASAuthorizationError)?.code == .canceled { return }
             errorMessage = "تعذّر تسجيل الدخول. حاول مرة أخرى."
         case .success(let authorization):
-            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+            // The server requires the nonce the request was made with.
+            guard let nonce = pendingNonce,
+                  let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
                   let tokenData = credential.identityToken,
                   let identityToken = String(data: tokenData, encoding: .utf8) else {
                 errorMessage = "تعذّر تسجيل الدخول. حاول مرة أخرى."
@@ -79,13 +81,14 @@ final class SessionStore {
             let authorizationCode = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
             do {
                 let response = try await api.signInWithApple(
-                    identityToken: identityToken, nonce: pendingNonce, name: name, device: Self.deviceName,
+                    identityToken: identityToken, nonce: nonce, name: name, device: Self.deviceName,
                     authorizationCode: authorizationCode)
                 _ = begin(response)
             } catch {
                 errorMessage = "تعذّر الاتصال بزمام. تحقّق من الإنترنت وحاول مرة أخرى."
             }
-            pendingNonce = nil
+            // A second attempt started meanwhile keeps its own nonce.
+            if pendingNonce == nonce { pendingNonce = nil }
         }
     }
 
