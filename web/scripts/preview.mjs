@@ -13,6 +13,7 @@ import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sets as designSets } from "./design-files.mjs";
 import { previewPage } from "./preview-frame.mjs";
 
 const scripts = dirname(fileURLToPath(import.meta.url));
@@ -35,15 +36,11 @@ try {
 await mkdir(out, { recursive: true });
 await writeFile(join(out, MARK), "Built by web/scripts/preview.mjs; rebuilt on each run.\n");
 
-/** [from, to inside out/, which files] — the design files as copy-design.mjs picks them; only app/ has subfolders. */
+/** [from, to inside out/, which files] — the design files as npm run build picks them (design-files.mjs); only app/ has subfolders. */
 const copies = [
   [join(web, "public", "app"), "app", (name) => !name.startsWith("google-callback"), true],
   [join(web, "public", "styles"), "styles", (name) => name === "base.css"],
-  [join(design, "generated"), "design/generated", (name) => name === "tokens.css"],
-  [join(design, "fonts", "web"), "design/fonts/web", (name) => name.endsWith(".woff2")],
-  [join(design, "logos"), "design/logos", (name) => name === "zimam-lockup-ar.svg" || name === "zimam-lockup-ar-on-dark.svg"],
-  [join(design, "app-icons"), "design/app-icons", (name) => name === "favicon.svg" || name === "apple-touch-icon-180.png"],
-  [join(design, "components"), "design/components", (name) => name === "bundle.css"],
+  ...designSets.map(([folder, wanted]) => [join(design, folder), `design/${folder}`, wanted]),
 ];
 
 async function copyTree(from, to, wanted, deep = false) {

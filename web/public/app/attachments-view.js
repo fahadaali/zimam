@@ -166,12 +166,15 @@ export function showAttachments(container, task, { announce = () => {} } = {}) {
     }
   });
 
-  /** `quiet`: a reload after a change elsewhere, which keeps what is shown when it fails. */
+  /**
+   * `quiet`: a reload after a change elsewhere, which keeps what is shown when it fails, and leaves
+   * the list as it is while it holds the focus (drawn anew, the keyboard would lose its place).
+   */
   const load = ({ quiet = false } = {}) =>
     attachmentsApi
       .list(task.id)
       .then((answer) => {
-        if (!current()) return;
+        if (!current() || (quiet && list.contains(document.activeElement))) return;
         items = answer.attachments ?? [];
         maxBytes = answer.maxFileBytes ?? maxBytes;
         setHint();
@@ -186,7 +189,8 @@ export function showAttachments(container, task, { announce = () => {} } = {}) {
 
   load();
   return {
-    // Not while a file is uploading or a deletion is being confirmed: the redraw would cut it short.
-    reload: () => current() && !add.disabled && !list.querySelector(".attachment-row-actions .danger") && load({ quiet: true }),
+    // Not while a file is uploading or a deletion is being confirmed (the redraw would cut it
+    // short), nor with the focus in the list.
+    reload: () => current() && !add.disabled && !list.querySelector(".attachment-row-actions .danger") && !list.contains(document.activeElement) && load({ quiet: true }),
   };
 }

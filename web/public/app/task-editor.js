@@ -371,7 +371,7 @@ export function remindersSection(taskId, getTask, ctx) {
   async function ensureAtTime() {
     await loading;
     const task = getTask();
-    if (!read || !hasTaskTime(task) || (!task.dueTime && !task.duePrayer)) return;
+    if (!read || (!task.dueTime && !task.duePrayer)) return;
     if (reminders.some((r) => r.kind === "relative")) return;
     await addReminder({ kind: "relative", offsetMinutes: 0 }, { quiet: true });
   }

@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { copies } from "../scripts/copy-design.mjs";
+import { copies } from "../scripts/design-files.mjs";
 
 const publicDir = fileURLToPath(new URL("../public", import.meta.url));
 
@@ -21,7 +21,7 @@ async function references(dir = publicDir) {
   return found;
 }
 
-test("every /design/ file a page names is one copy-design.mjs deploys", async () => {
+test("every /design/ file a page names is one npm run build deploys", async () => {
   const found = await references();
   assert.ok(found.length > 0);
   for (const { file, ref } of found) assert.ok(copies(ref), `${file} names /design/${ref}, which npm run build does not copy`);

@@ -441,12 +441,16 @@ export function commentsSection(task, ctx) {
     return li;
   };
 
-  const load = async () => {
+  /**
+   * `quiet`: a reload after a change elsewhere, which keeps the comments shown when it fails, and
+   * leaves the list as it is while it holds the focus (drawn anew, the keyboard would lose its place).
+   */
+  const load = async ({ quiet = false } = {}) => {
     try {
       const { comments } = await sharingApi.comments(task.id);
-      if (ctx.isCurrent()) draw(comments);
+      if (ctx.isCurrent() && !(quiet && list.contains(document.activeElement))) draw(comments);
     } catch (failure) {
-      if (failure.status === 401 || !ctx.isCurrent()) return;
+      if (failure.status === 401 || !ctx.isCurrent() || quiet) return;
       list.replaceChildren(h("li", { className: "callout muted" }, failure.code === "network" ? "التعليقات تحتاج اتصالاً بالإنترنت." : errorText(failure)));
     }
   };
@@ -475,7 +479,7 @@ export function commentsSection(task, ctx) {
 
   list.append(h("li", { className: "callout muted" }, "تُحمَّل التعليقات…"));
   load();
-  // Not while a deletion is being confirmed: the redraw would close it.
-  section.reload = () => !list.querySelector(".comment .sheet-actions:not([hidden])") && load();
+  // Not while a deletion is being confirmed (the redraw would close it), nor with the focus in the list.
+  section.reload = () => !list.querySelector(".comment .sheet-actions:not([hidden])") && !list.contains(document.activeElement) && load({ quiet: true });
   return section;
 }

@@ -354,25 +354,33 @@ export function breakdownSection(task, ctx) {
     list.replaceChildren(...(children.length ? children.map(subtaskRow) : [h("li", { className: "callout muted" }, "لا مهام فرعية بعد.")]));
   };
 
-  /** → whether the subtasks were read; a failure says so instead of «لا مهام فرعية بعد». */
-  const loadChildren = async () => {
+  /**
+   * → whether the subtasks were read; a failure says so instead of «لا مهام فرعية بعد». `quiet`: a
+   * reload after a change elsewhere, which keeps what is shown when it fails, and leaves a list that
+   * holds the focus as it is (drawn anew, the keyboard would lose its place).
+   */
+  const loadChildren = async ({ quiet = false } = {}) => {
+    let read;
     try {
       const { tasks } = await boardApi.tasks({ projectId: task.projectId ?? "inbox" });
-      children = tasks.filter((t) => t.parentId === task.id).sort(byManualOrder);
-      loaded = true;
+      read = tasks.filter((t) => t.parentId === task.id).sort(byManualOrder);
     } catch (failure) {
-      if (failure.status === 401 || !ctx.isCurrent()) return false;
+      if (failure.status === 401 || !ctx.isCurrent() || quiet) return false;
       if (!loaded) list.replaceChildren();
       listError.textContent = ctx.errorText(failure);
       return false;
     }
+    // The rows on screen keep the subtasks they were drawn from, so those stay until the next read.
+    if (quiet && list.contains(document.activeElement)) return true;
+    children = read;
+    loaded = true;
     if (ctx.isCurrent()) {
       listError.textContent = "";
       drawList();
     }
     return true;
   };
-  section.reload = () => loadChildren();
+  section.reload = () => !list.contains(document.activeElement) && loadChildren({ quiet: true });
   list.append(h("li", { className: "callout muted" }, "تُحمَّل الخطوات…"));
   loadChildren();
 

@@ -16,11 +16,11 @@ const expanded = new Set();
 
 let dragged = null;
 
-/** `ctx`: { today, primary, taskItem, canEditTask, announce, showError, markLocalChange, render }. */
+/** `ctx`: { today, primary, taskItem, canEditTask, announce, showError, markLocalChange, render, cutNote }. */
 export async function viewMatrix(ctx) {
   // The device's day, as everywhere else in the web app (main.js state.today).
   const today = ctx.today;
-  const { tasks } = await boardApi.tasks({ status: "open" });
+  const { tasks, truncated } = await boardApi.tasks({ status: "open" });
   const top = tasks.filter((t) => !t.parentId);
   const root = h("div", { className: "matrix" });
 
@@ -246,6 +246,7 @@ export async function viewMatrix(ctx) {
       h("h1", { className: "display view-title", tabindex: "-1" }, "المصفوفة"),
       h("p", { className: "callout muted" }, "المهم: أولوية متوسطة أو عالية. العاجل: موعده اليوم أو غداً أو فات."),
     ),
+    ...(truncated ? [ctx.cutNote()] : []),
     root,
   ];
 }

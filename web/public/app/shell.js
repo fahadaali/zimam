@@ -30,6 +30,8 @@ export function createShell(ctx) {
   let counts = sidebarCounts([], ctx.state.today);
   /** The open tasks were cut at the page limit (lib/api.js): the counts are at least these. */
   let countsCut = false;
+  /** Raised on sign-out (forget), so a read still on its way draws nothing of that account. */
+  let account = 0;
   let selectedItem = null;
 
   hydrateIcons(document);
@@ -179,14 +181,17 @@ export function createShell(ctx) {
 
   /** Reads the open tasks again for the counts, then redraws the sidebar. → whether the read worked */
   async function refreshSidebarOnce() {
+    const signedIn = account;
     let ok = true;
     try {
       const { tasks, truncated } = await api.tasks({ status: "open" });
+      if (signedIn !== account) return false;
       counts = sidebarCounts(tasks, ctx.state.today);
       countsCut = truncated;
     } catch {
       ok = false; // the counts wait for the next refresh
     }
+    if (signedIn !== account) return false;
     fillSections();
     renderCounts();
     renderProjects();
@@ -224,6 +229,7 @@ export function createShell(ctx) {
 
   /** Signed out: the counts and projects of that account leave the sidebar until the next one loads. */
   function forget() {
+    account += 1;
     counts = sidebarCounts([], ctx.state.today);
     countsCut = false;
     sections.clear();

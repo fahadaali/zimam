@@ -124,6 +124,7 @@ function featureContext() {
     },
     markLocalChange: () => (state.localChangeAt = Date.now()),
     onChanged: (task) => pane.refresh(task),
+    cutNote,
   };
 }
 
@@ -151,11 +152,16 @@ async function prepareNonce() {
   pendingNonce = { raw, hashed: await sha256Hex(raw), state: randomNonce(16) };
 }
 
+/** Where the last account was when it left this tab (forgetAccount): { userId, hash }. */
+let leftAt = null;
+
 /**
  * Forgets what the signed-in account showed, on every way back to sign-in (signing out, deleting
  * the account, a session that ended): the next account to sign in in this tab sees none of it.
  */
 function forgetAccount() {
+  // Null on a first load without a session: nothing was shown, and a link opened then stays whole.
+  const shown = state.me;
   state.renderId++; // a render still in flight draws nothing
   state.me = null;
   state.projects = [];
@@ -169,10 +175,17 @@ function forgetAccount() {
   frame.forget();
   forgetSummaries();
   forgetMembers();
+  prayers.forget();
   openFolds.clear();
   for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
-  // The task in the URL was the last account's; an invite or an import link stays for the next one.
-  if (parseRoute().task) history.replaceState(null, "", withTask(location.hash, null));
+  // The place in the URL (its project, section, search or task) was the account's: the next one
+  // starts on «اليوم», and the same account signing in again here finds it (leftAt). An invite or
+  // an import link stays for whoever signs in.
+  const route = parseRoute();
+  if (shown && route.name !== "join" && route.name !== "import") {
+    leftAt = { userId: shown.id, hash: location.hash };
+    history.replaceState(null, "", "#/today");
+  }
 }
 
 function showSignIn(message = "") {
@@ -379,6 +392,10 @@ async function start() {
   els.loading.hidden = true;
   els.signin.hidden = true;
   els.shell.hidden = false;
+  // The same account back in this tab (its session had ended, say): where it was, unless another
+  // place was opened meanwhile.
+  if (leftAt?.userId === state.me.id && location.hash === "#/today") history.replaceState(null, "", leftAt.hash);
+  leftAt = null;
   // Back from a sign-in that lost the hash (Google's whole-tab flow): return to the invite.
   const pendingJoin = takePendingJoin();
   if (pendingJoin && parseRoute().name !== "join") history.replaceState(null, "", pendingJoin);
@@ -751,19 +768,38 @@ function refreshViewSoon() {
 /** Each task's edits not answered yet: { last: the PATCH sent last, waiting: how many }. */
 const savingTasks = new Map();
 
+let paneRedrawTimer;
 /**
- * A field changed in the open task's editor. The change shows at once, so the next one builds on it
- * (the prayer stepper, the weekdays), and the PATCHes of a task go one after another, in order: the
- * server reads, merges and writes each, so two at once could undo each other. Only the last answer
- * redraws the pane, so an older one never shows over a newer edit; a failure reads the task again.
+ * Redraws the open task's editor once the focus has settled. A text field saves on `change`, which
+ * fires while the focus is on its way to the next control; a redraw then would take that control
+ * away mid-move and leave the focus on <body>. After it, fill() gives the focus back by data-key.
+ */
+function redrawPaneSoon(id) {
+  clearTimeout(paneRedrawTimer);
+  paneRedrawTimer = setTimeout(() => {
+    const shown = pane.currentTask(id);
+    if (shown) pane.refresh(shown);
+  }, 0);
+}
+
+/**
+ * A field changed in the open task's editor. The change is kept at once, so the next one builds on
+ * it (the prayer stepper, the weekdays), and shows as soon as the focus has settled. The PATCHes of a
+ * task go one after another, in order: the server reads, merges and writes each, so two at once
+ * could undo each other. Only the last answer redraws the pane, so an older one never shows over a
+ * newer edit; a failure reads the task again.
  */
 async function saveTask(task, fields) {
   state.localChangeAt = Date.now();
-  const apply = (fresh) => {
+  const merge = (fresh) => {
     for (const copy of new Set([task, state.taskIndex.get(task.id), pane.currentTask(task.id)].filter(Boolean))) Object.assign(copy, fresh);
+  };
+  const apply = (fresh) => {
+    merge(fresh);
     pane.refresh(fresh);
   };
-  apply({ ...fields, id: task.id });
+  merge({ ...fields, id: task.id });
+  redrawPaneSoon(task.id);
   const queue = savingTasks.get(task.id) ?? { last: Promise.resolve(), waiting: 0 };
   savingTasks.set(task.id, queue);
   queue.waiting += 1;

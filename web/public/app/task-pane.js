@@ -185,7 +185,11 @@ export function createTaskPane(ctx) {
     updateTaskExtras(current, extrasCtx(current));
   }
 
-  /** Reads the open task's subtasks, comments and attachments again, after a change elsewhere. */
+  /**
+   * Reads the open task's subtasks, comments and attachments again, after a change elsewhere. Each
+   * list is drawn anew, so one that holds the focus (a subtask's circle, «حذف التعليق», a file) is
+   * left as it is and read on the next change: the keyboard keeps its place.
+   */
   function reloadLists() {
     if (!current) return;
     reloadTaskExtras(current.id);

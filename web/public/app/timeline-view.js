@@ -47,7 +47,7 @@ const TAP_SLOP = 4;
 
 /** #/timeline: every open, dated task, grouped by project. */
 export async function viewTimeline(ctx) {
-  const { tasks } = await boardApi.tasks({ status: "open" });
+  const { tasks, truncated } = await boardApi.tasks({ status: "open" });
   const top = tasks.filter((t) => !t.parentId);
   const ids = [...new Set(top.filter((t) => t.projectId).map((t) => t.projectId))];
   const groups = [
@@ -62,6 +62,7 @@ export async function viewTimeline(ctx) {
   );
   return [
     header,
+    ...(truncated ? [ctx.cutNote()] : []),
     timeline(
       { tasks: top, groups, groupOf: (t) => t.projectId ?? "inbox", undated: false, label: "المخطط الزمني لكل المهام", empty: "لا مهام بتواريخ بعد. أضف لمهمة موعداً لتظهر هنا." },
       ctx,
@@ -245,8 +246,9 @@ function timeline({ tasks, groups, groupOf, undated, label, empty }, ctx) {
         text,
       );
       change.addEventListener("click", () =>
-        openDurationDialog(task, ctx, () => {
+        openDurationDialog(task, ctx, (saved) => {
           paint({ keepScroll: true, focus: `[data-task-id="${CSS.escape(task.id)}"] .tl-change` });
+          ctx.onChanged?.(saved); // the same task open beside the timeline follows
         }),
       );
       labelBox.append(change);
@@ -331,6 +333,7 @@ function timeline({ tasks, groups, groupOf, undated, label, empty }, ctx) {
       Object.assign(task, await boardApi.patchTask(task.id, patch));
       ctx.announce(`«${task.title}»: ${spanText(taskSpan(task), ctx)}.`);
       paint({ keepScroll: true });
+      ctx.onChanged?.(task); // the same task open beside the timeline follows
     } catch (error) {
       Object.assign(task, before);
       if (error.status !== 401) ctx.showError(error);
