@@ -8,6 +8,7 @@ public struct TaskAttachment: Codable, Equatable, Sendable, Identifiable {
     public var id: UUID
     public var taskId: UUID
     public var projectId: UUID?
+    /// Who added it, as the server sends it; kept in the cached list though no screen shows it yet.
     public var uploaderId: UUID?
     public var uploaderName: String?
     public var fileName: String

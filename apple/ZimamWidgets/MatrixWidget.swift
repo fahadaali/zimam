@@ -8,7 +8,7 @@ import ZimamKit
 /// time or day and a completion circle, and «+n أخرى» for the rest. Four of them side by side make
 /// the whole matrix.
 struct MatrixWidget: Widget {
-    static let kind = "app.zimam.matrix"
+    static let kind = ZimamShared.WidgetKind.matrix
 
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: Self.kind, intent: MatrixWidgetConfiguration.self, provider: MatrixProvider()) { entry in

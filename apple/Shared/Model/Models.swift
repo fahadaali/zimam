@@ -7,7 +7,8 @@ import ZimamKit
 // keeps applying sync changes simple in any order.
 //
 // `isDirty` marks an edit not yet sent; `pendingDelete` hides a record until
-// its deletion reaches the server.
+// its deletion reaches the server. `apply` takes the server's version, which the sync engine
+// does only when no newer local edit wins, so a record it applies shows (again).
 
 @Model
 final class ProjectItem {
@@ -51,6 +52,7 @@ final class ProjectItem {
         if let created = r.createdAt { createdAt = created }
         updatedAt = r.updatedAt
         isDirty = false
+        pendingDelete = false
         syncError = nil
     }
 
@@ -97,6 +99,7 @@ final class SectionItem {
         if let created = r.createdAt { createdAt = created }
         updatedAt = r.updatedAt
         isDirty = false
+        pendingDelete = false
         syncError = nil
     }
 
@@ -182,6 +185,7 @@ final class TaskItem {
         if let created = r.createdAt { createdAt = created }
         updatedAt = r.updatedAt
         isDirty = false
+        pendingDelete = false
         syncError = nil
     }
 
@@ -262,6 +266,7 @@ final class ReminderItem {
         if let created = r.createdAt { createdAt = created }
         updatedAt = r.updatedAt
         isDirty = false
+        pendingDelete = false
         syncError = nil
     }
 
@@ -312,6 +317,7 @@ final class PlaceItem {
         if let created = r.createdAt { createdAt = created }
         updatedAt = r.updatedAt
         isDirty = false
+        pendingDelete = false
         syncError = nil
     }
 

@@ -3,7 +3,8 @@ import Network
 import Observation
 
 /// Whether the device has a network path. The app works offline; only the assistant,
-/// sharing and comments need the server, so they read this to hide or disable themselves.
+/// sharing and comments need the server, so they read this to hide or disable themselves, and
+/// the app syncs when it comes back (`RootView`).
 /// A view that reads `isOnline` in its body updates when the connection changes.
 @MainActor
 @Observable

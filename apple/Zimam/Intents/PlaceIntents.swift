@@ -7,7 +7,7 @@ import ZimamKit
 // Places are added in the app, where the user picks them on the map; Siri only names them.
 
 /// A saved place as Siri and Shortcuts see it. Siri learns the names from
-/// `ZimamShortcuts.updateAppShortcutParameters()`, called when the data changes.
+/// `ZimamShortcuts.updateAppShortcutParameters()`, called when they change (`PlacePhrases`).
 struct PlaceEntity: AppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "مكان"
     static let defaultQuery = PlaceEntityQuery()
@@ -46,6 +46,23 @@ struct PlaceEntityQuery: EntityStringQuery {
                                                     sortBy: [SortDescriptor(\.name)])
         let items = (try? ZimamStore.shared.mainContext.fetch(descriptor)) ?? []
         return items.map { PlaceEntity(id: $0.id, name: $0.name) }
+    }
+}
+
+/// Tells Siri the saved places' names again when they changed: checked after each edit and
+/// sync that changed something, sent only when a place was added, renamed or deleted.
+@MainActor
+enum PlacePhrases {
+    /// The places last sent, as "id|name", sorted; nil before the first time.
+    private static var sent: [String]?
+
+    static func updateIfChanged() {
+        let descriptor = FetchDescriptor<PlaceItem>(predicate: #Predicate { !$0.pendingDelete })
+        let places = (try? ZimamStore.shared.mainContext.fetch(descriptor)) ?? []
+        let current = places.map { "\($0.id.uuidString)|\($0.name)" }.sorted()
+        guard current != sent else { return }
+        sent = current
+        ZimamShortcuts.updateAppShortcutParameters()
     }
 }
 

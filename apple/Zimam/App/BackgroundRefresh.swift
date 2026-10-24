@@ -7,16 +7,21 @@ import os
 /// Renews the rolling window of notifications while the app is closed. The adhan and iqama
 /// alerts cover two days (`PrayerAlertPlanner.windowDays`), so someone who does not open Zimam
 /// for a while still gets them: the system wakes the app now and then (`.backgroundTask` in
-/// `ZimamApp`), and each wake replans the window and asks for the next one. The Mac keeps its
-/// notifications while the app runs, and replans on every launch.
+/// `ZimamApp`), and each wake replans the window, syncs, and asks for the next one. The window
+/// comes first, from what is saved here, so a slow network cannot take the wake's time. The sync
+/// sends edits waiting since the app closed, and its pull tells the server this device's window
+/// starts now, so the server does not push what the device scheduled; a sync that ends in time
+/// replans again with what it brought. The Mac keeps its notifications while the app runs, and
+/// replans on every launch.
 @MainActor
 enum BackgroundRefresh {
     /// Listed in `BGTaskSchedulerPermittedIdentifiers` (project.yml).
     static let identifier = "app.zimam.ios.refresh"
     /// The soonest the system may wake the app again; it decides when, often later.
     private static let interval: TimeInterval = 6 * 3600
-
-    static weak var scheduler: NotificationScheduler?
+    /// How long a wake waits for the sync. The system gives a wake about 30 seconds in all; the
+    /// sync goes on after this while the app still runs.
+    private static let syncWait: Duration = .seconds(15)
 
     private static let logger = Logger(subsystem: "app.zimam.ios", category: "refresh")
 
@@ -37,9 +42,10 @@ enum BackgroundRefresh {
     /// One wake: the next one first, so a wake cut short still leaves one asked for.
     static func run() async {
         schedule()
-        // Reminders said to Siri while the app was closed (`ReminderBridge`), then the window.
+        // Reminders said to Siri while the app was closed (`ReminderBridge`), then the window and
+        // the sync (`LiveSync.flush`, set by `ZimamApp`).
         await ReminderBridge.shared.run()
-        await scheduler?.rescheduleNow()
+        await LiveSync.flush?(syncWait)
         ZimamShared.reloadWidgets()
     }
 }

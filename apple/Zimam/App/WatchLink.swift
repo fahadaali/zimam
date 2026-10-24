@@ -34,10 +34,13 @@ nonisolated final class WatchLink: NSObject, WCSessionDelegate, Sendable {
     }
 
     private nonisolated static func payload() -> [String: Any] {
-        var payload: [String: Any] = [
-            WatchPayload.token: Keychain.read(SessionStore.tokenAccount) ?? "",
-            WatchPayload.sentAt: Date().timeIntervalSince1970,
-        ]
+        var payload: [String: Any] = [WatchPayload.sentAt: Date().timeIntervalSince1970]
+        do {
+            payload[WatchPayload.token] = try Keychain.value(SessionStore.tokenAccount) ?? ""
+        } catch {
+            // The Keychain cannot answer for now: no token, which the watch ignores, rather than an
+            // empty one, which signs it out.
+        }
         if let calendar = SharedSettings.user()?.settings.calendar {
             payload[WatchPayload.calendar] = calendar.rawValue
         }

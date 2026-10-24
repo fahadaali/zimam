@@ -115,7 +115,7 @@ struct SpokenTimeTests {
 
     @Test func theLocalReadingFillsInForTheAssistant() {
         let spoken = SpokenTask.local("ذكرني أراجع العقد بعد العصر بكرة", problem: .offline, now: now, timeZone: riyadh)
-        #expect(!spoken.isRead)
+        #expect(spoken.problem == .offline)
         #expect(spoken.readLocally)
         #expect(spoken.suggestion.title == "أراجع العقد")
         let record = spoken.record(today: "2026-10-13")

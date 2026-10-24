@@ -32,12 +32,13 @@ struct Store {
     /// `notes`, `dueTime` and `tags` come from the assistant's suggestion; a time is kept
     /// only for a dated task that is not tied to a prayer, as the server does. `startDate` makes
     /// a dated task span days; it is kept only before the due day, as the server requires.
+    /// The title and notes are cut to the server's limits (`ServerText`), so the task syncs.
     @discardableResult
     func addTask(title: String, projectId: UUID? = nil, dueDate: String? = nil, duePrayer: Prayer? = nil,
                  duePrayerOffset: Int? = nil, priority: TaskPriority = .none,
                  notes: String? = nil, dueTime: String? = nil, tags: [String] = [], startDate: String? = nil) -> TaskItem {
-        let trimmedNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let record = TaskRecord(projectId: projectId, title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+        let trimmedNotes = notes.map { ServerText.clip($0.trimmingCharacters(in: .whitespacesAndNewlines), to: ServerText.maxNotes) }
+        let record = TaskRecord(projectId: projectId, title: Self.taskTitle(title),
                                 notes: trimmedNotes?.isEmpty == false ? trimmedNotes : nil,
                                 priority: priority, tags: tags, dueDate: dueDate,
                                 startDate: DaySpan(startDate: startDate, dueDate: dueDate)?.startDate,
@@ -52,13 +53,18 @@ struct Store {
     /// Adds a subtask under `parent`, in the same project.
     @discardableResult
     func addSubtask(to parent: TaskItem, title: String) -> TaskItem? {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = Self.taskTitle(title)
         guard !trimmed.isEmpty else { return nil }
         let record = TaskRecord(projectId: parent.projectId, sectionId: parent.sectionId, parentId: parent.id, title: trimmed)
         let task = TaskItem(record, dirty: true)
         context.insert(task)
         commit()
         return task
+    }
+
+    /// A title as typed, trimmed and cut to the server's limit.
+    static func taskTitle(_ title: String) -> String {
+        ServerText.clip(title.trimmingCharacters(in: .whitespacesAndNewlines), to: ServerText.maxTitle)
     }
 
     /// Applies an edit to a task's fields and marks it for sync.
@@ -116,16 +122,23 @@ struct Store {
         commit()
     }
 
-    /// Deletes a task and its subtasks; the server does the same for other devices.
+    /// Deletes a task, its subtasks and their reminders; the server does the same for other
+    /// devices. What the server already has goes with the task's deletion and is not sent on its
+    /// own; what it has not seen yet (still dirty: never sent, or an edit not sent) is sent as its
+    /// own deletion, so nothing is left behind here or sent later as an edit.
     func delete(_ task: TaskItem) {
         let children = Dictionary(grouping: (try? context.fetch(FetchDescriptor<TaskItem>())) ?? [], by: \.parentId)
+        var tree: Set<UUID> = [task.id]
         var queue = [task.id]
         while let id = queue.popLast() {
             for child in children[id] ?? [] where !child.pendingDelete {
                 child.pendingDelete = true
-                child.isDirty = false // the parent's deletion covers it
+                tree.insert(child.id)
                 queue.append(child.id)
             }
+        }
+        for reminder in (try? context.fetch(FetchDescriptor<ReminderItem>())) ?? [] where tree.contains(reminder.taskId) && !reminder.pendingDelete {
+            reminder.pendingDelete = true
         }
         task.pendingDelete = true
         touch(task)
@@ -240,7 +253,7 @@ struct Store {
     }
 
     private static func placeName(_ name: String) -> String {
-        String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+        ServerText.clip(name.trimmingCharacters(in: .whitespacesAndNewlines), to: ServerText.maxName)
     }
 
     private static func placeRadius(_ radius: Double) -> Double {
@@ -251,7 +264,8 @@ struct Store {
 
     @discardableResult
     func addProject(name: String) -> ProjectItem {
-        let project = ProjectItem(ProjectRecord(name: name.trimmingCharacters(in: .whitespacesAndNewlines)), dirty: true)
+        let trimmed = ServerText.clip(name.trimmingCharacters(in: .whitespacesAndNewlines), to: ServerText.maxName)
+        let project = ProjectItem(ProjectRecord(name: trimmed), dirty: true)
         context.insert(project)
         commit()
         return project
@@ -259,7 +273,7 @@ struct Store {
 
     /// «إعادة التسمية»: owners and editors (the server checks the role).
     func rename(_ project: ProjectItem, to name: String) {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = ServerText.clip(name.trimmingCharacters(in: .whitespacesAndNewlines), to: ServerText.maxName)
         guard !trimmed.isEmpty, trimmed != project.name else { return }
         project.name = trimmed
         touch(project)
@@ -272,24 +286,22 @@ struct Store {
         touch(project)
     }
 
-    /// «حذف المشروع», the owner's: its tasks, sections and their reminders go with it. Only the
-    /// project's deletion is sent; the server deletes the rest for every member, so here they are
-    /// hidden at once and not sent on their own.
+    /// «حذف المشروع», the owner's: its tasks, sections and their reminders go with it, hidden here
+    /// at once. What the server already has goes with the project's deletion, for every member,
+    /// and is not sent on its own; what it has not seen yet (still dirty, such as a task moved
+    /// into the project offline) is sent as its own deletion.
     func delete(_ project: ProjectItem) {
         let id = project.id
         let tasks = ((try? context.fetch(FetchDescriptor<TaskItem>())) ?? []).filter { $0.projectId == id && !$0.pendingDelete }
         let taskIds = Set(tasks.map(\.id))
         for task in tasks {
             task.pendingDelete = true
-            task.isDirty = false
         }
         for section in (try? context.fetch(FetchDescriptor<SectionItem>())) ?? [] where section.projectId == id && !section.pendingDelete {
             section.pendingDelete = true
-            section.isDirty = false
         }
         for reminder in (try? context.fetch(FetchDescriptor<ReminderItem>())) ?? [] where taskIds.contains(reminder.taskId) && !reminder.pendingDelete {
             reminder.pendingDelete = true
-            reminder.isDirty = false
         }
         project.pendingDelete = true
         touch(project)
@@ -316,7 +328,7 @@ struct Store {
             sync.scheduleSync()
             sync.noteLocalChange()
         } else {
-            ZimamShared.reloadWidgets()
+            ZimamShared.reloadTaskWidgets()
         }
     }
 
@@ -358,10 +370,7 @@ struct Store {
         let reminders = (try? context.fetch(FetchDescriptor<ReminderItem>(predicate: #Predicate { $0.taskId == taskId }))) ?? []
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = days.timeZone
-        var shift = 0
-        if let from = days.date(fromDay: fromDay), let to = days.date(fromDay: toDay) {
-            shift = calendar.dateComponents([.day], from: from, to: to).day ?? 0
-        }
+        let shift = DayMath.days(from: fromDay, to: toDay) ?? 0
         for reminder in reminders where !reminder.pendingDelete {
             var record = reminder.record
             record.id = UUID()

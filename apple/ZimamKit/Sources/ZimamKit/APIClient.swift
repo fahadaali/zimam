@@ -40,15 +40,18 @@ public enum RealtimeMessage {
     }
 }
 
-/// Talks to the Zimam API (api/). Every call after sign-in sends the session token.
+/// Talks to the Zimam API (api/). Every call after sign-in sends the session token. `token` gives
+/// nil when signed out, and throws when it cannot tell (a locked Keychain): the request then
+/// fails with that error rather than go out without the token, which the server would answer
+/// with 401, read as signed out.
 public final class APIClient: Sendable {
     public static let maxPushBatch = 200
 
     public let baseURL: URL
     private let session: URLSession
-    private let token: @Sendable () -> String?
+    private let token: @Sendable () throws -> String?
 
-    public init(baseURL: URL, session: URLSession = .shared, token: @escaping @Sendable () -> String?) {
+    public init(baseURL: URL, session: URLSession = .shared, token: @escaping @Sendable () throws -> String?) {
         self.baseURL = baseURL
         self.session = session
         self.token = token
@@ -98,11 +101,12 @@ public final class APIClient: Sendable {
         try await send("GET", "v1/me")
     }
 
-    /// `PATCH /v1/me`: changes the name and/or settings; fields left nil stay as they are.
-    public func updateMe(name: String? = nil, settings: User.Settings? = nil) async throws -> User {
+    /// `PATCH /v1/me`: changes the name and/or settings; fields left nil, and settings left out of
+    /// `settings`, stay as they are. Returns the account with all its settings.
+    public func updateMe(name: String? = nil, settings: User.Settings.Changes? = nil) async throws -> User {
         struct Body: Encodable {
             let name: String?
-            let settings: User.Settings?
+            let settings: User.Settings.Changes?
         }
         return try await send("PATCH", "v1/me", body: Body(name: name, settings: settings))
     }
@@ -150,7 +154,7 @@ public final class APIClient: Sendable {
     /// `GET /v1/realtime` as a WebSocket request (`wss`), signed in with the session token,
     /// or nil when signed out. The server only sends `{"type":"changed","seq":N}`; see `RealtimeMessage`.
     public func realtimeRequest() -> URLRequest? {
-        guard let token = token() else { return nil }
+        guard let token = try? token() else { return nil }
         var components = URLComponents(url: baseURL.appendingPathComponent("v1/realtime"), resolvingAgainstBaseURL: false)!
         components.scheme = components.scheme == "http" ? "ws" : "wss"
         var request = URLRequest(url: components.url!)
@@ -212,7 +216,7 @@ public final class APIClient: Sendable {
         var request = URLRequest(url: components.url!)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token = token() { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        if let token = try token() { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONEncoder().encode(body)
@@ -234,7 +238,7 @@ public final class APIClient: Sendable {
     func perform(_ request: URLRequest) async throws -> Data {
         var request = request
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token = token() { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        if let token = try token() { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {

@@ -6,8 +6,10 @@ import ZimamKit
 
 /// Keeps the open tasks in Spotlight as `TaskEntity` (`IndexedEntity`, iOS 18 and macOS 15), so
 /// they appear in system search and Siri and Apple Intelligence can find them by their words.
-/// Runs a few seconds after each sync or local edit (`SyncEngine.onDataChanged`): indexes only
-/// tasks that changed since the last run, and removes completed, deleted and signed-out ones.
+/// Runs a few seconds after each local edit and each sync that changed something
+/// (`SyncEngine.onDataChanged`), and on launch and each return to the app (`RootView`), so day
+/// words follow the date: indexes only tasks that changed since the last run, and removes
+/// completed, deleted and signed-out ones.
 /// The index stays on the device.
 @MainActor
 final class TaskSpotlight {

@@ -5,7 +5,7 @@ import ZimamKit
 /// «القادم مع التقويم»: the next open tasks (overdue first, then by day and time) with their time
 /// or prayer and a completion circle, beside three weeks of the calendar from this week.
 struct UpcomingWidget: Widget {
-    static let kind = "app.zimam.upcoming"
+    static let kind = ZimamShared.WidgetKind.upcoming
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: Self.kind, provider: UpcomingProvider()) { entry in

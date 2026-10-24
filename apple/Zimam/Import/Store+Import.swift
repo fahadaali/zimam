@@ -14,7 +14,7 @@ extension Store {
             sync.scheduleSync()
             sync.noteLocalChange()
         } else {
-            ZimamShared.reloadWidgets()
+            ZimamShared.reloadTaskWidgets()
         }
     }
 }

@@ -127,12 +127,13 @@ private struct TaskDetailForm: View {
     /// Saves the title, notes and tags when a field loses focus, on return, and on leaving.
     private func saveText() {
         guard loaded, !task.pendingDelete else { return }
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Cut to the server's limits (`ServerText`), so the edit syncs; the field shows what is kept.
+        let trimmedTitle = Store.taskTitle(title)
+        let trimmedNotes = ServerText.clip(notes.trimmingCharacters(in: .whitespacesAndNewlines), to: ServerText.maxNotes)
         let newTitle = trimmedTitle.isEmpty ? task.title : trimmedTitle
         let newNotes: String? = trimmedNotes.isEmpty ? nil : trimmedNotes
         let newTags = Self.parseTags(tags)
-        if trimmedTitle.isEmpty { title = task.title }
+        if trimmedTitle.isEmpty || ServerText.exceeds(title, ServerText.maxTitle) { title = newTitle }
         guard newTitle != task.title || newNotes != task.notes || newTags != task.tags else { return }
         store.update(task) { item in
             item.title = newTitle

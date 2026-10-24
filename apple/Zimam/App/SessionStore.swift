@@ -25,14 +25,29 @@ final class SessionStore {
     let api: APIClient
 
     @ObservationIgnored private var pendingNonce: String?
+    /// The settings as the server last returned them: what a save that failed goes back to.
+    @ObservationIgnored private var confirmedSettings: User.Settings?
+    /// Settings saves go out one at a time, in order, so the server ends with the last one.
+    @ObservationIgnored private var settingsSave: Task<User?, Never>?
+    /// Counts settings changes; only the latest one's answer updates `user`.
+    @ObservationIgnored private var settingsRevision = 0
 
     init() {
-        let signedIn = Keychain.read(Self.tokenAccount) != nil
+        let signedIn: Bool
+        do {
+            signedIn = try Keychain.value(Self.tokenAccount) != nil
+        } catch {
+            // The Keychain cannot answer for now (on the Mac, a refused prompt): still signed in,
+            // and requests wait until it can rather than go out without the token (`APIClient`).
+            signedIn = true
+        }
         isSignedIn = signedIn
-        user = signedIn ? Self.loadCachedUser() : nil
+        let cached = signedIn ? Self.loadCachedUser() : nil
+        user = cached
+        confirmedSettings = cached?.settings
         let configured = Bundle.main.object(forInfoDictionaryKey: "ZimamAPIURL") as? String
         let baseURL = configured.flatMap(URL.init(string:)) ?? URL(string: "https://api.zimam.work")!
-        api = APIClient(baseURL: baseURL) { Keychain.read(SessionStore.tokenAccount) }
+        api = APIClient(baseURL: baseURL) { try Keychain.value(SessionStore.tokenAccount) }
     }
 
     /// Fills the Apple request: name and email, and the SHA-256 of a fresh nonce.
@@ -65,7 +80,7 @@ final class SessionStore {
                 let response = try await api.signInWithApple(
                     identityToken: identityToken, nonce: pendingNonce, name: name, device: Self.deviceName,
                     authorizationCode: authorizationCode)
-                begin(response)
+                _ = begin(response)
             } catch {
                 errorMessage = "تعذّر الاتصال بزمام. تحقّق من الإنترنت وحاول مرة أخرى."
             }
@@ -123,7 +138,7 @@ final class SessionStore {
         do {
             let response = try await api.signInWithGoogle(
                 idToken: idToken, nonce: nonce, name: result.user.profile?.name, device: Self.deviceName)
-            begin(response)
+            guard begin(response) else { return }
             // The Google account's photo becomes the account's, once, if it has none yet. The
             // device downloads it; the server never fetches outside links.
             if response.user.avatarVersion == nil, result.user.profile?.hasImage == true,
@@ -157,42 +172,67 @@ final class SessionStore {
     }
     #endif
 
-    /// Keeps a new session from either provider.
-    private func begin(_ response: SignInResponse) {
-        Keychain.write(response.token, for: Self.tokenAccount)
-        user = response.user
-        Self.saveCachedUser(response.user)
+    /// Keeps a new session from either provider. False, still signed out, if the Keychain did not
+    /// keep the token: every request would go out without it.
+    private func begin(_ response: SignInResponse) -> Bool {
+        guard Keychain.write(response.token, for: Self.tokenAccount) else {
+            errorMessage = "تعذّر تسجيل الدخول. حاول مرة أخرى."
+            return false
+        }
+        setUser(response.user)
         isSignedIn = true
+        return true
     }
 
+    /// The account and its settings as the server has them: at launch and on each return to the
+    /// app, so settings changed on another device or on the web reach this one.
     func loadUser() async {
-        if let loaded = try? await api.me() { setUser(loaded) }
+        guard let loaded = try? await api.me() else { return }
+        confirmedSettings = loaded.settings
+        // Unchanged, as on most returns: nothing to save, and the widgets need no reload.
+        if loaded != user { setUser(loaded) }
     }
 
     /// Replaces the signed-in user, e.g. after the server returns an updated account.
     func setUser(_ newUser: User) {
         user = newUser
+        confirmedSettings = newUser.settings
         Self.saveCachedUser(newUser)
     }
 
-    /// Applies new settings right away (the date formatter switches calendars at once),
-    /// then saves them with `PATCH /v1/me`. Returns false and restores the old
-    /// settings if the server could not be reached.
+    /// Applies new settings right away (the date formatter switches calendars at once), then
+    /// saves what changed with `PATCH /v1/me`: only those keys, so what another device changed
+    /// meanwhile stays. Saves go out one at a time, in order. Returns false if the server could
+    /// not be reached; the settings then go back to what the server last returned.
     @discardableResult
     func updateSettings(_ settings: User.Settings) async -> Bool {
         guard var updated = user else { return false }
-        let previous = updated
+        let changes = settings.changes(from: updated.settings)
+        guard !changes.isEmpty else { return true }
         updated.settings = settings
         user = updated
-        do {
-            let saved = try await api.updateMe(settings: settings)
+        settingsRevision += 1
+        let revision = settingsRevision
+        let previous = settingsSave
+        let save = Task { [api] () async -> User? in
+            _ = await previous?.value
+            return try? await api.updateMe(settings: changes)
+        }
+        settingsSave = save
+        let saved = await save.value
+        if let saved { confirmedSettings = saved.settings }
+        // A newer change is on its way: its answer, or its failure, decides what `user` shows.
+        guard revision == settingsRevision else { return saved != nil }
+        if let saved {
             setUser(saved)
             return true
-        } catch {
-            // An expired session is handled by the next sync, which signs out.
-            user = previous
-            return false
         }
+        // An expired session is handled by the next sync, which signs out.
+        if var current = user, let confirmedSettings {
+            current.settings = confirmedSettings
+            user = current
+        }
+        return false
     }
 
     /// Saves the account's name (`PATCH /v1/me`); an empty name clears it. False if the server
@@ -206,25 +246,36 @@ final class SessionStore {
         }
     }
 
-    /// Whether the user chose to keep an approximate location on the server (off by default).
-    nonisolated static let shareLocationKey = "location.shareWithServer"
+    /// Where each device kept «أوقات الصلاة في كلود وChatGPT» before the switch became the
+    /// account's (a location in its settings). Read once to carry an «on» over, then removed.
+    private static let legacyShareKey = "location.shareWithServer"
 
-    /// Saves the device's time zone on the server, so agendas built for Claude and ChatGPT
-    /// start on the right day, and, only when the user turned sharing on, a city-level
-    /// location (one decimal, about 10 km) for their prayer times. Turning sharing off
-    /// clears it. Does nothing when the server already has these values.
-    func sharePlace(latitude: Double?, longitude: Double?) async {
-        guard var settings = user?.settings else { return }
-        var location: User.Settings.Coordinate?
-        if UserDefaults.standard.bool(forKey: Self.shareLocationKey), let latitude, let longitude {
-            location = User.Settings.Coordinate(latitude: (latitude * 10).rounded() / 10,
-                                                longitude: (longitude * 10).rounded() / 10)
+    /// Whether the account keeps an approximate location on the server (off by default): the
+    /// switch is the account's, the same on every device and on the web.
+    var sharesPlace: Bool { user?.settings.location != nil }
+
+    /// Saves the device's time zone on the server, so agendas built for Claude and ChatGPT start
+    /// on the right day, and, while the account shares it, this device's city-level location
+    /// (one decimal, about 10 km) for its prayer times. `share` turns sharing on or off (the
+    /// switch); nil keeps the account's choice, so a device that opens or moves never starts or
+    /// stops sharing on its own. Does nothing when the server already has these values.
+    func sharePlace(latitude: Double?, longitude: Double?, share: Bool? = nil) async {
+        guard let current = user?.settings else { return }
+        let legacy = UserDefaults.standard.object(forKey: Self.legacyShareKey) as? Bool
+        var settings = current
+        settings.timeZone = TimeZone.current.identifier
+        if share ?? (current.location != nil || legacy == true) {
+            if let latitude, let longitude {
+                settings.location = User.Settings.Coordinate(latitude: (latitude * 10).rounded() / 10,
+                                                             longitude: (longitude * 10).rounded() / 10)
+            }
+        } else {
+            settings.location = nil
         }
-        let zone = TimeZone.current.identifier
-        guard settings.timeZone != zone || settings.location != location else { return }
-        settings.timeZone = zone
-        settings.location = location
-        await updateSettings(settings)
+        if settings != current {
+            guard await updateSettings(settings) else { return }
+        }
+        if legacy != nil { UserDefaults.standard.removeObject(forKey: Self.legacyShareKey) }
     }
 
     /// Ends the session here and on the server; local data is wiped by the caller.
@@ -254,10 +305,13 @@ final class SessionStore {
         // Forgets the Google account on this device, so the next Google sign-in asks again.
         GIDSignIn.sharedInstance.signOut()
         Keychain.delete(Self.tokenAccount)
+        // Not carried over to the next account on this device.
+        UserDefaults.standard.removeObject(forKey: Self.legacyShareKey)
         // Attachment lists and files opened under this account (TaskAttachmentsSection.swift).
         AttachmentCache.clearAll()
         AvatarStore.shared.clear()
         user = nil
+        confirmedSettings = nil
         Self.saveCachedUser(nil)
         isSignedIn = false
     }

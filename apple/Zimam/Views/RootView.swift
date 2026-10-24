@@ -23,15 +23,21 @@ struct RootView: View {
                                                  longitude: location.coordinate?.longitude)
                         await sync.sync()
                         await ReminderBridge.shared.run()
+                        // Day words in Spotlight («اليوم», «غداً») follow the date, even when the
+                        // sync brought nothing new.
+                        TaskSpotlight.shared.scheduleUpdate()
                     }
                     .onChange(of: scenePhase) { _, phase in
                         // Each return also moves the rolling notification window forward.
                         if phase == .active {
                             notifications.reschedule()
+                            TaskSpotlight.shared.scheduleUpdate()
                             Task {
                                 await sync.sync()
                                 // What was said to Siri («ذكرني …») while away.
                                 await ReminderBridge.shared.run()
+                                // Settings changed on another device or on the web meanwhile.
+                                await session.loadUser()
                             }
                         }
                         // Leaving: ask the system to wake the app to renew the window while it is closed.
@@ -44,6 +50,10 @@ struct RootView: View {
                         case .background: sync.stopRealtime()
                         default: break
                         }
+                    }
+                    // Back online: what waited goes out now, not at the next edit or return.
+                    .onChange(of: NetworkMonitor.shared.isOnline) { _, online in
+                        if online { Task { await sync.sync() } }
                     }
                     // Signing out replaces this view, and its socket closes with it.
                     .onDisappear { sync.stopRealtime() }

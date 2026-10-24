@@ -18,8 +18,11 @@ final class SubscriptionStore {
     private(set) var products: [Product] = []
     /// The plan as the server last answered it.
     private(set) var plan: SubscriptionPlan?
-    /// Products this Apple account is entitled to on this device (StoreKit's verified current entitlements).
-    private(set) var localProductIds: Set<String> = []
+    /// What this Apple account is entitled to on this device (StoreKit's verified current
+    /// entitlements), with the Zimam account each was bought for (`appAccountToken`).
+    private var localEntitlements: Set<LocalEntitlement> = []
+    /// The signed-in Zimam account, whose purchases stand in for the server's plan.
+    private var userId: UUID?
     private(set) var isLoadingProducts = false
     private(set) var isPurchasing = false
     private(set) var isRestoring = false
@@ -33,14 +36,30 @@ final class SubscriptionStore {
         self.api = api
     }
 
+    private struct LocalEntitlement: Hashable {
+        let productId: String
+        let account: UUID?
+    }
+
+    /// Every product this Apple account has here, whoever bought it: sent to the server, which
+    /// decides (a subscription of a deleted Zimam account moves to the new one).
+    private var localProductIds: Set<String> { Set(localEntitlements.map(\.productId)) }
+
+    /// The products bought for the signed-in account: only these stand in for the server's plan.
+    /// Another Zimam account's subscription on the same Apple account does not make this one
+    /// pro, as on the server («مرتبط بحساب آخر»). Signed out, every one counts.
+    private var ownProductIds: Set<String> {
+        Set(localEntitlements.filter { userId == nil || $0.account == userId }.map(\.productId))
+    }
+
     /// Pro on the server, or on this device while the server catches up.
-    var isPro: Bool { plan?.isPro == true || !localProductIds.isEmpty }
+    var isPro: Bool { plan?.isPro == true || !ownProductIds.isEmpty }
 
     /// Whether the server blocks pro features for free users. False during the personal trial.
     var isEnforced: Bool { plan?.enforced ?? false }
 
     /// The product the user is subscribed to, if known.
-    var currentProductId: String? { plan?.productId ?? localProductIds.sorted().first }
+    var currentProductId: String? { plan?.productId ?? ownProductIds.sorted().first }
 
     /// Listens for transactions made outside the paywall (renewals, Ask to Buy, offer codes,
     /// another device) for as long as the app runs. Call once at launch.
@@ -55,7 +74,8 @@ final class SubscriptionStore {
 
     /// Loads the products (once) and the plan, and sends this device's entitlements to the
     /// server when it does not know about them. Signed out, only the products load.
-    func refresh(signedIn: Bool) async {
+    func refresh(signedIn: Bool, userId: UUID?) async {
+        self.userId = signedIn ? userId : nil
         await loadProducts()
         await loadLocalEntitlements()
         guard signedIn else {
@@ -85,6 +105,7 @@ final class SubscriptionStore {
     /// through `appAccountToken`, so it cannot be claimed by another Zimam account.
     func purchase(_ product: Product, userId: UUID) async {
         guard !isPurchasing else { return }
+        self.userId = userId
         message = nil
         isPurchasing = true
         defer { isPurchasing = false }
@@ -139,6 +160,7 @@ final class SubscriptionStore {
     func signedOut() {
         plan = nil
         message = nil
+        userId = nil
     }
 
     // MARK: Transactions
@@ -156,7 +178,9 @@ final class SubscriptionStore {
     private func deliver(_ transaction: StoreKit.Transaction, reportErrors: Bool) async {
         if ZimamPro.productIds.contains(transaction.productID) {
             await send(transaction, reportErrors: reportErrors)
-            if transaction.revocationDate == nil { localProductIds.insert(transaction.productID) }
+            if transaction.revocationDate == nil {
+                localEntitlements.insert(LocalEntitlement(productId: transaction.productID, account: transaction.appAccountToken))
+            }
         }
         await transaction.finish()
     }
@@ -177,14 +201,14 @@ final class SubscriptionStore {
     }
 
     private func loadLocalEntitlements() async {
-        var ids: Set<String> = []
+        var found: Set<LocalEntitlement> = []
         for await result in StoreKit.Transaction.currentEntitlements {
             if case .verified(let transaction) = result, transaction.revocationDate == nil,
                ZimamPro.productIds.contains(transaction.productID) {
-                ids.insert(transaction.productID)
+                found.insert(LocalEntitlement(productId: transaction.productID, account: transaction.appAccountToken))
             }
         }
-        localProductIds = ids
+        localEntitlements = found
     }
 
     /// Where the server should look first. Xcode's local StoreKit testing has no server

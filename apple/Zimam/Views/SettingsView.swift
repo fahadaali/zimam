@@ -103,7 +103,7 @@ struct SettingsView: View {
                 }
             }
             .task { await notifications.refreshStatus() }
-            .task { await subscriptions.refresh(signedIn: session.isSignedIn) }
+            .task { await subscriptions.refresh(signedIn: session.isSignedIn, userId: session.user?.id) }
         }
         #if os(macOS)
         .frame(minWidth: ZimamSpacing.space8 * 14, minHeight: ZimamSpacing.space8 * 18)

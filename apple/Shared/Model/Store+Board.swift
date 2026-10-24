@@ -19,7 +19,7 @@ extension Store {
     /// Adds a section after the project's last one.
     @discardableResult
     func addSection(named name: String, to projectId: UUID) -> SectionItem? {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = ServerText.clip(name.trimmingCharacters(in: .whitespacesAndNewlines), to: ServerText.maxSectionName)
         guard !trimmed.isEmpty else { return nil }
         let order = ManualOrder.after(sections(in: projectId).map(\.sortOrder))
         let section = SectionItem(SectionRecord(projectId: projectId, name: trimmed, sortOrder: order), dirty: true)
@@ -29,7 +29,7 @@ extension Store {
     }
 
     func rename(_ section: SectionItem, to name: String) {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = ServerText.clip(name.trimmingCharacters(in: .whitespacesAndNewlines), to: ServerText.maxSectionName)
         guard !trimmed.isEmpty, trimmed != section.name else { return }
         section.name = trimmed
         touch(section)
@@ -87,7 +87,7 @@ extension Store {
     /// Adds a task at the bottom of a column.
     @discardableResult
     func addTask(title: String, projectId: UUID, sectionId: UUID?, below column: [TaskItem]) -> TaskItem? {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = Self.taskTitle(title)
         guard !trimmed.isEmpty else { return nil }
         let record = TaskRecord(projectId: projectId, sectionId: sectionId, title: trimmed,
                                 sortOrder: ManualOrder.after(column.map(\.sortOrder)))

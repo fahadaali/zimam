@@ -9,7 +9,7 @@ import ZimamKit
 /// count in a ring of what is done (circular), and the next task's title above the clock (inline).
 /// The views are shared with the watch complications (Glance/GlanceViews.swift).
 struct LockScreenWidget: Widget {
-    static let kind = "app.zimam.next"
+    static let kind = ZimamShared.WidgetKind.next
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: Self.kind, provider: LockScreenProvider()) { entry in

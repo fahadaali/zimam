@@ -10,7 +10,8 @@ import ZimamKit
 
 /// Keeps the pending local notifications in step with the tasks, reminders and prayer alerts.
 /// iOS allows 64 per app, so it schedules the soonest ones (see `ReminderPlanner`)
-/// and recomputes the window on launch, after each sync and after each local edit.
+/// and recomputes the window on launch, after each sync that changed something and after each
+/// local edit.
 /// The server sends what lies beyond the window over APNs. Adhan and iqama alerts
 /// (`PrayerAlertPlanner`) take up to 20 of the 60 for the next two days; the app renews
 /// them whenever it runs, and in the background (`BackgroundRefresh`).

@@ -182,11 +182,16 @@ struct StoreTests {
 
     // MARK: delete (Store.swift)
 
-    @Test func deleteMarksTheTaskAndItsSubtasks() throws {
+    @Test func deleteMarksTheTaskItsSubtasksAndTheirReminders() throws {
         let task = store.addTask(title: "السفر")
         let child = try #require(store.addSubtask(to: task, title: "الحجز"))
         let grandchild = try #require(store.addSubtask(to: child, title: "الفندق"))
+        let reminder = store.addTimeReminder(to: grandchild.id, at: Date())
         let other = store.addTask(title: "شراء الهدايا")
+        let otherReminder = store.addTimeReminder(to: other.id, at: Date())
+        // The server has these two already.
+        child.isDirty = false
+        reminder.isDirty = false
 
         store.delete(task)
 
@@ -194,10 +199,14 @@ struct StoreTests {
         #expect(task.isDirty)
         #expect(child.pendingDelete)
         #expect(grandchild.pendingDelete)
-        // The parent's deletion covers the subtasks on the server, so they are not sent.
+        #expect(reminder.pendingDelete)
+        // What the server has goes with the parent's deletion, so it is not sent on its own...
         #expect(!child.isDirty)
-        #expect(!grandchild.isDirty)
+        #expect(!reminder.isDirty)
+        // ...and what it has not seen yet is sent as its own deletion, never as an edit.
+        #expect(grandchild.isDirty)
         #expect(!other.pendingDelete)
+        #expect(!otherReminder.pendingDelete)
     }
 
     // MARK: «خيارات المشروع» (Store.swift)
@@ -208,18 +217,25 @@ struct StoreTests {
         let section = try #require(store.addSection(named: "للشراء", to: project.id))
         let task = store.addTask(title: "شراء الخبز", projectId: project.id)
         let reminder = store.addTimeReminder(to: task.id, at: Date())
+        let unsent = store.addTask(title: "شراء الحليب", projectId: project.id)
         let elsewhere = store.addTask(title: "التقرير", projectId: other.id)
         let inbox = store.addTask(title: "اتصال")
+        // The server has these already; `unsent` it has not seen.
+        for item in [task, elsewhere, inbox] { item.isDirty = false }
+        section.isDirty = false
+        reminder.isDirty = false
 
         store.delete(project)
 
         #expect(project.pendingDelete)
         #expect(project.isDirty)
-        for item in [task.pendingDelete, section.pendingDelete, reminder.pendingDelete] { #expect(item) }
+        for item in [task.pendingDelete, section.pendingDelete, reminder.pendingDelete, unsent.pendingDelete] { #expect(item) }
         // The project's deletion deletes them on the server, for every member: they are not sent.
         #expect(!task.isDirty)
         #expect(!section.isDirty)
         #expect(!reminder.isDirty)
+        // One the server has not seen goes out as its own deletion.
+        #expect(unsent.isDirty)
         #expect(!elsewhere.pendingDelete)
         #expect(!inbox.pendingDelete)
         #expect(!other.pendingDelete)

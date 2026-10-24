@@ -30,6 +30,8 @@ struct CompleteFocusTaskIntent: LiveActivityIntent {
         descriptor.fetchLimit = 1
         if let item = try? context.fetch(descriptor).first, !item.pendingDelete, !item.isDone {
             Store(context: context, sync: LiveSync.engine).toggleDone(item)
+            // Replanned and sent before the system suspends the app again.
+            await LiveSync.flush?(LiveSync.intentWait)
         }
         await FocusActivity.end(taskId: id)
         return .result()

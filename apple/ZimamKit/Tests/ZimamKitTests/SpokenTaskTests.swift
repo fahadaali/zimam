@@ -42,10 +42,10 @@ struct SpokenTaskTests {
 
     @Test func theSentenceIsKeptWhenTheAssistantCannotReadIt() {
         let spoken = SpokenTask(text: "ذكرني أراجع العقد بعد العصر بكرة", problem: .proRequired)
-        #expect(!spoken.isRead)
+        #expect(spoken.problem == .proRequired)
         #expect(spoken.suggestion.title == "ذكرني أراجع العقد بعد العصر بكرة")
         #expect(spoken.suggestion.priority == TaskPriority.none)
         #expect(spoken.suggestion.dueDate == nil)
-        #expect(SpokenTask(suggestion: TaskSuggestion(title: "مهمة")).isRead)
+        #expect(SpokenTask(suggestion: TaskSuggestion(title: "مهمة")).problem == nil)
     }
 }

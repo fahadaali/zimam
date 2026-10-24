@@ -96,11 +96,6 @@ public enum AppleRemindersImport {
         public init() {}
     }
 
-    /// Server limits (api/src/data/schemas.ts).
-    static let maxTitle = 500
-    static let maxNotes = 20_000
-    static let maxProjectName = 200
-
     /// How reminders brought over from Siri («ذكرني …», `ReminderBridge` in the app) differ from an import.
     public struct BridgeOptions: Sendable {
         /// The account, so the same reminder becomes the same task on every device (`bridgedTaskId`).
@@ -160,9 +155,9 @@ public enum AppleRemindersImport {
 
             var title = rawTitle
             var noteLines: [String] = []
-            if title.count > maxTitle {
+            if ServerText.exceeds(title, ServerText.maxTitle) {
                 noteLines.append(title)
-                title = String(title.prefix(maxTitle))
+                title = ServerText.clip(title, to: ServerText.maxTitle)
             }
             if let notes = item.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
                 noteLines.append(notes)
@@ -200,7 +195,7 @@ public enum AppleRemindersImport {
             }
 
             var notes = noteLines.joined(separator: "\n\n")
-            if notes.count > maxNotes { notes = String(notes.prefix(maxNotes)) }
+            notes = ServerText.clip(notes, to: ServerText.maxNotes)
 
             let orderKey = projectId ?? Self.inboxKey
             let order = taskOrder[orderKey, default: 0]
@@ -296,7 +291,7 @@ public enum AppleRemindersImport {
     static func projectName(_ title: String) -> String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return "تذكيرات" }
-        return trimmed.count > maxProjectName ? String(trimmed.prefix(maxProjectName)) : trimmed
+        return ServerText.clip(trimmed, to: ServerText.maxName)
     }
 
     static func dayString(_ date: Date, timeZone: TimeZone) -> String {

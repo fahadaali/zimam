@@ -32,11 +32,18 @@ final class WatchModel {
     private static let calendarKey = "calendar"
 
     init() {
-        isSignedIn = Keychain.read(Self.tokenAccount) != nil
+        let signedIn: Bool
+        do {
+            signedIn = try Keychain.value(Self.tokenAccount) != nil
+        } catch {
+            // The Keychain cannot answer for now: requests wait for the token (`APIClient`).
+            signedIn = true
+        }
+        isSignedIn = signedIn
         calendar = UserDefaults.standard.string(forKey: Self.calendarKey).flatMap(CalendarKind.init(rawValue:)) ?? .hijri
         let configured = Bundle.main.object(forInfoDictionaryKey: "ZimamAPIURL") as? String
         let baseURL = configured.flatMap(URL.init(string:)) ?? URL(string: "https://api.zimam.work")!
-        api = APIClient(baseURL: baseURL) { Keychain.read(WatchModel.tokenAccount) }
+        api = APIClient(baseURL: baseURL) { try Keychain.value(WatchModel.tokenAccount) }
         link.onSession = { [weak self] token, calendar in
             self?.received(token: token, calendar: calendar)
         }
@@ -118,7 +125,7 @@ final class WatchModel {
     /// («ذكرني أراجع العقد بعد العصر بكرة»: title, day, time or prayer) as on the iPhone;
     /// otherwise, or when it cannot help, the words become the title of a task due today.
     func add(title: String) async {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = ServerText.clip(title.trimmingCharacters(in: .whitespacesAndNewlines), to: ServerText.maxTitle)
         guard !trimmed.isEmpty else { return }
         let today = Self.today()
         // Shown at once as said; the assistant's reading replaces it when it comes.
@@ -172,8 +179,7 @@ final class WatchModel {
             if current != nil { signOut() }
             return
         }
-        guard token != current else { return }
-        Keychain.write(token, for: Self.tokenAccount)
+        guard token != current, Keychain.write(token, for: Self.tokenAccount) else { return }
         isSignedIn = true
         Task { await refresh() }
     }

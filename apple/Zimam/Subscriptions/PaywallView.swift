@@ -54,7 +54,7 @@ struct PaywallContent: View {
         .navigationBarTitleDisplayMode(.inline)
         .manageSubscriptionsSheet(isPresented: $managing)
         #endif
-        .task { await subscriptions.refresh(signedIn: session.isSignedIn) }
+        .task { await subscriptions.refresh(signedIn: session.isSignedIn, userId: session.user?.id) }
     }
 
     // MARK: Sections

@@ -7,7 +7,7 @@ import ZimamKit
 /// their days, «+n» for what does not fit, today highlighted, and both calendars' day numbers.
 /// The month is in the user's primary calendar unless the widget is set to the other one.
 struct MonthWidget: Widget {
-    static let kind = "app.zimam.month"
+    static let kind = ZimamShared.WidgetKind.month
 
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: Self.kind, intent: CalendarWidgetConfiguration.self, provider: CalendarWidgetProvider()) { entry in

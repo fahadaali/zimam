@@ -35,15 +35,15 @@ struct ZimamApp: App {
         // the engine, the provider is its own owner): those would be reference cycles.
         sync.onDataChanged = { [weak notifications] in
             notifications?.reschedule()
-            ZimamShared.reloadWidgets()
+            ZimamShared.reloadTaskWidgets()
             #if os(iOS)
             // «المهمة الجارية» ends once its task is done or deleted, wherever that happened.
             FocusActivity.endFinished(in: ZimamStore.shared.mainContext)
             #endif
             // Open tasks in Spotlight, for system search, Siri and Apple Intelligence.
             TaskSpotlight.shared.scheduleUpdate()
-            // Saved places in Siri's phrases («ذكرني في زمام إذا وصلت البيت»).
-            ZimamShortcuts.updateAppShortcutParameters()
+            // Saved places in Siri's phrases («ذكرني في زمام إذا وصلت البيت»), when they changed.
+            PlacePhrases.updateIfChanged()
         }
         location.onChange = { [weak notifications, session, weak location] in
             notifications?.reschedule()
@@ -56,10 +56,18 @@ struct ZimamApp: App {
         }
         // Reminders beyond the local window come as pushes; the token is sent with this session.
         PushRegistration.shared.api = session.api
-        // Siri and Shortcuts run their intents in this process; their edits sync through the same engine.
+        // Siri and Shortcuts run their intents in this process, and on iPhone and iPad so do the
+        // widgets' buttons: their edits sync through the same engine.
         LiveSync.engine = sync
-        // The system's background wakes renew the notification window (adhan and iqama alerts).
-        BackgroundRefresh.scheduler = notifications
+        // An intent's edit, or a background wake (`BackgroundRefresh`), replans the notifications
+        // and goes out before the system suspends the app, which may be right after. The window
+        // first: it needs only what is saved here, and the network may not answer in time.
+        LiveSync.flush = { [weak sync, weak notifications, session] limit in
+            await notifications?.rescheduleNow()
+            guard session.isSignedIn, let sync else { return }
+            // Again with what the pull brought, unless the time ran out first.
+            if await sync.sync(waitingAtMost: limit) { await notifications?.rescheduleNow() }
+        }
         // «ذكرني …» said to Siri lands in Apple Reminders; brought over to the inbox when turned on.
         ReminderBridge.shared.start(context: container.mainContext, sync: sync, session: session)
         #if os(iOS)

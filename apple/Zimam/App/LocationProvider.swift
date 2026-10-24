@@ -8,8 +8,8 @@ import UIKit
 
 /// The place prayer times are computed for. Asks for the location when the user taps
 /// «استعمال موقعي الحالي» (when in use, until the first reading), and keeps the last coordinate
-/// on the device. It reaches the server only, rounded to city level, when the user turns on
-/// sharing in settings (see `SessionStore.sharePlace`).
+/// on the device. It reaches the server only, rounded to city level, while the account shares it
+/// («أوقات الصلاة في كلود وChatGPT», see `SessionStore.sharePlace`).
 ///
 /// The reading uses `startUpdatingLocation` and stops at the first fix, rather than the one-shot
 /// `requestLocation`: that one gives up with `kCLErrorLocationUnknown` when the first fix is slow

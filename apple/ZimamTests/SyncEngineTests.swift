@@ -140,6 +140,140 @@ struct SyncEngineTests {
         #expect((data["updatedAt"] as? Int) == 5_000)
     }
 
+    /// A sync asked for while one runs waits for it, and for the round it adds: the task created
+    /// meanwhile is on the server when the call returns, so a request made next finds it.
+    @Test func aSyncAskedForDuringAnotherReturnsOnceItsEditsAreSent() async throws {
+        let saved = prepare()
+        defer { saved.restore() }
+        let first = try insertTask(TaskRecord(title: "مراجعة العقد", updatedAt: 5_000), dirty: true)
+        StubURLProtocol.respond(to: Self.path, method: "POST", with: results([first.id], status: "applied"))
+        StubURLProtocol.respond(to: Self.path, method: "GET", with: page([], cursor: 5))
+
+        let engine = self.engine
+        let running = Task { await engine.sync() }
+        try await StubURLProtocol.waitForRequest(to: Self.path, method: "POST")
+        let second = try insertTask(TaskRecord(title: "إرسال العقد", updatedAt: 6_000), dirty: true)
+        StubURLProtocol.respond(to: Self.path, method: "POST", with: results([second.id], status: "applied"))
+        let joined = Task { await engine.sync() }
+        // Lets it start, and find the sync running, before the first push is answered.
+        await Task.yield()
+        StubURLProtocol.release(Self.path)
+        await joined.value
+
+        #expect(!second.isDirty)
+        #expect(StubURLProtocol.requestCount(for: Self.path, method: "POST") == 2)
+        await running.value
+        #expect(!first.isDirty)
+        #expect(engine.lastError == nil)
+    }
+
+    /// An edit made while a `stale` answer is on its way stays dirty, and the pull that follows
+    /// does not overwrite it with the server's older version.
+    @Test func anEditMadeDuringAStaleAnswerIsKept() async throws {
+        let saved = prepare()
+        defer { saved.restore() }
+        let id = UUID()
+        let task = try insertTask(TaskRecord(id: id, title: "مراجعة العقد", updatedAt: 5_000), dirty: true)
+        StubURLProtocol.respond(to: Self.path, method: "POST", with: results([id], status: "stale"))
+        try StubURLProtocol.respond(to: Self.path, method: "GET",
+                                    with: page([upsert(TaskRecord(id: id, title: "مراجعة العقد مع المحامي", updatedAt: 5_500))],
+                                               cursor: 4))
+
+        let engine = self.engine
+        let run = Task { await engine.sync() }
+        try await StubURLProtocol.waitForRequest(to: Self.path, method: "POST")
+        task.title = "مراجعة العقد مع الإدارة"
+        task.updatedAt = 6_000
+        try context.save()
+        StubURLProtocol.release(Self.path)
+        await run.value
+
+        #expect(task.title == "مراجعة العقد مع الإدارة")
+        #expect(task.isDirty)
+    }
+
+    /// A task deleted while its edit is in flight: the edit's `applied` does not remove it here,
+    /// since its deletion was never sent. It stays hidden and dirty, the echo of the edit does not
+    /// bring it back, and the next sync sends the deletion.
+    @Test func aTaskDeletedWhileItsEditIsInFlightIsStillDeleted() async throws {
+        let saved = prepare()
+        defer { saved.restore() }
+        let id = UUID()
+        let task = try insertTask(TaskRecord(id: id, title: "مراجعة العقد", updatedAt: 5_000), dirty: true)
+        StubURLProtocol.respond(to: Self.path, method: "POST", with: results([id], status: "applied"))
+        // The echo of the edit, then the deletion once it reached the server.
+        try StubURLProtocol.respond(to: Self.path, method: "GET",
+                                    with: page([upsert(TaskRecord(id: id, title: "مراجعة العقد", updatedAt: 5_000))], cursor: 4))
+        StubURLProtocol.respond(to: Self.path, method: "GET", with: page([delete(id)], cursor: 5))
+
+        let engine = self.engine
+        let run = Task { await engine.sync() }
+        try await StubURLProtocol.waitForRequest(to: Self.path, method: "POST")
+        Store(context: context, sync: nil).delete(task)
+        StubURLProtocol.release(Self.path)
+        await run.value
+
+        #expect(try allTasks().count == 1)
+        #expect(task.pendingDelete)
+        #expect(task.isDirty)
+
+        await engine.sync()
+
+        #expect(try allTasks().isEmpty)
+        let pushes = StubURLProtocol.recordedRequests(to: Self.path, method: "POST")
+        #expect(pushes.count == 2)
+        let body = try #require(pushes.last?.body)
+        let object = try JSONSerialization.jsonObject(with: body)
+        let json = try #require(object as? [String: Any])
+        let mutations = try #require(json["mutations"] as? [[String: Any]])
+        #expect((mutations.first?["op"] as? String) == "delete")
+    }
+
+    /// Another device edited the task after it was deleted here: the server answers `stale` and
+    /// keeps it, so the later edit wins. The task shows again, with the subtask and the reminder
+    /// its deletion hid, and takes the server's version from the pull.
+    @Test func aStaleDeleteShowsTheTaskAndWhatItHidAgain() async throws {
+        let saved = prepare()
+        defer { saved.restore() }
+        let (task, child, reminder) = try insertTree()
+        Store(context: context, sync: nil).delete(task)
+        #expect(child.pendingDelete && reminder.pendingDelete)
+        StubURLProtocol.respond(to: Self.path, method: "POST", with: results([task.id], status: "stale"))
+        try StubURLProtocol.respond(to: Self.path, method: "GET",
+                                    with: page([upsert(TaskRecord(id: task.id, title: "السفر إلى جدة",
+                                                                  updatedAt: Milliseconds.now + 60_000))], cursor: 6))
+        StubURLProtocol.release(Self.path)
+
+        await engine.sync()
+
+        #expect(!task.pendingDelete)
+        #expect(!task.isDirty)
+        #expect(task.title == "السفر إلى جدة")
+        #expect(!child.pendingDelete)
+        #expect(!reminder.pendingDelete)
+    }
+
+    /// A deletion the server refuses (a viewer's, in a shared project) leaves the task where it is,
+    /// here as there, with what its deletion hid, and the reason kept on it.
+    @Test func aForbiddenDeleteKeepsTheTaskAndWhatItHid() async throws {
+        let saved = prepare()
+        defer { saved.restore() }
+        let (task, child, reminder) = try insertTree()
+        Store(context: context, sync: nil).delete(task)
+        StubURLProtocol.respond(to: Self.path, method: "POST", with: results([task.id], status: "forbidden"))
+        StubURLProtocol.respond(to: Self.path, method: "GET", with: page([], cursor: 6))
+        StubURLProtocol.release(Self.path)
+
+        await engine.sync()
+
+        #expect(try allTasks().count == 2)
+        #expect(!task.pendingDelete)
+        #expect(!task.isDirty)
+        #expect(task.syncError != nil)
+        #expect(!child.pendingDelete)
+        #expect(!reminder.pendingDelete)
+    }
+
     // MARK: Reset
 
     /// Signing out while a pull is in flight: the page that arrives afterwards belongs to the
@@ -240,6 +374,17 @@ struct SyncEngineTests {
 
     private func allTasks() throws -> [TaskItem] {
         try context.fetch(FetchDescriptor<TaskItem>())
+    }
+
+    /// A synced task with a subtask, and a reminder on the subtask.
+    private func insertTree() throws -> (TaskItem, TaskItem, ReminderItem) {
+        let task = try insertTask(TaskRecord(title: "السفر", updatedAt: 1_000), dirty: false)
+        let child = try insertTask(TaskRecord(parentId: task.id, title: "الحجز", updatedAt: 1_000), dirty: false)
+        let reminder = ReminderItem(ReminderRecord(taskId: child.id, kind: .time, at: "2026-10-20T09:00:00+03:00", updatedAt: 1_000),
+                                    dirty: false)
+        context.insert(reminder)
+        try context.save()
+        return (task, child, reminder)
     }
 
     /// The `cursor` a pull asked from.

@@ -75,13 +75,14 @@ struct TaskEntity: IndexedEntity {
 struct TaskEntityQuery: EntityStringQuery {
     init() {}
 
+    /// Fetches only the tasks asked for: a widget's button resolves its one task here on each tap.
     @MainActor
     func entities(for identifiers: [UUID]) async throws -> [TaskEntity] {
-        let wanted = Set(identifiers)
+        let ids = identifiers
+        let descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate { ids.contains($0.id) && !$0.pendingDelete })
+        let tasks = (try? ZimamStore.shared.mainContext.fetch(descriptor)) ?? []
         let formatter = TaskEntity.userFormatter()
-        return allTasks()
-            .filter { wanted.contains($0.id) }
-            .map { TaskEntity($0, formatter: formatter) }
+        return tasks.map { TaskEntity($0, formatter: formatter) }
     }
 
     @MainActor
