@@ -50,7 +50,8 @@ public enum Weekday: Int, CaseIterable, Codable, Sendable {
 /// A monthly or yearly series keeps its day: from the 31st, February's occurrence is the 28th
 /// and March's the 31st again; from 29 February, the next leap year's is the 29th again. While an
 /// occurrence is moved earlier by a short month, the rule it carries says the series' day
-/// (`BYMONTHDAY`, with `BYMONTH` for a yearly one); back on that day, it reads as before.
+/// (`BYMONTHDAY`, with `BYMONTH` for a yearly one); back on that day, it reads as before. Moved
+/// by the user to another day, the occurrence takes the series with it (`moved(from:)`).
 public struct Recurrence: Equatable, Sendable {
     public enum Frequency: String, CaseIterable, Sendable {
         case daily = "DAILY", weekly = "WEEKLY", monthly = "MONTHLY", yearly = "YEARLY"
@@ -211,6 +212,27 @@ public struct Recurrence: Equatable, Sendable {
             return (day: next, rule: rule.settled(on: next))
         }
         return nil
+    }
+
+    /// The rule once the occurrence due `day` is moved to another day: without the series' day
+    /// (`monthDay`, `month`) when `day` was on it, or on the last day of a month too short for it.
+    /// The series then follows the move, as a plain rule's does, rather than add a second
+    /// occurrence in the month it was moved within (28 February carrying the 31st, moved to the
+    /// 10th, is followed by 10 March, not by 28 February again). A day the rule picks other than
+    /// the task's own («BYMONTHDAY=20» on the 15th) stays.
+    public func moved(from day: String) -> Recurrence {
+        guard monthDay != nil || month != nil, let parts = Recurrence.parts(of: day) else { return self }
+        if let month, month != parts.month { return self }
+        if let monthDay {
+            let calendar = Recurrence.calendar(TimeZone(secondsFromGMT: 0) ?? .current)
+            guard let date = Recurrence.noon(of: day, calendar: calendar),
+                  let length = calendar.range(of: .day, in: .month, for: date)?.count,
+                  parts.day == min(monthDay, length) else { return self }
+        }
+        var copy = self
+        copy.monthDay = nil
+        copy.month = nil
+        return copy
     }
 
     /// Without `monthDay` and `month` once an occurrence falls on them: from there the plain rule

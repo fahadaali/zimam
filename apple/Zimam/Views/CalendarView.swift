@@ -93,6 +93,10 @@ struct CalendarView: View {
                 selectedDay = day
                 PlaceOpener.shared.pending = nil
             }
+            // A new day (DayClock) moves a selection that was on today; a day picked on purpose stays.
+            .onChange(of: today) { old, new in
+                if selectedDay == old { selectedDay = new }
+            }
     }
 
     // MARK: Layout
@@ -271,7 +275,7 @@ struct CalendarView: View {
     }
 
     private var addTaskSheet: some View {
-        let tomorrow = grid.dayString(from: grid.addingDays(1, to: Date()))
+        let tomorrow = grid.dayString(from: grid.addingDays(1, to: DayClock.shared.now))
         let due: AddTaskView.Due = selectedDay == today ? .today : selectedDay == tomorrow ? .tomorrow : .pickedDate
         return AddTaskView(due: due, date: selectedNoon)
     }
@@ -305,7 +309,7 @@ struct CalendarView: View {
         CalendarGrid(kind: kind, firstWeekday: firstWeekday, timeZone: formatter.timeZone)
     }
 
-    private var today: String { formatter.dayString(from: Date()) }
+    private var today: String { formatter.dayString(from: DayClock.shared.now) }
 
     /// Midday of the selected day, away from either edge of it.
     private var selectedNoon: Date {

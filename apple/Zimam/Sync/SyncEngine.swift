@@ -136,6 +136,11 @@ final class SyncEngine {
         defer { isSyncing = false }
         repeat {
             runAgain = false
+            // This round sends every edit saved so far, so a sync scheduled for one of them
+            // (`scheduleSync`) would only push and pull again with nothing to send. An edit made
+            // from here on schedules its own.
+            scheduled?.cancel()
+            scheduled = nil
             let started = generation
             do {
                 try await push(started)
@@ -345,7 +350,7 @@ final class SyncEngine {
             case .applied:
                 if sentDelete {
                     // What its deletion hid goes with the server's, in the pull that follows.
-                    Self.leaveSection(item, in: context)
+                    Self.releaseLinks(to: item, in: context)
                     context.delete(item)
                 } else if unchanged {
                     item.isDirty = false
@@ -364,13 +369,16 @@ final class SyncEngine {
                 if unchanged { item.isDirty = false }
                 return false
             case .gone:
-                Self.leaveSection(item, in: context)
+                Self.releaseLinks(to: item, in: context)
                 context.delete(item)
                 return true
             case .forbidden, .invalid:
                 if sentDelete && result.status == .invalid {
                     // The server never had it, so nothing it has hangs from it (what was never
-                    // sent goes out as its own deletion): nothing is left to send.
+                    // sent goes out as its own deletion): nothing is left to send, and what its
+                    // deletion hid goes too, rather than stay hidden here.
+                    Self.removeHidden(with: item, in: context)
+                    Self.releaseLinks(to: item, in: context)
                     context.delete(item)
                     return false
                 }
@@ -473,9 +481,7 @@ final class SyncEngine {
         case .project(let record)?:
             if let local = records.projects[change.id] {
                 guard !keepsLocal(local, over: record.updatedAt) else { return false }
-                let changed = reveal(local) || local.record != record
-                local.apply(record)
-                return changed
+                return take(local, differs: local.record != record) { $0.apply(record) }
             }
             let item = ProjectItem(record, dirty: false)
             context.insert(item)
@@ -483,9 +489,7 @@ final class SyncEngine {
         case .section(let record)?:
             if let local = records.sections[change.id] {
                 guard !keepsLocal(local, over: record.updatedAt) else { return false }
-                let changed = reveal(local) || local.record != record
-                local.apply(record)
-                return changed
+                return take(local, differs: local.record != record) { $0.apply(record) }
             }
             let item = SectionItem(record, dirty: false)
             context.insert(item)
@@ -493,9 +497,7 @@ final class SyncEngine {
         case .task(let record)?:
             if let local = records.tasks[change.id] {
                 guard !keepsLocal(local, over: record.updatedAt) else { return false }
-                let changed = reveal(local) || local.record != record
-                local.apply(record)
-                return changed
+                return take(local, differs: local.record != record) { $0.apply(record) }
             }
             let item = TaskItem(record, dirty: false)
             context.insert(item)
@@ -503,9 +505,7 @@ final class SyncEngine {
         case .reminder(let record)?:
             if let local = records.reminders[change.id] {
                 guard !keepsLocal(local, over: record.updatedAt) else { return false }
-                let changed = reveal(local) || local.record != record
-                local.apply(record)
-                return changed
+                return take(local, differs: local.record != record) { $0.apply(record) }
             }
             let item = ReminderItem(record, dirty: false)
             context.insert(item)
@@ -513,9 +513,7 @@ final class SyncEngine {
         case .place(let record)?:
             if let local = records.places[change.id] {
                 guard !keepsLocal(local, over: record.updatedAt) else { return false }
-                let changed = reveal(local) || local.record != record
-                local.apply(record)
-                return changed
+                return take(local, differs: local.record != record) { $0.apply(record) }
             }
             let item = PlaceItem(record, dirty: false)
             context.insert(item)
@@ -528,16 +526,32 @@ final class SyncEngine {
             case .section:
                 guard let local = records.sections.removeValue(forKey: change.id) else { return false }
                 // Its tasks come with the deletion too, but one edited here keeps its own version.
-                Self.leaveSection(local, in: context)
+                Self.releaseLinks(to: local, in: context)
                 context.delete(local)
                 return true
             case .task: return remove(records.tasks.removeValue(forKey: change.id))
             case .reminder: return remove(records.reminders.removeValue(forKey: change.id))
-            case .place: return remove(records.places.removeValue(forKey: change.id))
+            case .place:
+                guard let local = records.places.removeValue(forKey: change.id) else { return false }
+                // Its reminders come unlinked with the deletion too, but one edited here keeps its own.
+                Self.releaseLinks(to: local, in: context)
+                context.delete(local)
+                return true
             case .comment: return false
             }
         }
         return true
+    }
+
+    /// Gives a local record the server's version (`apply`, which `differs` from it or not). True
+    /// if anything here changed. One a deletion hid shows again (`reveal`), unless a deletion not
+    /// sent yet still hides it (`hiddenByUnsentDeletion`): it then stays hidden with the new fields.
+    private func take<Item: SyncedItem>(_ local: Item, differs: Bool, apply: (Item) -> Void) -> Bool {
+        let held = hiddenByUnsentDeletion(local)
+        let changed = (!held && reveal(local)) || differs
+        apply(local)
+        if held { local.pendingDelete = true }
+        return changed
     }
 
     /// A record a deletion still hides, about to take the server's version: the server kept it,
@@ -546,6 +560,45 @@ final class SyncEngine {
         guard local.pendingDelete else { return false }
         Self.unhide(local, in: context)
         return true
+    }
+
+    /// Whether a deletion not sent yet hides `local`, which that deletion hid without marking it
+    /// (`Store.delete`): a parent task's at any depth, its task's for a reminder, or its project's.
+    /// The server deletes it with that deletion, in the round that sends it; until then its version
+    /// arriving first (the pull of a round whose push went out before the deletion, or a long pull
+    /// from zero) does not show it, orphaned, meanwhile.
+    private func hiddenByUnsentDeletion(_ local: some SyncedItem) -> Bool {
+        guard local.pendingDelete, !local.isDirty else { return false }
+        if let task = local as? TaskItem {
+            return unsentDeletion(fromTask: task.parentId) || unsentDeletion(ofProject: task.projectId)
+        }
+        if let reminder = local as? ReminderItem { return unsentDeletion(fromTask: reminder.taskId) }
+        if let section = local as? SectionItem { return unsentDeletion(ofProject: section.projectId) }
+        return false
+    }
+
+    /// Whether the task `id`, or a parent above it, is hidden by a deletion not sent yet: its own
+    /// or its project's. A task that is not hidden hides nothing below it.
+    private func unsentDeletion(fromTask id: UUID?) -> Bool {
+        var next = id
+        var seen: Set<UUID> = []
+        while let id = next, seen.insert(id).inserted {
+            var descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.id == id })
+            descriptor.fetchLimit = 1
+            guard let task = try? context.fetch(descriptor).first, task.pendingDelete else { return false }
+            if task.isDirty || unsentDeletion(ofProject: task.projectId) { return true }
+            next = task.parentId
+        }
+        return false
+    }
+
+    /// Whether the project `id` is deleted here and its deletion not sent yet.
+    private func unsentDeletion(ofProject id: UUID?) -> Bool {
+        guard let id else { return false }
+        var descriptor = FetchDescriptor<ProjectItem>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        guard let project = try? context.fetch(descriptor).first else { return false }
+        return project.pendingDelete && project.isDirty
     }
 
     private func remove<Item: PersistentModel>(_ local: Item?) -> Bool {
@@ -629,13 +682,34 @@ final class SyncEngine {
         item.pendingDelete = false
     }
 
-    /// A section gone from the server: the tasks still in it here leave it, as its deletion left
-    /// them there, so an edit to one is not refused for naming it. Nothing for other records.
-    private static func leaveSection(_ item: some SyncedItem, in context: ModelContext) {
-        guard let section = item as? SectionItem else { return }
-        let id: UUID? = section.id
-        let tasks = (try? context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { $0.sectionId == id }))) ?? []
-        for task in tasks { task.sectionId = nil }
+    /// Removes what a deletion hid along with a record the server never had: none of it reached
+    /// the server either, which refuses what hangs from a record it does not have.
+    private static func removeHidden(with item: some SyncedItem, in context: ModelContext) {
+        let hidden = hiddenWith(item, in: context)
+        for task in hidden.tasks { context.delete(task) }
+        for section in hidden.sections { context.delete(section) }
+        for reminder in hidden.reminders { context.delete(reminder) }
+    }
+
+    /// A section or place gone from the server: the tasks still in the section here leave it, and
+    /// the reminders still linked to the place lose the link, which its deletion kept until the
+    /// server took it (`Store.delete`, `Store.deletePlace`). An edit to one is then not sent naming
+    /// it. Not marked for sync, as the server did the same. Nothing for other records.
+    private static func releaseLinks(to item: some SyncedItem, in context: ModelContext) {
+        if let section = item as? SectionItem {
+            let id: UUID? = section.id
+            let tasks = (try? context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { $0.sectionId == id }))) ?? []
+            for task in tasks { task.sectionId = nil }
+        } else if let place = item as? PlaceItem {
+            let id = place.id
+            let kind = ReminderRecord.Kind.location.rawValue
+            let reminders = (try? context.fetch(FetchDescriptor<ReminderItem>(predicate: #Predicate { $0.kindRaw == kind }))) ?? []
+            for reminder in reminders {
+                guard var location = reminder.record.location, location.placeId == id else { continue }
+                location.placeId = nil
+                reminder.locationJSON = try? JSONEncoder().encode(location)
+            }
+        }
     }
 }
 

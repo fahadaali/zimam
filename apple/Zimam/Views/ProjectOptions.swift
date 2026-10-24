@@ -188,7 +188,7 @@ struct ArchivedProjectsSection: View {
                                     Store(context: context, sync: sync).setArchived(project, false)
                                 }
                                 .labelStyle(.titleOnly)
-                                .buttonStyle(.bordered)
+                                .buttonStyle(.zimamSecondary)
                             }
                         }
                         .frame(minHeight: ZimamSpacing.space11)

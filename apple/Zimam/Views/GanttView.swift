@@ -133,7 +133,7 @@ struct GanttView: View {
         return Calendar.current.firstWeekday
     }
 
-    private var today: String { formatter.dayString(from: Date()) }
+    private var today: String { formatter.dayString(from: DayClock.shared.now) }
 
     init(projectId: UUID?) {
         self.projectId = projectId

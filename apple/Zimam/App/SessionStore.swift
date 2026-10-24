@@ -27,7 +27,8 @@ final class SessionStore {
     @ObservationIgnored private var pendingNonce: String?
     /// The settings as the server last returned them: what a save that failed goes back to.
     @ObservationIgnored private var confirmedSettings: User.Settings?
-    /// Settings saves go out one at a time, in order, so the server ends with the last one.
+    /// Settings saves go out one at a time, in order, so the server ends with the last one. Nil
+    /// once the last one has answered.
     @ObservationIgnored private var settingsSave: Task<User?, Never>?
     /// Counts settings changes; only the latest one's answer updates `user`.
     @ObservationIgnored private var settingsRevision = 0
@@ -185,9 +186,13 @@ final class SessionStore {
     }
 
     /// The account and its settings as the server has them: at launch and on each return to the
-    /// app, so settings changed on another device or on the web reach this one.
+    /// app, so settings changed on another device or on the web reach this one. Not while a
+    /// settings save is on its way, or once one starts before the answer: the server may read the
+    /// account before that save lands, and the save's own answer brings the whole account anyway.
     func loadUser() async {
-        guard let loaded = try? await api.me() else { return }
+        guard settingsSave == nil else { return }
+        let revision = settingsRevision
+        guard let loaded = try? await api.me(), revision == settingsRevision else { return }
         confirmedSettings = loaded.settings
         // Unchanged, as on most returns: nothing to save, and the widgets need no reload.
         if loaded != user { setUser(loaded) }
@@ -223,6 +228,8 @@ final class SessionStore {
         if let saved { confirmedSettings = saved.settings }
         // A newer change is on its way: its answer, or its failure, decides what `user` shows.
         guard revision == settingsRevision else { return saved != nil }
+        // The last save has answered (saves run in order), so `loadUser` may read again.
+        settingsSave = nil
         if let saved {
             setUser(saved)
             return true

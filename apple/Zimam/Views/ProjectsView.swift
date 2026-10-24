@@ -30,10 +30,10 @@ struct ProjectsView: View {
         // Grouped once, then looked up per card, rather than filtering every task per project.
         let byProject = Dictionary(grouping: tasks.filter { $0.parentId == nil }, by: \.projectId)
         List {
-            // The timeline and the matrix of every project, at the top of the iPhone's projects tab
-            // (the iPad and the Mac list them in the sidebar).
+            // The inbox, and the timeline and the matrix of every project, at the top of the iPhone's
+            // projects tab (the iPad and the Mac list them in the sidebar).
             Section {
-                ForEach([OverviewRoute.timeline, .matrix], id: \.self) { route in
+                ForEach([OverviewRoute.inbox, .timeline, .matrix], id: \.self) { route in
                     NavigationLink(value: route) {
                         Label(route.title, systemImage: route.systemImage)
                             .font(ZimamType.body)
@@ -153,10 +153,12 @@ struct ProjectDetailView: View {
                 GanttView(projectId: projectId)
             } else {
                 list(own: own, sections: sections)
+                    .roomForAddButton()
                     .overlay(alignment: .bottomTrailing) { AddTaskButton { showingAdd = true } }
             }
         }
-        .sheet(isPresented: $showingAdd) { AddTaskView(projectId: projectId) }
+        // From a section's own screen the task goes in that section.
+        .sheet(isPresented: $showingAdd) { AddTaskView(projectId: projectId, sectionId: sectionId) }
         .navigationDestination(item: $opened) { route in TaskDetailView(taskId: route.id) }
         .toolbar {
             ToolbarItem {
@@ -182,8 +184,14 @@ struct ProjectDetailView: View {
         }
         .projectActions($action, onDeleted: close)
         // Leaving the project closes this screen too; its tasks leave with the next pull.
-        .sheet(isPresented: $sharing) { ShareProjectView(projectId: projectId, onLeft: { dismiss() }) }
+        .sheet(isPresented: $sharing) { ShareProjectView(projectId: projectId, onLeft: close) }
         .onAppear { projectOpened?(projectId) }
+        // Deleted on another device, or this user taken out of the shared project: the pull removes
+        // it, and its screen closes as after a deletion here (on the iPhone too, where no sidebar
+        // watches it). Also when a widened window first shows a project already gone.
+        .onChange(of: project == nil, initial: true) { _, missing in
+            if missing { close() }
+        }
     }
 
     @ViewBuilder
@@ -255,10 +263,12 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// Deleted or archived from here: back to the projects on the iPhone, to the inbox in the sidebar.
+    /// Deleted, archived or left: back to the projects on the iPhone, to the inbox in the sidebar.
+    /// Only the iPhone's pushed screen pops (no `\.taskSelection` there). On the iPad and the Mac it
+    /// is the content column's root, where `dismiss` is the window's and on the Mac closes it.
     private func close() {
         projectClosed?(projectId)
-        dismiss()
+        if taskSelection == nil { dismiss() }
     }
 
     private func linger(_ id: UUID) {

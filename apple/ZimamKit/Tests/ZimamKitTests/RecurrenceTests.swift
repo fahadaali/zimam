@@ -127,6 +127,27 @@ struct RecurrenceTests {
         #expect(Recurrence(rrule: "FREQ=YEARLY;BYMONTH=3")?.nextOccurrence(after: "2026-10-24", timeZone: riyadh)?.day == "2027-03-24")
     }
 
+    /// 28 February carrying the series' 31st, moved to the 10th: the series follows the move, as a
+    /// plain rule's does, so completing it adds 10 March rather than a second February occurrence.
+    @Test func aMovedOccurrenceTakesTheSeriesWithIt() throws {
+        let carried = try #require(Recurrence(rrule: "FREQ=MONTHLY;BYMONTHDAY=31"))
+        #expect(carried.nextOccurrence(after: "2026-02-10", timeZone: riyadh)?.day == "2026-02-28")
+        let moved = carried.moved(from: "2026-02-28")
+        #expect(moved.rrule == "FREQ=MONTHLY")
+        #expect(moved.nextOccurrence(after: "2026-02-10", timeZone: riyadh)?.day == "2026-03-10")
+        // On the series' day itself, too: the 31st moved to the 25th.
+        #expect(carried.moved(from: "2026-03-31").rrule == "FREQ=MONTHLY")
+        // A day the rule picks other than the task's own stays.
+        let twentieth = try #require(Recurrence(rrule: "FREQ=MONTHLY;BYMONTHDAY=20"))
+        #expect(twentieth.moved(from: "2026-10-15") == twentieth)
+        // Yearly: 28 February carrying the leap day, and a rule in another month.
+        let leapDay = try #require(Recurrence(rrule: "FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=29"))
+        #expect(leapDay.moved(from: "2029-02-28").rrule == "FREQ=YEARLY")
+        let march = try #require(Recurrence(rrule: "FREQ=YEARLY;BYMONTH=3"))
+        #expect(march.moved(from: "2026-10-24") == march)
+        #expect(Recurrence(frequency: .weekly, weekdays: [.monday]).moved(from: "2026-10-19").rrule == "FREQ=WEEKLY;BYDAY=MO")
+    }
+
     @Test func untilAndCountEndTheSeries() throws {
         let until = Recurrence(frequency: .daily, until: "2026-10-20")
         #expect(until.nextDay(after: "2026-10-19", timeZone: riyadh) == "2026-10-20")

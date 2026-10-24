@@ -32,7 +32,7 @@ struct TodayView: View {
     @State private var sheet: SheetRoute?
 
     private var items: [TaskItem] {
-        let today = formatter.dayString(from: Date())
+        let today = formatter.dayString(from: DayClock.shared.now)
         return tasks
             .filter { task in
                 guard task.parentId == nil, let due = task.dueDate, due <= today else { return false }
@@ -42,7 +42,7 @@ struct TodayView: View {
     }
 
     private var todayEvents: [ShownEvent] {
-        let today = formatter.dayString(from: Date())
+        let today = formatter.dayString(from: DayClock.shared.now)
         return CalendarEvents.shared.events(from: today, to: today, timeZone: formatter.timeZone)
     }
 
@@ -64,7 +64,7 @@ struct TodayView: View {
                     TaskListItem(task: task, projectName: task.projectId.flatMap { names[$0] }, onCompleted: linger)
                 }
             } header: {
-                ScreenHeader(title: "اليوم", subtitle: formatter.dual(Date()))
+                ScreenHeader(title: "اليوم", subtitle: formatter.dual(DayClock.shared.now))
             }
             // Apple Calendar's events today, read only, when «إظهار أحداث التقويم» is on.
             if !events.isEmpty {
@@ -84,6 +84,7 @@ struct TodayView: View {
             }
         }
         .zimamList()
+        .roomForAddButton()
         .overlay(alignment: .bottomTrailing) { AddTaskButton { sheet = .add } }
         .sheet(item: $sheet) { route in
             switch route {

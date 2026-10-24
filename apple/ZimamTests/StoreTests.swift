@@ -101,6 +101,24 @@ struct StoreTests {
         #expect(relativeReminders(task).isEmpty)
     }
 
+    // MARK: addTask (Store.swift)
+
+    @Test func aNewTaskKeepsALiveSectionOfItsOwnProjectOnly() throws {
+        let project = store.addProject(name: "البيت")
+        let other = store.addProject(name: "العمل")
+        let section = try #require(store.addSection(named: "قيد العمل", to: project.id))
+
+        let task = store.addTask(title: "ترتيب المكتب", projectId: project.id, sectionId: section.id)
+        #expect(task.projectId == project.id)
+        #expect(task.sectionId == section.id)
+        // The server takes no section in the inbox, nor one of another project.
+        #expect(store.addTask(title: "اتصال", sectionId: section.id).sectionId == nil)
+        #expect(store.addTask(title: "التقرير", projectId: other.id, sectionId: section.id).sectionId == nil)
+
+        store.delete(section)
+        #expect(store.addTask(title: "الغسيل", projectId: project.id, sectionId: section.id).sectionId == nil)
+    }
+
     // MARK: move(_:toProject:section:) (Store+Move.swift)
 
     @Test func moveTakesTheSubtasksAndSetsTheSection() throws {
@@ -178,6 +196,28 @@ struct StoreTests {
 
         #expect(store.sections(in: other.id).map(\.id) == [elsewhere.id])
         #expect(store.sections(in: UUID()).isEmpty)
+    }
+
+    // MARK: Recurrence (Store.swift)
+
+    /// 28 February carrying the series' 31st, moved to the 10th: the series follows the move, so
+    /// completing it adds 10 March, not a second February task. A rule set with the day stays.
+    @Test func movingARepeatingTaskTakesItsSeriesWithIt() throws {
+        let task = store.addTask(title: "دفع الإيجار", dueDate: "2099-02-28")
+        store.update(task) { $0.recurrence = "FREQ=MONTHLY;BYMONTHDAY=31" }
+        store.reschedule(task, toDay: "2099-02-10")
+        #expect(task.recurrence == "FREQ=MONTHLY")
+
+        store.toggleDone(task)
+        let next = try store.context.fetch(FetchDescriptor<TaskItem>()).filter { $0.id != task.id }
+        #expect(next.map(\.dueDate) == ["2099-03-10"])
+
+        let other = store.addTask(title: "دفع الفاتورة", dueDate: "2099-02-28")
+        store.update(other) { item in
+            item.dueDate = "2099-02-10"
+            item.recurrence = "FREQ=MONTHLY;BYMONTHDAY=31"
+        }
+        #expect(other.recurrence == "FREQ=MONTHLY;BYMONTHDAY=31")
     }
 
     // MARK: delete (Store.swift)

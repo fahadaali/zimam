@@ -419,7 +419,7 @@ struct DayTasksSection: View {
         dates.primary = kind
         let full = dates.dual(date, withYear: true)
         let weekday = formatter.weekday(date)
-        switch formatter.relativeWord(for: date) {
+        switch formatter.relativeWord(for: date, now: DayClock.shared.now) {
         case let word? where word != weekday: return (word, "\(weekday)، \(full)")
         default: return (weekday, full)
         }
@@ -434,7 +434,7 @@ private struct CalendarTaskRow: View {
     let onToggle: () -> Void
 
     var body: some View {
-        NavigationLink(value: TaskRoute(id: task.id)) {
+        TaskOpenLink(taskId: task.id) {
             TaskRow(task: task, projectName: projectName, onToggle: onToggle)
                 .padding(.horizontal, ZimamSpacing.space3)
                 .padding(.vertical, ZimamSpacing.space2)
@@ -678,7 +678,7 @@ struct SpanLanes: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .background(ZimamColor.timelineBar, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusSm))
         if interactive {
-            NavigationLink(value: TaskRoute(id: item.id)) {
+            TaskOpenLink(taskId: item.id) {
                 label.contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -700,7 +700,7 @@ private struct WeekTaskCard: View {
     @Environment(\.dateFormatterZimam) private var formatter
 
     var body: some View {
-        NavigationLink(value: TaskRoute(id: task.id)) {
+        TaskOpenLink(taskId: task.id) {
             VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
                 Text(task.title)
                     .font(ZimamType.callout)

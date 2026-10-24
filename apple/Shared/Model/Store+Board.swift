@@ -35,12 +35,15 @@ extension Store {
         touch(section)
     }
 
-    /// Deletes a section. Its tasks stay in the project with no section: the server clears
-    /// them with the deletion and sends them back, so they are only cleared here, not sent.
+    /// Deletes a section. Its tasks stay in the project with no section: the server clears them
+    /// with the deletion and sends them back. Until then those the server has in it keep it, and
+    /// show under «بلا قسم» as the section is hidden, so a deletion the server turns down leaves
+    /// them where they were; the sync engine clears it once the section is gone. An edit not sent
+    /// yet leaves the section at once, as that section may never have reached the server.
     func delete(_ section: SectionItem) {
-        let id = section.id
-        let all = (try? context.fetch(FetchDescriptor<TaskItem>())) ?? []
-        for task in all where task.sectionId == id {
+        let id: UUID? = section.id
+        let tasks = (try? context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { $0.sectionId == id }))) ?? []
+        for task in tasks where task.isDirty {
             task.sectionId = nil
         }
         section.pendingDelete = true

@@ -8,8 +8,10 @@ public struct TaskAttachment: Codable, Equatable, Sendable, Identifiable {
     public var id: UUID
     public var taskId: UUID
     public var projectId: UUID?
-    /// Who added it, as the server sends it; kept in the cached list though no screen shows it yet.
+    /// Who added it, by id and by name (`uploaderName`), as the server sends them; kept in the
+    /// cached list though no screen shows them yet.
     public var uploaderId: UUID?
+    /// The uploader's name, kept as `uploaderId` is.
     public var uploaderName: String?
     public var fileName: String
     /// Set by the server from the extension, e.g. "application/pdf".

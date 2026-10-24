@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Security
 
 /// Stores the session token in the Keychain, never in UserDefaults. The Keychain is safe to
@@ -31,7 +32,7 @@ nonisolated enum Keychain {
             return String(data: data, encoding: .utf8)
         case errSecItemNotFound:
             #if os(macOS)
-            return moveFromLoginKeychain(account)
+            return try moveFromLoginKeychain(account)
             #else
             return nil
             #endif
@@ -72,13 +73,20 @@ nonisolated enum Keychain {
     }
 
     #if os(macOS)
+    /// A read of the login keychain that got no answer this launch (a refused password prompt):
+    /// not asked again until the next launch, so a refusal does not bring the prompt back with
+    /// every request. Reads of the token meanwhile throw, as the Keychain cannot answer.
+    private static let loginRefusal = OSAllocatedUnfairLock<OSStatus?>(initialState: nil)
+
     /// Mac builds before the data protection keychain kept the token in the login keychain. It is
-    /// moved here once, on the first read that finds nothing, so updating does not sign anyone
-    /// out; only once, so a login keychain that asks for its password asks at most that time.
-    private static func moveFromLoginKeychain(_ account: String) -> String? {
+    /// moved here on the first read that finds nothing, so updating does not sign anyone out.
+    /// Marked done only on a clear answer, the token moved or none there, after which the login
+    /// keychain is not read again. A refused prompt throws, rather than read as signed out for
+    /// good, and is asked again on the next launch; a locked keychain, on the next read.
+    private static func moveFromLoginKeychain(_ account: String) throws -> String? {
         let movedKey = "keychain.movedFromLogin.\(account)"
         guard !UserDefaults.standard.bool(forKey: movedKey) else { return nil }
-        UserDefaults.standard.set(true, forKey: movedKey)
+        if let refused = loginRefusal.withLock({ $0 }) { throw Unavailable(status: refused) }
         let legacy: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -88,10 +96,27 @@ nonisolated enum Keychain {
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let data = item as? Data,
-              let value = String(data: data, encoding: .utf8) else { return nil }
-        if write(value, for: account) { SecItemDelete(legacy as CFDictionary) }
-        return value
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        switch status {
+        case errSecSuccess:
+            guard let data = item as? Data, let value = String(data: data, encoding: .utf8) else {
+                UserDefaults.standard.set(true, forKey: movedKey)
+                return nil
+            }
+            // Only once it is kept here: a write that failed leaves it there for the next read.
+            if write(value, for: account) {
+                SecItemDelete(legacy as CFDictionary)
+                UserDefaults.standard.set(true, forKey: movedKey)
+            }
+            return value
+        case errSecItemNotFound:
+            UserDefaults.standard.set(true, forKey: movedKey)
+            return nil
+        default:
+            // Locked with no prompt shown: asked again on the next read. Otherwise not this launch.
+            if status != errSecInteractionNotAllowed { loginRefusal.withLock { $0 = status } }
+            throw Unavailable(status: status)
+        }
     }
     #endif
 }

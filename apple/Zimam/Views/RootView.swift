@@ -30,6 +30,8 @@ struct RootView: View {
                     .onChange(of: scenePhase) { _, phase in
                         // Each return also moves the rolling notification window forward.
                         if phase == .active {
+                            // A day that turned over while away moves the screens to it (DayClock).
+                            DayClock.shared.refresh()
                             notifications.reschedule()
                             TaskSpotlight.shared.scheduleUpdate()
                             Task {
@@ -75,7 +77,9 @@ struct RootView: View {
                 SignInView()
             }
         }
-        .environment(\.dateFormatterZimam, DualDateFormatter(primary: session.user?.settings.calendar ?? .hijri, locale: ZimamLocale.current))
+        // In the zone DayClock read, so today moves with it when the zone changes.
+        .environment(\.dateFormatterZimam, DualDateFormatter(primary: session.user?.settings.calendar ?? .hijri,
+                                                              locale: ZimamLocale.current, timeZone: DayClock.shared.timeZone))
         .environment(\.prayerScheduleZimam, location.schedule(session.user?.settings))
         .onAppear {
             // Weak: the engine owns this closure. A local, so the weak capture is of it rather than

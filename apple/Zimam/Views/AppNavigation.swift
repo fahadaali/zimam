@@ -15,8 +15,8 @@ enum SidebarItem: Hashable {
     case project(UUID)
     case section(project: UUID, section: UUID)
 
-    /// The iPhone tab that shows the same place. The timeline and the matrix live at the top of
-    /// the projects tab (`OverviewRoute`), which keeps the iPhone's five tabs.
+    /// The iPhone tab that shows the same place. The inbox, the timeline and the matrix live at the
+    /// top of the projects tab (`OverviewRoute`), which keeps the iPhone's five tabs.
     var tab: MainTab {
         switch self {
         case .today: .today
@@ -30,6 +30,7 @@ enum SidebarItem: Hashable {
     /// The overview this item opens on the iPhone's projects tab, if it is one.
     var overview: OverviewRoute? {
         switch self {
+        case .inbox: .inbox
         case .timeline: .timeline
         case .matrix: .matrix
         default: nil
@@ -85,13 +86,14 @@ extension SidebarItem: RawRepresentable {
     }
 }
 
-/// «المخطط الزمني» and «المصفوفة» pushed on the iPhone's projects tab; the sidebar lists them on
-/// the iPad and the Mac.
+/// «صندوق المهام», «المخطط الزمني» and «المصفوفة» pushed on the iPhone's projects tab; the
+/// sidebar lists them on the iPad and the Mac.
 enum OverviewRoute: Hashable {
-    case timeline, matrix
+    case inbox, timeline, matrix
 
     var sidebarItem: SidebarItem {
         switch self {
+        case .inbox: .inbox
         case .timeline: .timeline
         case .matrix: .matrix
         }
@@ -99,6 +101,7 @@ enum OverviewRoute: Hashable {
 
     var title: String {
         switch self {
+        case .inbox: "صندوق المهام"
         case .timeline: "المخطط الزمني"
         case .matrix: "المصفوفة"
         }
@@ -106,6 +109,7 @@ enum OverviewRoute: Hashable {
 
     var systemImage: String {
         switch self {
+        case .inbox: "tray"
         case .timeline: "calendar.day.timeline.leading"
         case .matrix: "square.grid.2x2"
         }
@@ -146,10 +150,15 @@ private struct OverviewOpenedKey: EnvironmentKey {
     static let defaultValue: ((OverviewRoute) -> Void)? = nil
 }
 
+private struct TaskCompleteInToolbarKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
 extension EnvironmentValues {
     /// The task shown in the details column on the iPad and the Mac. Lists bind it with
     /// `List(selection:)`, so a row's `NavigationLink(value: TaskRoute)` selects the task
-    /// instead of pushing it. Nil on the iPhone, where rows push the details as before.
+    /// instead of pushing it; task links outside a list (`TaskOpenLink`) set it themselves.
+    /// Nil on the iPhone, where rows push the details as before.
     var taskSelection: Binding<TaskRoute?>? {
         get { self[TaskSelectionKey.self] }
         set { self[TaskSelectionKey.self] = newValue }
@@ -162,17 +171,25 @@ extension EnvironmentValues {
         set { self[ProjectOpenedKey.self] = newValue }
     }
 
-    /// Told when a project is deleted or archived from its own screen: on the iPad and the Mac the
-    /// sidebar leaves it for the inbox, as its screen is a column that cannot be dismissed.
+    /// Told when a project is deleted, archived or left from its own screen, or is gone after a pull:
+    /// on the iPad and the Mac the sidebar leaves it for the inbox, as its screen is a column that
+    /// cannot be dismissed.
     var projectClosed: ((UUID) -> Void)? {
         get { self[ProjectClosedKey.self] }
         set { self[ProjectClosedKey.self] = newValue }
     }
 
-    /// Told when the timeline or the matrix opens on the iPhone, for the same reason.
+    /// Told when the inbox, the timeline or the matrix opens on the iPhone, for the same reason.
     var overviewOpened: ((OverviewRoute) -> Void)? {
         get { self[OverviewOpenedKey.self] }
         set { self[OverviewOpenedKey.self] = newValue }
+    }
+
+    /// Whether a task's details show «إنجاز» in their own toolbar. Off in the inspector on the
+    /// iPad and the Mac, whose toolbar has the button that the menu's ⌘↩ also presses.
+    var taskCompleteInToolbar: Bool {
+        get { self[TaskCompleteInToolbarKey.self] }
+        set { self[TaskCompleteInToolbarKey.self] = newValue }
     }
 }
 

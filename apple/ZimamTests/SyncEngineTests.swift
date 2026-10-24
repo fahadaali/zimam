@@ -274,6 +274,110 @@ struct SyncEngineTests {
         #expect(!reminder.pendingDelete)
     }
 
+    /// A deletion of a task the server never had (`invalid`: not found) removes it here, with the
+    /// subtask and the reminder its deletion hid, which never reached the server either.
+    @Test func anInvalidDeleteRemovesTheTaskAndWhatItHid() async throws {
+        let saved = prepare()
+        defer { saved.restore() }
+        let (task, _, _) = try insertTree()
+        Store(context: context, sync: nil).delete(task)
+        StubURLProtocol.respond(to: Self.path, method: "POST", with: results([task.id], status: "invalid"))
+        StubURLProtocol.respond(to: Self.path, method: "GET", with: page([], cursor: 6))
+        StubURLProtocol.release(Self.path)
+
+        await engine.sync()
+
+        #expect(try allTasks().isEmpty)
+        #expect(try context.fetch(FetchDescriptor<ReminderItem>()).isEmpty)
+    }
+
+    /// A task deleted here while a pull is on its way, which brings the subtask its deletion hid
+    /// (edited on another device): the subtask takes that version but stays hidden, since the
+    /// deletion, not sent yet, takes it on the server too.
+    @Test func aSubtaskPulledWhileItsParentsDeletionWaitsStaysHidden() async throws {
+        let saved = prepare()
+        defer { saved.restore() }
+        let (task, child, reminder) = try insertTree()
+        try StubURLProtocol.respond(to: Self.path, method: "GET",
+                                    with: page([upsert(TaskRecord(id: child.id, parentId: task.id, title: "حجز الفندق",
+                                                                  updatedAt: 2_000))], cursor: 6))
+
+        let engine = self.engine
+        let run = Task { await engine.sync() }
+        try await StubURLProtocol.waitForRequest(to: Self.path, method: "GET")
+        Store(context: context, sync: nil).delete(task)
+        StubURLProtocol.release(Self.path)
+        await run.value
+
+        #expect(child.title == "حجز الفندق")
+        #expect(child.pendingDelete)
+        #expect(!child.isDirty)
+        #expect(reminder.pendingDelete)
+        #expect(task.pendingDelete && task.isDirty)
+    }
+
+    /// A section's deletion turned down (`stale`): it shows again with its task still in it, as on
+    /// the server. Once a deletion goes through, the task leaves it here too.
+    @Test func aSectionsTasksStayInItUntilItsDeletionGoesThrough() async throws {
+        let saved = prepare()
+        defer { saved.restore() }
+        let projectId = UUID()
+        let section = SectionItem(SectionRecord(projectId: projectId, name: "قيد العمل", updatedAt: 1_000), dirty: false)
+        context.insert(section)
+        let task = try insertTask(TaskRecord(projectId: projectId, sectionId: section.id, title: "مراجعة العقد",
+                                             updatedAt: 1_000), dirty: false)
+        Store(context: context, sync: nil).delete(section)
+        #expect(task.sectionId == section.id)
+        StubURLProtocol.respond(to: Self.path, method: "POST", with: results([section.id], status: "stale"))
+        StubURLProtocol.respond(to: Self.path, method: "GET", with: page([], cursor: 6))
+        StubURLProtocol.release(Self.path)
+
+        await engine.sync()
+
+        #expect(!section.pendingDelete)
+        #expect(task.sectionId == section.id)
+        #expect(!task.isDirty)
+
+        StubURLProtocol.reset(Self.path)
+        Store(context: context, sync: nil).delete(section)
+        StubURLProtocol.respond(to: Self.path, method: "POST", with: results([section.id], status: "applied"))
+        StubURLProtocol.respond(to: Self.path, method: "GET", with: page([], cursor: 7))
+        StubURLProtocol.release(Self.path)
+
+        await engine.sync()
+
+        #expect(task.sectionId == nil)
+        #expect(!task.isDirty)
+        #expect(try context.fetch(FetchDescriptor<SectionItem>()).isEmpty)
+    }
+
+    /// A place's reminder keeps the link until the place's deletion reaches the server, which
+    /// unlinks it too; then it is unlinked here, where the place was.
+    @Test func aPlacesRemindersAreUnlinkedOnceItsDeletionGoesThrough() async throws {
+        let saved = prepare()
+        defer { saved.restore() }
+        let place = PlaceItem(PlaceRecord(name: "البيت", latitude: 24.7, longitude: 46.6, radius: 200, updatedAt: 1_000),
+                              dirty: false)
+        context.insert(place)
+        let task = try insertTask(TaskRecord(title: "شراء الخبز", updatedAt: 1_000), dirty: false)
+        let reminder = ReminderItem(ReminderRecord(taskId: task.id, kind: .location,
+                                                   location: .init(place: place.record, trigger: .arrive), updatedAt: 1_000),
+                                    dirty: false)
+        context.insert(reminder)
+        try context.save()
+        Store(context: context, sync: nil).deletePlace(place)
+        #expect(reminder.record.location?.placeId == place.id)
+        StubURLProtocol.respond(to: Self.path, method: "POST", with: results([place.id], status: "applied"))
+        StubURLProtocol.respond(to: Self.path, method: "GET", with: page([], cursor: 6))
+        StubURLProtocol.release(Self.path)
+
+        await engine.sync()
+
+        #expect(reminder.record.location?.placeId == nil)
+        #expect(reminder.record.location?.latitude == 24.7)
+        #expect(!reminder.isDirty)
+    }
+
     // MARK: Reset
 
     /// Signing out while a pull is in flight: the page that arrives afterwards belongs to the

@@ -66,7 +66,7 @@ struct MainView: View {
             open(place: link)
         }
         .sheet(item: $newTask) { request in
-            AddTaskView(due: request.due, projectId: request.projectId)
+            AddTaskView(due: request.due, projectId: request.projectId, sectionId: request.sectionId)
         }
         #if os(macOS)
         .frame(minWidth: ZimamLayout.windowMinWidth, minHeight: ZimamLayout.windowMinHeight)
@@ -80,9 +80,10 @@ struct MainView: View {
             SidebarView(selection: sidebarSelection, onSearch: openSearch)
                 .navigationSplitViewColumnWidth(min: ZimamLayout.sidebarMinWidth, ideal: ZimamLayout.sidebarIdealWidth)
         } detail: {
-            // A task link in the content (a list row, a calendar day, a kanban card) opens the
-            // inspector instead of pushing: the stack's path is always empty, and what a link
-            // appends becomes the selection.
+            // A task in the content opens the inspector instead of pushing: a list row selects it
+            // through `List(selection:)`, a task in the calendar or the matrix (`TaskOpenLink`),
+            // a kanban card and a timeline bar through `\.taskSelection`. The stack's path is
+            // always empty, and a route appended to it becomes the selection.
             NavigationStack(path: contentPath) {
                 ContentColumn(item: sidebar)
                     .environment(\.taskSelection, selectedTask)
@@ -141,19 +142,19 @@ struct MainView: View {
     private var tabView: some View {
         TabView(selection: $tab) {
             Tab("اليوم", systemImage: "sun.max", value: MainTab.today) {
-                NavigationStack(path: $todayPath) { TodayView().compactTaskDestination(selectedTask) }
+                NavigationStack(path: $todayPath) { TodayView().compactTaskDestination(selectedTask, path: $todayPath) }
             }
             Tab("القادم", systemImage: "calendar", value: MainTab.upcoming) {
-                NavigationStack(path: $upcomingPath) { UpcomingView().compactTaskDestination(selectedTask) }
+                NavigationStack(path: $upcomingPath) { UpcomingView().compactTaskDestination(selectedTask, path: $upcomingPath) }
             }
             Tab("التقويم", systemImage: "calendar.badge.clock", value: MainTab.calendar) {
-                NavigationStack(path: $calendarPath) { CalendarView().compactTaskDestination(selectedTask) }
+                NavigationStack(path: $calendarPath) { CalendarView().compactTaskDestination(selectedTask, path: $calendarPath) }
             }
             Tab("المشاريع", systemImage: "folder", value: MainTab.projects) {
-                NavigationStack(path: $projectsPath) { ProjectsView().compactTaskDestination(selectedTask) }
+                NavigationStack(path: $projectsPath) { ProjectsView().compactTaskDestination(selectedTask, path: $projectsPath) }
             }
             Tab(value: MainTab.search, role: .search) {
-                NavigationStack(path: $searchPath) { SearchView().compactTaskDestination(selectedTask) }
+                NavigationStack(path: $searchPath) { SearchView().compactTaskDestination(selectedTask, path: $searchPath) }
             }
         }
         .tabViewStyle(.sidebarAdaptable)
@@ -172,8 +173,8 @@ struct MainView: View {
         }
     }
 
-    /// Three columns to the iPhone layout: the tab follows the sidebar, and the open project
-    /// and task are pushed onto its stack.
+    /// Three columns to the iPhone layout: the tab follows the sidebar, and the open project (or
+    /// the inbox, the timeline or the matrix) and task are pushed onto its stack.
     private func narrow() {
         tab = sidebar.tab
         var path = NavigationPath()
@@ -212,13 +213,15 @@ struct MainView: View {
         }
     }
 
-    /// A new task where the user is: due today in «اليوم», tomorrow in «القادم», in the open project.
+    /// A new task where the user is: due today in «اليوم», tomorrow in «القادم», in the open
+    /// project or section.
     private func newTaskRequest() -> NewTaskRequest {
         let place: SidebarItem = isRegular ? sidebar : (tab.sidebarItem ?? .inbox)
         switch place {
         case .today: return NewTaskRequest(due: .today, projectId: nil)
         case .upcoming: return NewTaskRequest(due: .tomorrow, projectId: nil)
-        case .project(let id), .section(let id, _): return NewTaskRequest(due: .unscheduled, projectId: id)
+        case .project(let id): return NewTaskRequest(due: .unscheduled, projectId: id)
+        case .section(let id, let section): return NewTaskRequest(due: .unscheduled, projectId: id, sectionId: section)
         case .inbox, .calendar, .timeline, .matrix, .search: return NewTaskRequest(due: .unscheduled, projectId: nil)
         }
     }
@@ -269,6 +272,7 @@ struct NewTaskRequest: Identifiable {
     let id = UUID()
     let due: AddTaskView.Due
     let projectId: UUID?
+    var sectionId: UUID? = nil
 }
 
 /// The middle column for the sidebar's choice.
@@ -291,7 +295,7 @@ private struct ContentColumn: View {
 }
 
 /// The inspector on the iPad and the Mac: the open task's details in their own stack (so a
-/// subtask opens inside it), with «إنجاز» (⌘↩) and «إغلاق» (Esc) in its toolbar.
+/// subtask opens inside it), with «إنجاز» (⌘↩, as the menu's) and «إغلاق» (Esc) in its toolbar.
 private struct TaskInspector: View {
     let route: TaskRoute?
     let onToggleDone: () -> Void
@@ -313,6 +317,11 @@ private struct TaskInspector: View {
                     }
                 }
         }
+        // The details' own «إنجاز» gives way to the one above.
+        .environment(\.taskCompleteInToolbar, false)
+        // A new identity per task for the whole stack: the form loads the newly selected task's
+        // fields, and a subtask opened inside it closes with it.
+        .id(route?.id)
     }
 }
 
@@ -322,31 +331,39 @@ private struct TaskDetailBody: View {
 
     var body: some View {
         if let route {
-            // A new identity per task, so the form loads the newly selected task's fields.
-            TaskDetailView(taskId: route.id).id(route.id)
+            TaskDetailView(taskId: route.id)
         } else {
             ZimamColor.surface
         }
     }
 }
 
-/// «إنجاز» in the details column's toolbar, with ⌘↩ on the iPad and the Mac.
-private struct CompleteToolbarButton: View {
+/// «إنجاز» or «إلغاء الإنجاز» in the toolbar of a task's details, with ⌘↩. The inspector passes
+/// its own action (the menu's «إنجاز المهمة المحددة»); elsewhere the button completes the task.
+struct CompleteToolbarButton: View {
+    @Environment(\.modelContext) private var context
+    @Environment(SyncEngine.self) private var sync
     @Query private var matches: [TaskItem]
-    let action: () -> Void
+    let action: (() -> Void)?
 
-    init(taskId: UUID, action: @escaping () -> Void) {
+    init(taskId: UUID, action: (() -> Void)? = nil) {
         _matches = Query(filter: #Predicate<TaskItem> { $0.id == taskId })
         self.action = action
     }
 
     var body: some View {
         if let task = matches.first, !task.pendingDelete {
-            Button(task.isDone ? "إلغاء الإنجاز" : "إنجاز",
-                   systemImage: symbol(done: task.isDone),
-                   action: action)
-                .zimamProminentToolbarAction()
-                .keyboardShortcut(.return, modifiers: .command)
+            Button(task.isDone ? "إلغاء الإنجاز" : "إنجاز", systemImage: symbol(done: task.isDone)) {
+                if let action {
+                    action()
+                } else {
+                    withAnimation(.zimamComplete) {
+                        Store(context: context, sync: sync).toggleDone(task)
+                    }
+                }
+            }
+            .zimamProminentToolbarAction()
+            .keyboardShortcut(.return, modifiers: .command)
         }
     }
 
@@ -362,10 +379,31 @@ private struct CompleteToolbarButton: View {
 
 extension View {
     /// The iPhone's task details, which also remember the open task for the iPad layout.
-    func compactTaskDestination(_ selection: Binding<TaskRoute?>) -> some View {
+    /// `path` is the stack's own, to tell a closed task from one only covered.
+    func compactTaskDestination(_ selection: Binding<TaskRoute?>, path: Binding<NavigationPath>) -> some View {
         navigationDestination(for: TaskRoute.self) { route in
-            TaskDetailView(taskId: route.id)
-                .onAppear { selection.wrappedValue = route }
+            CompactTaskDetail(route: route, selection: selection, path: path)
         }
+    }
+}
+
+/// A task's details pushed on an iPhone tab. Going back (the path got shorter) forgets the task,
+/// so a wider window does not open it in the inspector again. A subtask pushed over it, another
+/// tab, or the switch to the wide layout only hide it: the path still holds it, and it stays.
+private struct CompactTaskDetail: View {
+    let route: TaskRoute
+    @Binding var selection: TaskRoute?
+    @Binding var path: NavigationPath
+    @State private var depth = 0
+
+    var body: some View {
+        TaskDetailView(taskId: route.id)
+            .onAppear {
+                selection = route
+                depth = path.count
+            }
+            .onDisappear {
+                if path.count < depth, selection == route { selection = nil }
+            }
     }
 }

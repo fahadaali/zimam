@@ -56,12 +56,13 @@ struct MatrixView: View {
         return calendar
     }
 
-    private var today: String { formatter.dayString(from: Date()) }
+    private var today: String { formatter.dayString(from: DayClock.shared.now) }
 
     init() {}
 
     var body: some View {
-        let grouped = PriorityMatrix.group(tasks.filter { $0.parentId == nil }, calendar: calendar,
+        let grouped = PriorityMatrix.group(tasks.filter { $0.parentId == nil }, today: DayClock.shared.now,
+                                           calendar: calendar,
                                            isOpen: { !$0.isDone || lingering.contains($0.id) },
                                            priority: \.priority, dueDate: \.dueDate)
         let names = projectNames(projects)
@@ -169,7 +170,7 @@ extension PriorityQuadrant {
     }
 }
 
-/// The timeline or the matrix pushed on the iPhone's projects tab.
+/// The inbox, the timeline or the matrix pushed on the iPhone's projects tab.
 struct OverviewScreen: View {
     let route: OverviewRoute
 
@@ -178,6 +179,7 @@ struct OverviewScreen: View {
     var body: some View {
         Group {
             switch route {
+            case .inbox: InboxView()
             case .timeline: GanttView(projectId: nil)
             case .matrix: MatrixView()
             }

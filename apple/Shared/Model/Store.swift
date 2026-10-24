@@ -32,13 +32,17 @@ struct Store {
     /// `notes`, `dueTime` and `tags` come from the assistant's suggestion; a time is kept
     /// only for a dated task that is not tied to a prayer, as the server does. `startDate` makes
     /// a dated task span days; it is kept only before the due day, as the server requires.
+    /// `sectionId` is kept only for a live section of `projectId`, which is all the server takes.
     /// The title and notes are cut to the server's limits (`ServerText`), so the task syncs.
     @discardableResult
-    func addTask(title: String, projectId: UUID? = nil, dueDate: String? = nil, duePrayer: Prayer? = nil,
-                 duePrayerOffset: Int? = nil, priority: TaskPriority = .none,
+    func addTask(title: String, projectId: UUID? = nil, sectionId: UUID? = nil, dueDate: String? = nil,
+                 duePrayer: Prayer? = nil, duePrayerOffset: Int? = nil, priority: TaskPriority = .none,
                  notes: String? = nil, dueTime: String? = nil, tags: [String] = [], startDate: String? = nil) -> TaskItem {
         let trimmedNotes = notes.map { ServerText.clip($0.trimmingCharacters(in: .whitespacesAndNewlines), to: ServerText.maxNotes) }
-        let record = TaskRecord(projectId: projectId, title: Self.taskTitle(title),
+        let section: UUID? = projectId.flatMap { project in
+            sectionId.flatMap { id in sections(in: project).contains(where: { $0.id == id }) ? id : nil }
+        }
+        let record = TaskRecord(projectId: projectId, sectionId: section, title: Self.taskTitle(title),
                                 notes: trimmedNotes?.isEmpty == false ? trimmedNotes : nil,
                                 priority: priority, tags: tags, dueDate: dueDate,
                                 startDate: DaySpan(startDate: startDate, dueDate: dueDate)?.startDate,
@@ -67,9 +71,17 @@ struct Store {
         ServerText.clip(title.trimmingCharacters(in: .whitespacesAndNewlines), to: ServerText.maxTitle)
     }
 
-    /// Applies an edit to a task's fields and marks it for sync.
+    /// Applies an edit to a task's fields and marks it for sync. A repeating task moved to another
+    /// day takes its series with it (`Recurrence.moved(from:)`), unless the edit sets its rule too.
     func update(_ task: TaskItem, _ change: (TaskItem) -> Void) {
+        let day = task.dueDate
+        let rule = task.recurrence
         change(task)
+        if let day, task.dueDate != nil, task.dueDate != day, task.recurrence == rule,
+           let text = rule, let current = Recurrence(rrule: text) {
+            let moved = current.moved(from: day)
+            if moved != current { task.recurrence = moved.rrule }
+        }
         touch(task)
     }
 
@@ -233,13 +245,11 @@ struct Store {
         touch(place)
     }
 
-    /// Deletes a place. Its reminders stay where it was, no longer linked to it.
+    /// Deletes a place. Its reminders stay where it was, no longer linked to it: the server
+    /// unlinks them with the deletion and sends them back. Until then they keep the link, which
+    /// holds nothing but the place's id (they carry their own copy of where it is), so a deletion
+    /// the server turns down leaves them linked; the sync engine unlinks them once it is gone.
     func deletePlace(_ place: PlaceItem) {
-        for reminder in reminders(at: place.id) {
-            guard var location = reminder.record.location else { continue }
-            location.placeId = nil
-            reminder.locationJSON = try? JSONEncoder().encode(location)
-        }
         place.pendingDelete = true
         touch(place)
     }
