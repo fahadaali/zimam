@@ -7,7 +7,7 @@ import { googleAudiences, verifyGoogleToken } from "./auth/google";
 import { appleAudiences, signInUser } from "./auth/users";
 import { Access } from "./data/access";
 import { foldForSearch } from "./data/arabic";
-import { addDays, dayIn, dualText, gregorianText, hijriText, localDateTime, weekdayText } from "./data/dates";
+import { addDays, dayIn, dualText, gregorianText, hijriText, localDateTime, timeIn, weekdayText } from "./data/dates";
 import { Mutator } from "./data/mutations";
 import { prayerPhrase, prayerTimes, type PrayerTimesOfDay } from "./data/prayers";
 import { listProjects, listTasks } from "./data/queries";
@@ -474,7 +474,7 @@ export class Assistant {
     for (const reminder of results.map(reminderOut)) {
       let { at, firedAt } = reminder;
       if (reminder.kind === "time" || (reminder.kind === "location" && at)) {
-        at = shiftedTime(at, shift);
+        at = shiftedTime(at, shift, userOut(user).settings.timeZone);
         if (!at) continue;
         firedAt = null;
       }
@@ -532,10 +532,14 @@ function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
 }
 
-/** An ISO time moved by whole days, its clock time and offset kept; null if it cannot be read. */
-function shiftedTime(at: string | null, days: number): string | null {
-  const m = /^(\d{4}-\d{2}-\d{2})(T.*)$/.exec(at ?? "");
-  return m ? `${addDays(m[1]!, days)}${m[2]}` : null;
+/**
+ * An ISO time moved by whole days in the user's zone, its clock time kept across a daylight-saving
+ * change (as NextOccurrence.reminders in the app); null if it cannot be read.
+ */
+function shiftedTime(at: string | null, days: number, timeZone: string): string | null {
+  const instant = new Date(at ?? "");
+  if (!at || Number.isNaN(instant.getTime())) return null;
+  return localDateTime(addDays(dayIn(timeZone, instant), days), timeIn(timeZone, instant), timeZone);
 }
 
 /** Maps assistant field names onto the sync schema, keeping only the fields that were given. */

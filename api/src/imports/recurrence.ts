@@ -76,7 +76,9 @@ export function zimamRule(input: string, dueDate: string): string | null {
         break;
       }
       default:
-        // A provider's own extension (TickTick's TT_SKIP=HOLIDAY, X-…) changes no day Zimam computes.
+        // A provider's own extension (X-…, TickTick's TT_…) changes no day Zimam computes, except
+        // TickTick's TT_SKIP (weekends, holidays), which leaves days out: kept in the notes instead.
+        if (key === "TT_SKIP") return null;
         if (key.startsWith("TT_") || key.startsWith("X-")) break;
         // BYSETPOS, BYYEARDAY, BYWEEKNO, BYHOUR...: other days or several a day.
         return null;

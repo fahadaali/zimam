@@ -261,6 +261,9 @@ final class SyncEngine {
         retry?.cancel()
         retry = nil
         failures = 0
+        // The previous account's refusals and their notice are not the next one's.
+        refused = []
+        refusedNotice = nil
         stopRealtime()
         ZimamShared.defaults.set(true, forKey: Self.wipePendingKey)
         wipeIfPending()
@@ -469,7 +472,8 @@ final class SyncEngine {
                 hasMore = page.hasMore
             }
         } catch {
-            refused.formUnion(restoring)
+            // Tried again by the next pull, unless the account changed meanwhile.
+            if generation == started { refused.formUnion(restoring) }
             throw error
         }
         guard !restoring.isEmpty else { return }
