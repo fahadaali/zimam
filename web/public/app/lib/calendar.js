@@ -164,17 +164,6 @@ export function orderDay(tasks) {
     .map((x) => x.task);
 }
 
-/** Open top-level tasks by due day: { "2026-10-15": [task, …] }, each day in calendar order. */
-export function tasksByDay(tasks) {
-  const out = {};
-  for (const task of tasks) {
-    if (task.parentId || !task.dueDate) continue;
-    (out[task.dueDate] ??= []).push(task);
-  }
-  for (const day of Object.keys(out)) out[day] = orderDay(out[day]);
-  return out;
-}
-
 /** Titles shown in a wide month cell (DayTitles in CalendarComponents.swift); the rest are counted. */
 export const DAY_TITLES = 2;
 /** Dots drawn in a narrow month cell (TaskDots); past this the cell shows the count instead. */

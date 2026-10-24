@@ -7,7 +7,6 @@ import {
   shiftTo,
   singleDayByDay,
   spanFields,
-  spanLength,
   spanText,
   taskSpan,
   tasksByOccupiedDay,
@@ -22,7 +21,6 @@ test("a task's span: start to due inclusive, or the due day alone", () => {
   // A start date without a due date, or after it, is ignored (the server never stores either).
   assert.equal(taskSpan(task("d", null, "2026-10-15")), null);
   assert.deepEqual(taskSpan(task("e", "2026-10-15", "2026-10-20")), { start: "2026-10-15", end: "2026-10-15" });
-  assert.equal(spanLength({ start: "2026-10-15", end: "2026-10-20" }), 6);
   assert.equal(isMultiDay(task("f", "2026-10-15", "2026-10-15")), false);
   assert.equal(isMultiDay(task("g", "2026-10-16", "2026-10-15")), true);
 });

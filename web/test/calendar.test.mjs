@@ -14,7 +14,6 @@ import {
   orderDay,
   rangeTitle,
   startOfMonth,
-  tasksByDay,
   weekDays,
   weekdayHeaders,
 } from "../public/app/lib/calendar.js";
@@ -142,17 +141,6 @@ test("a day's tasks: untimed first, then by clock or prayer time", () => {
   assert.equal(minuteOfDay(tasks[1]), 540);
   assert.equal(minuteOfDay(tasks[4]), 690);
   assert.deepEqual(orderDay(tasks).map((t) => t.id), ["free-first", "free", "nine", "before-dhuhr", "isha"]);
-});
-
-test("tasks by day leave out subtasks and undated tasks", () => {
-  const byDay = tasksByDay([
-    { id: "a", dueDate: "2026-10-15" },
-    { id: "b", dueDate: "2026-10-15", parentId: "a" },
-    { id: "c", dueDate: null },
-    { id: "d", dueDate: "2026-10-16" },
-  ]);
-  assert.deepEqual(Object.keys(byDay).sort(), ["2026-10-15", "2026-10-16"]);
-  assert.deepEqual(byDay["2026-10-15"].map((t) => t.id), ["a"]);
 });
 
 test("a wide month cell shows two titles, prayer ones in sand, then the rest counted", () => {

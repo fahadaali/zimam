@@ -53,7 +53,7 @@ test("only the inbox when there are no projects", () => {
   assert.deepEqual(moveDestinations({}, []).map((p) => p.kind), ["inbox"]);
 });
 
-test("reads sections already on the project objects, and leaves the rest to be fetched", () => {
+test("reads the sections on the project objects (GET /v1/projects carries them)", () => {
   const known = knownSections([{ id: "a", sections: [{ id: "s1" }] }, { id: "b" }]);
   assert.deepEqual([...known.keys()], ["a"]);
   assert.deepEqual(known.get("a"), [{ id: "s1" }]);

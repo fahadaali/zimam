@@ -202,11 +202,6 @@ export function isAvailable(source) {
   return source?.available !== false;
 }
 
-/** The first source that can be started, selected at first. */
-export function firstAvailable(sources = []) {
-  return sources.find(isAvailable) ?? null;
-}
-
 /** GET …/start?return=<this site's origin>: the provider's callback then comes back to this site. */
 export function oauthStartPath(sourceId, origin) {
   return `/v1/imports/oauth/${encodeURIComponent(sourceId)}/start?return=${encodeURIComponent(origin)}`;

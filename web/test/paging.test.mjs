@@ -15,14 +15,15 @@ function pages(total, pageSize = TASK_PAGE_SIZE) {
 
 test("one short page is the whole list", async () => {
   const { offsets, fetchPage } = pages(3);
-  const { tasks } = await fetchAllPages(fetchPage);
+  const { tasks, truncated } = await fetchAllPages(fetchPage);
   assert.deepEqual(offsets, [0]);
   assert.deepEqual(tasks.map((t) => t.id), ["t0", "t1", "t2"]);
+  assert.equal(truncated, false);
 });
 
 test("an empty list asks once", async () => {
   const { offsets, fetchPage } = pages(0);
-  assert.deepEqual(await fetchAllPages(fetchPage), { tasks: [] });
+  assert.deepEqual(await fetchAllPages(fetchPage), { tasks: [], truncated: false });
   assert.deepEqual(offsets, [0]);
 });
 
@@ -37,16 +38,18 @@ test("full pages read on by offset and join in order", async () => {
 
 test("a list that ends on a full page asks once more and stops at the empty one", async () => {
   const { offsets, fetchPage } = pages(1000);
-  const { tasks } = await fetchAllPages(fetchPage);
+  const { tasks, truncated } = await fetchAllPages(fetchPage);
   assert.deepEqual(offsets, [0, 500, 1000]);
   assert.equal(tasks.length, 1000);
+  assert.equal(truncated, false);
 });
 
-test("stops after the page limit", async () => {
+test("stops after the page limit, and says the list may go on", async () => {
   const { offsets, fetchPage } = pages(Infinity);
-  const { tasks } = await fetchAllPages(fetchPage);
+  const { tasks, truncated } = await fetchAllPages(fetchPage);
   assert.equal(offsets.length, TASK_PAGE_LIMIT);
   assert.equal(tasks.length, TASK_PAGE_LIMIT * TASK_PAGE_SIZE);
+  assert.equal(truncated, true);
 });
 
 test("page size and limit can be set", async () => {

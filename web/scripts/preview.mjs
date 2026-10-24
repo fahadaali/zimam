@@ -41,7 +41,7 @@ const copies = [
   [join(web, "public", "styles"), "styles", (name) => name === "base.css"],
   [join(design, "generated"), "design/generated", (name) => name === "tokens.css"],
   [join(design, "fonts", "web"), "design/fonts/web", (name) => name.endsWith(".woff2")],
-  [join(design, "logos"), "design/logos", (name) => name.endsWith(".svg")],
+  [join(design, "logos"), "design/logos", (name) => name === "zimam-lockup-ar.svg" || name === "zimam-lockup-ar-on-dark.svg"],
   [join(design, "app-icons"), "design/app-icons", (name) => name === "favicon.svg" || name === "apple-touch-icon-180.png"],
   [join(design, "components"), "design/components", (name) => name === "bundle.css"],
 ];

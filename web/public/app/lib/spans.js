@@ -16,9 +16,6 @@ export function taskSpan(task) {
   return { start, end: task.dueDate };
 }
 
-/** Days in a span, both ends included: 1 for a one-day task. */
-export const spanLength = (span) => dayDiff(span.start, span.end) + 1;
-
 export const isMultiDay = (task) => {
   const span = taskSpan(task);
   return !!span && span.start !== span.end;

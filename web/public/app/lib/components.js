@@ -3,6 +3,7 @@
 // Text always goes in through textContent; nothing here parses HTML.
 import { icon } from "./icons.js";
 import { arabicNumber } from "./numbers.js";
+import { PRIORITY_WORDS } from "./tasks.js";
 
 /** h("div", { className: "x", onclick }, child, "text") */
 export function h(tag, props = {}, ...children) {
@@ -68,11 +69,12 @@ export function TimeChip(text) {
   return h("span", { className: "zm-chip zm-chip-date zm-chip-time" }, h("span", null, text));
 }
 
-const PRIORITY_WORDS = { high: "أولوية عالية", medium: "أولوية متوسطة", low: "أولوية منخفضة" };
+const FLAG_LEVELS = { low: 1, medium: 2, high: 3 };
 
 export function PriorityFlag(priority) {
-  if (!PRIORITY_WORDS[priority]) return null;
-  return h("span", { className: `zm-flag zm-flag-${priority}` }, icons.flag(), h("span", { className: "zm-sr" }, PRIORITY_WORDS[priority]));
+  const words = PRIORITY_WORDS[FLAG_LEVELS[priority]];
+  if (!words) return null;
+  return h("span", { className: `zm-flag zm-flag-${priority}` }, icons.flag(), h("span", { className: "zm-sr" }, words));
 }
 
 /**
@@ -169,6 +171,24 @@ export function IconButton({ icon: name, label, className, ...rest }) {
     { type: "button", className: ["icon-button", className].filter(Boolean).join(" "), "aria-label": label, title: label, ...rest },
     icon(name),
   );
+}
+
+/** Light dismiss (a click outside closes it) for a dialog with `closedby="any"`, where Safari does not support that yet. */
+export function lightDismiss(dialog) {
+  if ("closedBy" in HTMLDialogElement.prototype) return;
+  dialog.addEventListener("click", (event) => {
+    if (event.target !== dialog) return;
+    const r = dialog.getBoundingClientRect();
+    const inside = r.top <= event.clientY && event.clientY <= r.bottom && r.left <= event.clientX && event.clientX <= r.right;
+    if (!inside) dialog.close();
+  });
+}
+
+/** Whether keys pressed in `el` belong to it: a text field, a list or editable text, not a checkbox or a button. */
+export function isTyping(el) {
+  if (typeof Element === "undefined" || !(el instanceof Element)) return false;
+  if (el.closest("textarea, select, [contenteditable]:not([contenteditable=false])")) return true;
+  return el.matches("input") && !/^(checkbox|radio|button|submit|reset|range|color|file)$/.test(el.type);
 }
 
 /** A toolbar row above a screen's title: its buttons sit at the inline end, as the app's toolbar items. */

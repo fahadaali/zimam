@@ -2,13 +2,12 @@
 // in Arabic), then «مهم», «عاجل» and «يوماً ما», as in the Apple app's widget. Each quadrant has
 // its icon, title and count, then its first rows (completion circle, title, due chip) and
 // «+n أخرى» for the rest. A task completes in place; it moves to another quadrant by drag and drop,
-// or from its «نقل إلى» menu with the keyboard. The rules (what a move changes, and that leaving
-// the urgent quadrants clears the due date only after confirming) are in lib/matrix.js.
+// or from its «نقل إلى» menu with the keyboard. The rules (what a move changes, and when leaving the
+// urgent quadrants is refused because more than the day is tied to it) are in lib/matrix.js.
 // Plain DOM through h() and textContent; nothing here parses HTML.
 import { Button, h } from "./lib/components.js";
-import { dualDate } from "./lib/dates.js";
-import { boardApi } from "./lib/feature-api.js";
-import { QUADRANTS, VISIBLE_ROWS, hiddenCount, moveToQuadrant, quadrant, quadrants } from "./lib/matrix.js";
+import { boardApi, remindersApi } from "./lib/feature-api.js";
+import { QUADRANTS, VISIBLE_ROWS, anchoredByFields, hiddenCount, isAnchored, leavesUrgent, moveToQuadrant, quadrant, quadrants } from "./lib/matrix.js";
 import { arabicNumber } from "./lib/numbers.js";
 import { taskCount } from "./lib/tasks.js";
 
@@ -160,14 +159,22 @@ export async function viewMatrix(ctx) {
   // ——— Moving ———
 
   async function move(task, to) {
-    const { patch, clearsDueDate } = moveToQuadrant(task, to, today);
     const target = quadrant(to);
     const focus = `[data-task-id="${CSS.escape(task.id)}"] .card-move`;
-    if (Object.keys(patch).length === 0) return;
-    if (clearsDueDate && !(await confirmClear(task, target))) {
+    // Leaving «عاجل» clears the due day unless more is tied to it. The reminders are read only
+    // then; a count that cannot be read refuses the move, as Store.isAnchored does.
+    let anchored = false;
+    if (leavesUrgent(task, to, today)) {
+      anchored = anchoredByFields(task) || isAnchored(task, await reminderCount(task));
+      if (!root.isConnected) return; // signed out or moved on meanwhile
+    }
+    const { patch, refused } = moveToQuadrant(task, to, today, { anchored });
+    if (refused) {
+      await showRefusal(task);
       root.querySelector(focus)?.focus();
       return;
     }
+    if (Object.keys(patch).length === 0) return;
     const before = Object.fromEntries(Object.keys(patch).map((k) => [k, task[k] ?? null]));
     Object.assign(task, patch);
     ctx.markLocalChange();
@@ -185,37 +192,51 @@ export async function viewMatrix(ctx) {
     }
   }
 
-  /** Leaving the urgent quadrants clears the due date: only when the person says so. */
-  function confirmClear(task, target) {
-    let dialog = document.getElementById("matrix-confirm");
+  /** The person's reminders on the task, counted; null when they cannot be read. */
+  async function reminderCount(task) {
+    try {
+      return (await remindersApi.list(task.id)).reminders.length;
+    } catch {
+      return null;
+    }
+  }
+
+  /** «لم تُنقل المهمة»: leaving «عاجل» would lose more than the day (MatrixView.swift). */
+  function showRefusal(task) {
+    let dialog = document.getElementById("matrix-refusal");
     if (!dialog) {
-      dialog = h("dialog", { className: "sheet", id: "matrix-confirm", "aria-labelledby": "matrix-confirm-title", "aria-describedby": "matrix-confirm-text" });
+      dialog = h("dialog", { className: "sheet", id: "matrix-refusal", "aria-labelledby": "matrix-refusal-title", "aria-describedby": "matrix-refusal-text" });
       document.body.append(dialog);
     }
-    const due = task.dueDate ? dualDate(task.dueDate, { primary: ctx.primary, today }) : "";
-    const yes = Button({ variant: "secondary", className: "danger" }, "إزالة الموعد ونقلها");
-    const no = Button({ variant: "quiet" }, "إلغاء");
+    const close = Button({ variant: "quiet" }, "إغلاق");
+    close.addEventListener("click", () => dialog.close());
     dialog.replaceChildren(
       h(
         "div",
         { className: "sheet-form" },
-        h("h2", { className: "title", id: "matrix-confirm-title" }, `نقل إلى «${target.title}»`),
-        h("p", { className: "callout", id: "matrix-confirm-text" }, `«${task.title}» عاجلة لأن موعدها ${due}. نقلها إلى «${target.title}» يزيل موعدها${task.startDate ? " وتاريخ بدايتها" : ""}.`),
-        h("div", { className: "sheet-actions" }, yes, no),
+        h("h2", { className: "title", id: "matrix-refusal-title" }, "لم تُنقل المهمة"),
+        h("p", { className: "callout", id: "matrix-refusal-text" }, `«${task.title}» لها وقت أو صلاة أو تكرار أو تاريخ بداية أو تذكير مرتبط بموعدها. غيّر موعدها من تفاصيلها لتخرج من العاجل.`),
+        h("div", { className: "sheet-actions" }, close),
       ),
     );
     return new Promise((resolve) => {
-      let answer = false;
-      yes.addEventListener("click", () => {
-        answer = true;
-        dialog.close();
-      });
-      no.addEventListener("click", () => dialog.close());
-      dialog.addEventListener("close", () => resolve(answer), { once: true });
+      dialog.addEventListener("close", resolve, { once: true });
       dialog.showModal();
-      no.focus();
+      close.focus();
     });
   }
+
+  // A row that leaves (completed, or deleted from it) leaves its quadrant: drawn again, so the
+  // count and «+n أخرى» follow, and the next hidden row moves up.
+  root.addEventListener("zimam:task-left", (event) => {
+    const li = event.target.closest?.(".task-item");
+    if (!li) return;
+    event.preventDefault();
+    const next = li.contains(document.activeElement) ? (li.nextElementSibling ?? li.previousElementSibling)?.dataset.taskId : null;
+    const at = top.findIndex((t) => t.id === li.dataset.taskId);
+    if (at >= 0) top.splice(at, 1);
+    paint(next ? `[data-task-id="${CSS.escape(next)}"] .zm-check` : null);
+  });
 
   paint();
   return [

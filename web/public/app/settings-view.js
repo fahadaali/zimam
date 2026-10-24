@@ -43,7 +43,7 @@ export function openSettings(ctx) {
   const linkRow = (iconName, label, value, onclick) =>
     h(
       "button",
-      { type: "button", className: "form-row settings-link", onclick },
+      { type: "button", className: "form-row settings-link", dataset: { focus: `link-${iconName}` }, onclick },
       h("span", { className: "settings-link-label body" }, icon(iconName), label),
       h("span", { className: "settings-link-value callout muted" }, value ?? "", icon("chevron-forward", { size: "xs" })),
     );
@@ -95,12 +95,16 @@ export function openSettings(ctx) {
     }
   }
   function photoControls(me) {
-    const change = Button({ variant: "quiet", className: "avatar-action", disabled: photoBusy, onclick: () => picker.click() }, icon("camera", { size: "sm" }), "تغيير الصورة");
-    const remove = me?.avatarVersion != null ? Button({ variant: "quiet", className: "avatar-action", disabled: photoBusy, onclick: removePhoto }, icon("trash", { size: "sm" }), "إزالة الصورة") : null;
+    const change = Button({ variant: "quiet", className: "avatar-action", dataset: { focus: "photo-change" }, disabled: photoBusy, onclick: () => picker.click() }, icon("camera", { size: "sm" }), "تغيير الصورة");
+    const remove = me?.avatarVersion != null ? Button({ variant: "quiet", className: "avatar-action", dataset: { focus: "photo-remove" }, disabled: photoBusy, onclick: removePhoto }, icon("trash", { size: "sm" }), "إزالة الصورة") : null;
     return [h("div", { className: "avatar-actions" }, change, remove, picker), photoError];
   }
 
+  /** Draws the sheet again after a save; the control that has focus gets it back, and a name being typed stays. */
   function draw() {
+    const active = body.contains(document.activeElement) ? document.activeElement : null;
+    const focusKey = active?.id || active?.dataset.focus || null;
+    const typed = active?.id === "settings-name" ? { value: active.value, start: active.selectionStart, end: active.selectionEnd } : null;
     const me = ctx.me();
     const settings = me?.settings ?? {};
 
@@ -152,19 +156,19 @@ export function openSettings(ctx) {
     );
 
     // «الحساب والمزامنة»
-    const syncButton = h("button", { type: "button", className: "zm-btn zm-btn-quiet form-add" }, icon("refresh", { size: "sm" }), "مزامنة الآن");
+    const syncButton = h("button", { type: "button", className: "zm-btn zm-btn-quiet form-add", dataset: { focus: "sync" } }, icon("refresh", { size: "sm" }), "مزامنة الآن");
     syncButton.addEventListener("click", async () => {
       syncButton.disabled = true;
       await ctx.sync();
       syncButton.disabled = false;
     });
-    const signOut = h("button", { type: "button", className: "zm-btn zm-btn-quiet form-add" }, icon("log-out", { size: "sm" }), "تسجيل الخروج");
+    const signOut = h("button", { type: "button", className: "zm-btn zm-btn-quiet form-add", dataset: { focus: "sign-out" } }, icon("log-out", { size: "sm" }), "تسجيل الخروج");
     signOut.addEventListener("click", () => {
       dialog.close();
       ctx.signOut();
     });
     const confirm = h("div", { className: "reminder-sheet", hidden: true });
-    const remove = h("button", { type: "button", className: "zm-btn zm-btn-quiet form-add danger" }, icon("trash", { size: "sm" }), "حذف الحساب");
+    const remove = h("button", { type: "button", className: "zm-btn zm-btn-quiet form-add danger", dataset: { focus: "delete" } }, icon("trash", { size: "sm" }), "حذف الحساب");
     remove.addEventListener("click", () => {
       const yes = Button({ variant: "secondary", className: "danger" }, "حذف الحساب");
       const no = Button({ variant: "quiet" }, "إلغاء");
@@ -212,6 +216,13 @@ export function openSettings(ctx) {
     );
 
     body.replaceChildren(h("div", { className: "form-card" }, account), general, more, accountSection, about, error);
+    if (!focusKey) return;
+    const again = body.querySelector(`#${CSS.escape(focusKey)}, [data-focus="${CSS.escape(focusKey)}"]`);
+    if (typed && again) {
+      again.value = typed.value;
+      again.setSelectionRange?.(typed.start, typed.end);
+    }
+    again?.focus();
   }
 
   draw();

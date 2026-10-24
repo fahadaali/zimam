@@ -7,8 +7,9 @@ import { Button, h, icons } from "./lib/components.js";
 import { icon } from "./lib/icons.js";
 import { assistantErrorText, breakdownText, isoWithOffset, suggestionLines, suggestionToTask } from "./lib/assistant.js";
 import { dictatedTitle, dictationErrorText, dictationPrefix, transcriptOf } from "./lib/dictation.js";
-import { assistantApi, boardApi } from "./lib/feature-api.js";
+import { assistantApi, boardApi, remindersApi } from "./lib/feature-api.js";
 import { after, byManualOrder } from "./lib/order.js";
+import { newReminder } from "./lib/reminders.js";
 import { canEdit } from "./lib/sharing.js";
 import { arabicNumber } from "./lib/numbers.js";
 import { isOpen } from "./lib/tasks.js";
@@ -189,6 +190,19 @@ async function suggest(ctx) {
   }
 }
 
+/**
+ * Where an accepted suggestion goes, as AddTaskView.accept decides it: the project it names when
+ * the form lists it (one the person can add to), otherwise the project chosen in the form.
+ */
+function withFormProject(task) {
+  const select = document.getElementById("add-project");
+  const known = task.projectId && [...select.options].some((o) => o.value === task.projectId) ? task.projectId : null;
+  return { ...task, projectId: known ?? (select.value || null) };
+}
+
+/** The sentence after adding a task whose «عند الموعد» could not be added with it (main.js says the same). */
+export const AT_TIME_FAILED = "أُضيفت المهمة، ولم يُضف تذكير «عند الموعد». أضفه من تفاصيلها.";
+
 function showSuggestion(task, ctx) {
   const error = h("p", { className: "callout field-error", role: "alert" });
   const accept = Button({ variant: "primary" }, "إضافة");
@@ -199,11 +213,18 @@ function showSuggestion(task, ctx) {
     accept.disabled = true;
     try {
       ctx.markLocalChange?.();
-      await boardApi.createTask(task);
+      const created = await boardApi.createTask(withFormProject(task));
+      // A task with a time reminds at it, as the app adds «عند الموعد» (ensureAtTimeReminder). The
+      // task is added either way; a reminder that could not be is said, so it can be added by hand.
+      let reminderFailed = false;
+      if (created.dueTime || created.duePrayer) {
+        await remindersApi.add(newReminder(created.id, { kind: "relative", offsetMinutes: 0 })).catch((e) => (reminderFailed = e.status !== 401));
+      }
       document.getElementById("add-dialog").close();
-      ctx.announce("أُضيفت المهمة.");
+      if (!reminderFailed) ctx.announce("أُضيفت المهمة.");
       await ctx.refreshProjects();
-      ctx.render();
+      await ctx.render();
+      if (reminderFailed) ctx.showError(AT_TIME_FAILED); // an alert, read out after the redraw
     } catch (failure) {
       if (failure.status !== 401) error.textContent = ctx.errorText(failure);
       accept.disabled = false;
@@ -233,6 +254,11 @@ function fillForm(task) {
 
 /** One summary per day for this page's life, so a live reload keeps it. */
 const summaries = new Map();
+
+/** Forgets the summaries when the account signs out, so the next account never sees them. */
+export function forgetSummaries() {
+  summaries.clear();
+}
 
 /** The summary block for Today: a button, then the card once asked. */
 export function todaySummary(ctx) {
@@ -287,6 +313,7 @@ export function todaySummary(ctx) {
  * «المهام الفرعية» (TaskSubtasksSection.swift): each with its completion circle and opening on its
  * own, «مهمة فرعية جديدة», then «تقسيم إلى خطوات». `ctx`: { primary, today, role, announce,
  * errorText, isCurrent(), openTask(task) } where isCurrent() is false once the pane shows another task.
+ * `reload()` on the section reads the subtasks again (another member may have added some).
  */
 export function breakdownSection(task, ctx) {
   const list = h("ul", { className: "subtask-list", role: "list" });
@@ -295,6 +322,8 @@ export function breakdownSection(task, ctx) {
   const listError = h("p", { className: "callout field-error", role: "alert" });
   const section = h("section", { className: "extra-section", "aria-labelledby": "subtasks-title" }, h("h3", { className: "headline", id: "subtasks-title" }, "المهام الفرعية"), list, listError);
   let children = [];
+  /** Whether `children` is what the server has: new ones are ordered after them only then. */
+  let loaded = false;
 
   const subtaskRow = (t) => {
     const done = !isOpen(t);
@@ -325,15 +354,25 @@ export function breakdownSection(task, ctx) {
     list.replaceChildren(...(children.length ? children.map(subtaskRow) : [h("li", { className: "callout muted" }, "لا مهام فرعية بعد.")]));
   };
 
+  /** → whether the subtasks were read; a failure says so instead of «لا مهام فرعية بعد». */
   const loadChildren = async () => {
     try {
       const { tasks } = await boardApi.tasks({ projectId: task.projectId ?? "inbox" });
       children = tasks.filter((t) => t.parentId === task.id).sort(byManualOrder);
-    } catch {
-      children = [];
+      loaded = true;
+    } catch (failure) {
+      if (failure.status === 401 || !ctx.isCurrent()) return false;
+      if (!loaded) list.replaceChildren();
+      listError.textContent = ctx.errorText(failure);
+      return false;
     }
-    if (ctx.isCurrent()) drawList();
+    if (ctx.isCurrent()) {
+      listError.textContent = "";
+      drawList();
+    }
+    return true;
   };
+  section.reload = () => loadChildren();
   list.append(h("li", { className: "callout muted" }, "تُحمَّل الخطوات…"));
   loadChildren();
 
@@ -348,6 +387,11 @@ export function breakdownSection(task, ctx) {
     const title = newTitle.value.trim();
     if (!title) return;
     addSub.disabled = true;
+    // Ordered after the subtasks the server has, so they are read first if they were not.
+    if (!loaded && !(await loadChildren())) {
+      addSub.disabled = false;
+      return;
+    }
     listError.textContent = "";
     try {
       ctx.markLocalChange?.();
@@ -404,6 +448,10 @@ export function breakdownSection(task, ctx) {
       }
       error.textContent = "";
       accept.disabled = true;
+      if (!loaded && !(await loadChildren())) {
+        accept.disabled = false;
+        return;
+      }
       try {
         let order = after(children.map((t) => t.sortOrder ?? 0));
         for (const title of chosen) {

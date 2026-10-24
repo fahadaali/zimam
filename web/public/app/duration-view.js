@@ -4,7 +4,7 @@
 //   - In the task details: «المدة» with «تغيير المدة…», which opens the start and due dates inline.
 //   - «تغيير المدة…» as a dialog: the timeline's keyboard way to move and resize a bar.
 // Plain DOM through h() and textContent; nothing here parses HTML.
-import { Button, h } from "./lib/components.js";
+import { Button, h, lightDismiss } from "./lib/components.js";
 import { dualDate, isIsoDate, relativeDay, weekdayName } from "./lib/dates.js";
 import { boardApi } from "./lib/feature-api.js";
 import { START_ERRORS, checkStart, spanText, taskSpan } from "./lib/spans.js";
@@ -155,16 +155,8 @@ export function openDurationDialog(task, ctx, onSaved) {
   let dialog = document.getElementById("duration-dialog");
   if (!dialog) {
     dialog = h("dialog", { className: "sheet", id: "duration-dialog", "aria-labelledby": "duration-title" });
-    // Light dismiss where `closedby` is not supported yet (Safari), as the task dialog does.
     dialog.setAttribute("closedby", "any");
-    if (!("closedBy" in HTMLDialogElement.prototype)) {
-      dialog.addEventListener("click", (event) => {
-        if (event.target !== dialog) return;
-        const r = dialog.getBoundingClientRect();
-        const inside = r.top <= event.clientY && event.clientY <= r.bottom && r.left <= event.clientX && event.clientX <= r.right;
-        if (!inside) dialog.close();
-      });
-    }
+    lightDismiss(dialog);
     document.body.append(dialog);
   }
   const close = () => dialog.close();
@@ -190,12 +182,15 @@ export function openDurationDialog(task, ctx, onSaved) {
 
 /**
  * «المدة» in the task details: the span in words and, for editors, «تغيير المدة…» opening the
- * form in place. `ctx` as showTaskExtras gets it (with `role`, `canEditTask`, `render`, `isCurrent`).
+ * form in place. `ctx` as showTaskExtras gets it (with `role`, `canEditTask`, `render`, `onChanged`,
+ * `isCurrent`). `update()` on the section redraws the words after the task's dates changed elsewhere;
+ * an open form keeps what is typed in it.
  */
 export function durationSection(task, ctx) {
   const titleId = "task-span-title";
   const text = h("p", { className: "body" }, spanText(taskSpan(task), ctx));
   const section = h("section", { className: "extra-section", "aria-labelledby": titleId }, h("h3", { className: "headline", id: titleId }, "المدة"), text);
+  section.update = () => (text.textContent = spanText(taskSpan(task), ctx));
   if (!ctx.canEditTask?.(task)) return section;
   const open = Button({ variant: "secondary", "aria-expanded": "false" }, "تغيير المدة…");
   const slot = h("div");
@@ -203,8 +198,10 @@ export function durationSection(task, ctx) {
     const { form, focus } = durationForm(task, ctx, {
       onSaved: () => {
         if (!ctx.isCurrent?.()) return;
-        text.textContent = spanText(taskSpan(task), ctx);
+        section.update();
         close();
+        // The editor's «الموعد» above follows the new dates, and so does the list.
+        ctx.onChanged?.(task);
         ctx.render?.();
       },
       onCancel: close,

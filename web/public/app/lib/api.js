@@ -143,16 +143,17 @@ export const TASK_PAGE_LIMIT = 20;
 
 /**
  * Reads a paged list to its end: asks `fetchPage(offset)` for `{ tasks }` pages while a page comes
- * back full, up to `maxPages`, and returns `{ tasks }` with every page joined in order.
+ * back full, up to `maxPages`, and returns `{ tasks, truncated }` with every page joined in order.
+ * `truncated` is true when it stopped at `maxPages` on a full page, so more may be on the server.
  */
 export async function fetchAllPages(fetchPage, { pageSize = TASK_PAGE_SIZE, maxPages = TASK_PAGE_LIMIT } = {}) {
   const tasks = [];
   for (let page = 0; page < maxPages; page += 1) {
     const { tasks: batch = [] } = (await fetchPage(page * pageSize)) ?? {};
     tasks.push(...batch);
-    if (batch.length < pageSize) break;
+    if (batch.length < pageSize) return { tasks, truncated: false };
   }
-  return { tasks };
+  return { tasks, truncated: true };
 }
 
 /** Every task matching `params`, read from GET /v1/tasks a full page at a time. */

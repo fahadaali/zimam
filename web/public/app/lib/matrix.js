@@ -5,16 +5,19 @@
 //                device's day, as in every other view (main.js state.today)
 // Done tasks are in no quadrant.
 //
-// Moving a task between quadrants changes the fewest fields that put it there:
+// Moving a task between quadrants changes the fewest fields that put it there (PriorityMatrix.move):
 //   - into an important quadrant: priority becomes 2 (medium) when it is below 2; 3 stays 3.
-//   - out of the important ones:  priority becomes 0 (none).
-//   - into an urgent quadrant:    the due date becomes today when the task has none or it is later
-//                                 than tomorrow (a due date of today or tomorrow already counts);
-//                                 a start date after the new due date is cleared.
-//   - out of the urgent ones:     the due date (and with it the start date) is cleared, only after
-//                                 the person confirms; without that nothing moves.
+//   - out of the important ones:  a medium or high priority becomes 1 (low).
+//   - into an urgent quadrant:    the due date becomes today when the task is not urgent yet (a due
+//                                 date of today, tomorrow or before already counts); its time or
+//                                 prayer stays, and a start date moves with it, keeping the span.
+//   - out of the urgent ones:     the due date is cleared, but only when nothing else is tied to it
+//                                 (isAnchored: a time, a prayer, a repeat, a start date or a
+//                                 reminder); otherwise the move is refused, and the person changes
+//                                 the date in the task's details.
 // Pure functions, no DOM; tested in test/matrix.test.mjs.
 import { addDays, isIsoDate } from "./dates.js";
+import { shiftTo } from "./spans.js";
 
 export const QUADRANTS = [
   { key: "urgent-important", title: "مهم وعاجل", important: true, urgent: true },
@@ -27,20 +30,6 @@ export const quadrant = (key) => QUADRANTS.find((q) => q.key === key) ?? null;
 
 /** Rows a quadrant shows before «+n أخرى». */
 export const VISIBLE_ROWS = 5;
-
-/** Today as "YYYY-MM-DD" in an IANA time zone (the user's settings.timeZone); the device's day if it is unknown. */
-export function todayIn(timeZone, now = new Date()) {
-  try {
-    const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
-    const get = (type) => parts.find((p) => p.type === type)?.value;
-    const iso = `${get("year")}-${get("month")}-${get("day")}`;
-    if (isIsoDate(iso)) return iso;
-  } catch {
-    /* unknown zone: fall through */
-  }
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
 
 export const isImportant = (task) => (task.priority ?? 0) >= 2;
 export const isUrgent = (task, today) => isIsoDate(task.dueDate) && task.dueDate <= addDays(today, 1);
@@ -73,31 +62,41 @@ export function quadrants(tasks, today) {
   return out;
 }
 
+/** Whether the task's own fields tie its due date to more than the day (Store.isAnchored, without the reminders). */
+export const anchoredByFields = (task) => !!(task.dueTime || task.duePrayer || task.recurrence || task.startDate);
+
 /**
- * What moving `task` to quadrant `to` changes. → { patch, clearsDueDate }
- * `patch` is the fields to send (empty when it is already there). `clearsDueDate` is true when the
- * move takes the task out of the urgent quadrants, which needs the person's confirmation first.
- * `startDate` is only in the patch when the task has one, so a server without the field is never sent it.
+ * Whether clearing the due date would lose more than the day: a time, a prayer, a repeat, a start
+ * date, or one of `reminderCount` reminders. A count that could not be read (null) counts as tied,
+ * the safe answer, as the app does.
  */
-export function moveToQuadrant(task, to, today) {
+export const isAnchored = (task, reminderCount) => anchoredByFields(task) || reminderCount !== 0;
+
+/** Whether moving `task` to quadrant `to` takes it out of the urgent quadrants (and so clears its due date). */
+export const leavesUrgent = (task, to, today) => !quadrant(to)?.urgent && isUrgent(task, today);
+
+/**
+ * What moving `task` to quadrant `to` changes. → { patch, refused }
+ * `patch` is the fields to send (empty when it is already there). `anchored` (isAnchored) is only
+ * read when the move leaves the urgent quadrants: then the move is `refused` and nothing changes.
+ * `startDate` is only in the patch when the task has one.
+ */
+export function moveToQuadrant(task, to, today, { anchored = false } = {}) {
   const target = quadrant(to);
   if (!target) throw new RangeError(`Unknown quadrant: ${to}`);
+  if (quadrantOf(task, today) === to) return { patch: {}, refused: false };
   const patch = {};
   const important = isImportant(task);
   if (target.important && !important) patch.priority = 2;
-  if (!target.important && important) patch.priority = 0;
+  if (!target.important && important) patch.priority = 1;
 
   const urgent = isUrgent(task, today);
-  let clearsDueDate = false;
-  if (target.urgent && !urgent) {
-    patch.dueDate = today;
-    if (isIsoDate(task.startDate) && task.startDate > today) patch.startDate = null;
-  } else if (!target.urgent && urgent) {
-    clearsDueDate = true;
+  if (target.urgent && !urgent) Object.assign(patch, shiftTo(task, today));
+  else if (!target.urgent && urgent) {
+    if (anchored) return { patch: {}, refused: true };
     patch.dueDate = null;
-    if (task.startDate != null) patch.startDate = null;
   }
-  return { patch, clearsDueDate };
+  return { patch, refused: false };
 }
 
 /** «+٢ أخرى» needs the count of rows past the visible ones. */

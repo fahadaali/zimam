@@ -6,7 +6,9 @@ export function priorityKey(priority) {
   return { 1: "low", 2: "medium", 3: "high" }[priority] ?? null;
 }
 
-export const PRIORITY_WORDS = { 0: "بلا أولوية", 1: "أولوية منخفضة", 2: "أولوية متوسطة", 3: "أولوية عالية" };
+/** The priorities 0–3 by name, as a picker lists them («عالية»), and as words that stand alone («أولوية عالية»). */
+export const PRIORITY_NAMES = { 0: "بلا أولوية", 1: "منخفضة", 2: "متوسطة", 3: "عالية" };
+export const PRIORITY_WORDS = Object.fromEntries(Object.entries(PRIORITY_NAMES).map(([level, name]) => [level, Number(level) ? `أولوية ${name}` : name]));
 
 export const isOpen = (task) => task.status !== "done";
 
@@ -19,13 +21,6 @@ export function groupByDay(tasks) {
     groups.get(task.dueDate).push(task);
   }
   return [...groups.keys()].sort().map((date) => ({ date, tasks: groups.get(date) }));
-}
-
-/** Today's list: overdue first (oldest first), then today's, each in the server's order. */
-export function splitToday(tasks, today) {
-  const overdue = tasks.filter((t) => t.dueDate && t.dueDate < today);
-  const due = tasks.filter((t) => t.dueDate === today);
-  return { overdue, due };
 }
 
 /**
@@ -48,10 +43,6 @@ export const topLevel = (tasks) => tasks.filter((t) => !t.parentId);
 /** «٧ من ١٢». */
 export function progressText(done, total) {
   return `${arabicNumber(done)} من ${arabicNumber(total)}`;
-}
-
-export function progressPercent(done, total) {
-  return total > 0 ? Math.round((done / total) * 100) : 0;
 }
 
 /** «مهمة واحدة», «مهمتان», «٣ مهام», «١١ مهمة». */

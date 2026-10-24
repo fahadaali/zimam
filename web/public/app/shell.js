@@ -5,9 +5,9 @@
 import { avatarView } from "./avatar.js";
 import { api, errorText } from "./lib/api.js";
 import { IconButton, h } from "./lib/components.js";
-import { boardApi } from "./lib/feature-api.js";
 import { hydrateIcons, icon } from "./lib/icons.js";
 import { appJoinHash, extractInviteCode } from "./lib/invites.js";
+import { TASK_DRAG_TYPE } from "./lib/move.js";
 import { arabicNumber } from "./lib/numbers.js";
 import { sidebarItemFor, tabFor } from "./lib/routes.js";
 import { canEdit } from "./lib/sharing.js";
@@ -17,8 +17,6 @@ import { taskCount } from "./lib/tasks.js";
 /** The width from which the sidebar replaces the tab bar; the same literal is in shell.css. */
 const REGULAR = "(min-width: 48rem)";
 const EXPANDED_KEY = "zimam.sidebarExpanded";
-/** At most this many project requests at once when reading sections for the sidebar. */
-const SECTION_FETCHES = 4;
 
 const $ = (id) => document.getElementById(id);
 
@@ -30,6 +28,8 @@ export function createShell(ctx) {
   const shell = $("shell");
   const sections = new Map(); // project id → its sections
   let counts = sidebarCounts([], ctx.state.today);
+  /** The open tasks were cut at the page limit (lib/api.js): the counts are at least these. */
+  let countsCut = false;
   let selectedItem = null;
 
   hydrateIcons(document);
@@ -94,7 +94,8 @@ export function createShell(ctx) {
 
   function countBadge(n) {
     if (!n) return null;
-    return [h("span", { className: "sidebar-count caption", "aria-hidden": "true" }, arabicNumber(n)), h("span", { className: "zm-sr" }, `، ${taskCount(n)}`)];
+    const more = countsCut ? "+" : "";
+    return [h("span", { className: "sidebar-count caption", "aria-hidden": "true" }, `${arabicNumber(n)}${more}`), h("span", { className: "zm-sr" }, `، ${taskCount(n)}${countsCut ? " أو أكثر" : ""}`)];
   }
 
   function row({ href, item, iconName, label, count, drop }) {
@@ -176,54 +177,68 @@ export function createShell(ctx) {
     }
   }
 
-  /** Reads the open tasks and the projects' sections again, then redraws the sidebar. */
-  async function refreshSidebar() {
+  /** Reads the open tasks again for the counts, then redraws the sidebar. → whether the read worked */
+  async function refreshSidebarOnce() {
+    let ok = true;
     try {
-      const { tasks } = await api.tasks({ status: "open" });
+      const { tasks, truncated } = await api.tasks({ status: "open" });
       counts = sidebarCounts(tasks, ctx.state.today);
+      countsCut = truncated;
     } catch {
-      /* the counts wait for the next refresh */
+      ok = false; // the counts wait for the next refresh
     }
+    fillSections();
     renderCounts();
     renderProjects();
-    await fetchSections();
-    renderProjects();
+    return ok;
   }
 
-  /**
-   * The project list carries each project's sections; a server older than that field leaves it out,
-   * so only those projects are read one by one, a few at a time.
-   */
-  async function fetchSections() {
-    const queue = [];
+  // One refresh at a time, so an older answer never draws over a newer one; calls made during one
+  // ask for a single refresh after it, which a burst of changes shares.
+  let sidebarRun = null;
+  let sidebarAgain = false;
+  /** Redraws the sidebar from the server. → whether the last read worked */
+  function refreshSidebar() {
+    if (sidebarRun) {
+      sidebarAgain = true;
+      return sidebarRun;
+    }
+    sidebarRun = (async () => {
+      let ok;
+      do {
+        sidebarAgain = false;
+        ok = await refreshSidebarOnce();
+      } while (sidebarAgain);
+      return ok;
+    })().finally(() => (sidebarRun = null));
+    return sidebarRun;
+  }
+
+  /** Each project's sections, which GET /v1/projects carries. */
+  function fillSections() {
     for (const project of ctx.state.projects) {
       if (project.kind === "folder" || project.archivedAt) continue;
-      if (Array.isArray(project.sections)) sections.set(project.id, project.sections);
-      else queue.push(project.id);
+      sections.set(project.id, project.sections ?? []);
     }
-    if (queue.length === 0) return;
-    const worker = async () => {
-      while (queue.length) {
-        const id = queue.shift();
-        try {
-          const detail = await boardApi.project(id);
-          sections.set(id, detail.sections ?? []);
-        } catch {
-          /* this project's sections wait for the next refresh */
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: SECTION_FETCHES }, worker));
+  }
+
+  /** Signed out: the counts and projects of that account leave the sidebar until the next one loads. */
+  function forget() {
+    counts = sidebarCounts([], ctx.state.today);
+    countsCut = false;
+    sections.clear();
+    renderCounts();
+    $("sidebar-projects").replaceChildren();
+    $("account-name").textContent = "";
   }
 
   // ——— Dropping a task on the sidebar ———
 
-  const TASK_TYPE = "application/x-zimam-task";
   const sidebar = $("sidebar");
   const target = (event) => event.target.closest?.("[data-drop]");
   sidebar.addEventListener("dragover", (event) => {
     const el = target(event);
-    if (!el || !event.dataTransfer?.types.includes(TASK_TYPE)) return;
+    if (!el || !event.dataTransfer?.types.includes(TASK_DRAG_TYPE)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     for (const other of sidebar.querySelectorAll(".is-target")) if (other !== el) other.classList.remove("is-target");
@@ -238,7 +253,7 @@ export function createShell(ctx) {
     if (!el) return;
     event.preventDefault();
     el.classList.remove("is-target");
-    const taskId = event.dataTransfer.getData(TASK_TYPE);
+    const taskId = event.dataTransfer.getData(TASK_DRAG_TYPE);
     if (!taskId) return;
     const where = el.dataset.drop === "inbox" ? { projectId: null, sectionId: null, label: "صندوق المهام" } : JSON.parse(el.dataset.drop);
     ctx.moveTask(taskId, where);
@@ -368,5 +383,5 @@ export function createShell(ctx) {
   $("new-project-button").addEventListener("click", openNewProject);
   $("join-button").addEventListener("click", openJoin);
 
-  return { layout, updateNav, refreshSidebar, renderCounts, accountButton, openNewProject, openJoin };
+  return { layout, updateNav, refreshSidebar, renderCounts, forget, accountButton, openNewProject, openJoin };
 }

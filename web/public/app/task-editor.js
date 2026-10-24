@@ -10,6 +10,7 @@ import { icon } from "./lib/icons.js";
 import { PRAYERS, PRAYER_NAMES, prayerPhrase } from "./lib/prayer.js";
 import { WEEKDAYS, WEEKDAY_NAMES, chooseFrequency, ruleChoice, ruleText, toggleWeekday } from "./lib/recurrence.js";
 import { hasTaskTime, localToIso, newReminder, presetsFor, reminderLabel, sortReminders } from "./lib/reminders.js";
+import { PRIORITY_NAMES } from "./lib/tasks.js";
 
 let fieldIds = 0;
 const uid = (name) => `te-${name}-${++fieldIds}`;
@@ -64,20 +65,24 @@ function nextHour(now = new Date()) {
 
 /**
  * The editor for `task`. `ctx`: { primary, today, projects (those the person can add to),
- * projectName(id), save(fields) → Promise<task>, isCurrent(), announce, errorText }.
+ * projectName(id), save(fields) → Promise<task>, isCurrent(), announce, errorText, error (the error
+ * line, kept across redraws), ensureAtTimeReminder() }.
  * `remindersNode` is the «التذكيرات» section (remindersSection), kept across redraws so its list is
  * read once per opened task. Controls carry `data-key`, so a redraw can give focus back.
  */
 export function taskEditor(task, ctx, remindersNode) {
-  const error = h("p", { className: "callout field-error", role: "alert" });
+  const error = ctx.error ?? h("p", { className: "callout field-error", role: "alert" });
 
+  /** → whether the server took the change */
   async function save(fields, { announce } = {}) {
     error.textContent = "";
     try {
       await ctx.save(fields);
       if (announce) ctx.announce(announce);
+      return true;
     } catch (failure) {
       if (failure.status !== 401 && ctx.isCurrent()) error.textContent = ctx.errorText(failure);
+      return false;
     }
   }
 
@@ -141,6 +146,10 @@ export function taskEditor(task, ctx, remindersNode) {
   }
 
   const mode = task.duePrayer ? "prayer" : task.dueTime ? "clock" : "allDay";
+  // From all day to a time adds «عند الموعد», as Store.setTime does: a time set is one to be told of.
+  const timed = async (fields) => {
+    if ((await save(fields)) && mode === "allDay" && ctx.isCurrent()) ctx.ensureAtTimeReminder?.();
+  };
   dueRows.push(
     h(
       "div",
@@ -153,8 +162,8 @@ export function taskEditor(task, ctx, remindersNode) {
             error.textContent = "حدّد تاريخ الاستحقاق أولاً لتختار ساعة.";
             return;
           }
-          save({ dueTime: nextHour(), duePrayer: null, duePrayerOffset: null });
-        } else save({ duePrayer: "asr", duePrayerOffset: 0, dueTime: null });
+          timed({ dueTime: nextHour(), duePrayer: null, duePrayerOffset: null });
+        } else timed({ duePrayer: "asr", duePrayerOffset: 0, dueTime: null });
       }),
     ),
   );
@@ -187,7 +196,7 @@ export function taskEditor(task, ctx, remindersNode) {
   const priority = h(
     "select",
     { className: "input body form-control", id: priorityId, dataset: { key: "priority" }, onchange: (e) => save({ priority: Number(e.target.value) }) },
-    [["0", "بلا أولوية"], ["1", "منخفضة"], ["2", "متوسطة"], ["3", "عالية"]].map(([v, t]) => h("option", { value: v, selected: Number(v) === (task.priority ?? 0) }, t)),
+    [0, 1, 2, 3].map((level) => h("option", { value: String(level), selected: level === (task.priority ?? 0) }, PRIORITY_NAMES[level])),
   );
   const detailRows = [row("الأولوية", priority, { id: priorityId })];
   // A subtask goes with its task (TaskDetailsSection.swift hides the picker for subtasks).
@@ -274,6 +283,8 @@ export function remindersSection(taskId, getTask, ctx) {
   const section = card("التذكيرات", [list, form, add, menu]);
   section.append(error, footer);
   let reminders = [];
+  /** Whether `reminders` is the list the server has. */
+  let read = false;
 
   menu.addEventListener("beforetoggle", (event) => {
     if (event.newState !== "open") return;
@@ -329,6 +340,7 @@ export function remindersSection(taskId, getTask, ctx) {
   async function load() {
     try {
       ({ reminders } = await remindersApi.list(taskId));
+      read = true;
     } catch (failure) {
       reminders = [];
       if (failure.status !== 401 && ctx.isCurrent()) error.textContent = ctx.errorText(failure);
@@ -336,20 +348,32 @@ export function remindersSection(taskId, getTask, ctx) {
     if (ctx.isCurrent()) draw();
   }
 
-  async function addReminder(fields) {
+  /** `quiet`: added for the person (ensureAtTime), so the focus and an open form stay where they are. */
+  async function addReminder(fields, { quiet = false } = {}) {
     error.textContent = "";
     const reminder = newReminder(taskId, fields);
     try {
       ctx.markLocalChange?.();
       await remindersApi.add(reminder);
       reminders.push(reminder);
-      ctx.announce("أُضيف التذكير.");
-      form.replaceChildren();
+      if (!quiet) {
+        ctx.announce("أُضيف التذكير.");
+        form.replaceChildren();
+      }
       if (ctx.isCurrent()) draw();
-      add.focus();
+      if (!quiet) add.focus();
     } catch (failure) {
       if (failure.status !== 401 && ctx.isCurrent()) error.textContent = ctx.errorText(failure);
     }
+  }
+
+  /** «عند الموعد», unless a reminder counts from the task's time already (ensureAtTimeReminder). */
+  async function ensureAtTime() {
+    await loading;
+    const task = getTask();
+    if (!read || !hasTaskTime(task) || (!task.dueTime && !task.duePrayer)) return;
+    if (reminders.some((r) => r.kind === "relative")) return;
+    await addReminder({ kind: "relative", offsetMinutes: 0 }, { quiet: true });
   }
 
   async function removeReminder(reminder) {
@@ -416,6 +440,6 @@ export function remindersSection(taskId, getTask, ctx) {
     select.focus();
   }
 
-  load();
-  return { node: section, redraw: () => ctx.isCurrent() && draw() };
+  const loading = load();
+  return { node: section, redraw: () => ctx.isCurrent() && draw(), ensureAtTime };
 }

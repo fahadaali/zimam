@@ -6,12 +6,8 @@
 //   another place moves the task there at once (with its subtasks), as a drop on the sidebar does.
 // Plain DOM through h() and textContent; nothing here parses HTML. Styles in editor.css.
 import { Button, h } from "./lib/components.js";
-import { boardApi } from "./lib/feature-api.js";
 import { icon } from "./lib/icons.js";
-import { knownSections, movableProjects, moveDestinations } from "./lib/move.js";
-
-/** At most this many project requests at once when a project's sections are not known yet. */
-const SECTION_FETCHES = 4;
+import { knownSections, moveDestinations } from "./lib/move.js";
 
 const ICONS = { inbox: "inbox", project: "folder", section: "section" };
 
@@ -52,7 +48,6 @@ export function openMoveSheet(task, ctx) {
         className: `move-row body${place.kind === "section" ? " is-section" : ""}`,
         "aria-current": place.current ? "true" : null,
         "aria-label": place.spoken !== place.name ? place.spoken : null,
-        dataset: { place: `${place.projectId ?? ""}/${place.sectionId ?? ""}` },
       },
       icon(ICONS[place.kind]),
       h("span", { className: "move-name" }, place.name),
@@ -71,8 +66,6 @@ export function openMoveSheet(task, ctx) {
   }
 
   function draw() {
-    // Redrawn once late sections arrive: the focus stays on the same place.
-    const focused = dialog.contains(document.activeElement) ? document.activeElement.dataset?.place : null;
     const places = moveDestinations(task, ctx.projects(), sections);
     const [inbox, ...rest] = places;
     body.replaceChildren(
@@ -86,7 +79,6 @@ export function openMoveSheet(task, ctx) {
           : h("p", { className: "callout muted move-empty" }, "لا مشاريع بعد."),
       ),
     );
-    if (focused != null) body.querySelector(`[data-place="${CSS.escape(focused)}"]`)?.focus();
   }
 
   document.body.append(dialog);
@@ -95,26 +87,6 @@ export function openMoveSheet(task, ctx) {
   // Start on the current place, as a picker does.
   body.querySelector('[aria-current="true"]')?.focus();
 
-  // Projects whose sections GET /v1/projects did not carry: read them now, then redraw once.
-  const missing = movableProjects(ctx.projects())
-    .filter((p) => !sections.has(p.id))
-    .map((p) => p.id);
-  if (missing.length) {
-    const worker = async () => {
-      while (missing.length) {
-        const id = missing.shift();
-        try {
-          const detail = await boardApi.project(id);
-          sections.set(id, detail.sections ?? detail.project?.sections ?? []);
-        } catch {
-          /* listed without its sections; the project itself is still a place */
-        }
-      }
-    };
-    Promise.all(Array.from({ length: SECTION_FETCHES }, worker)).then(() => {
-      if (dialog.isConnected) draw();
-    });
-  }
   return dialog;
 }
 

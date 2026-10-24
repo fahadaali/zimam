@@ -20,7 +20,7 @@ const TODAY = "2026-10-13"; // Tuesday, 2 Jumada al-Ula 1448
 
 test("Hijri is Umm al-Qura with Arabic-Indic digits", () => {
   assert.equal(formatHijri("2026-10-13"), "٢ جمادى الأولى");
-  assert.equal(formatHijri("2026-10-13", { year: true }), "٢ جمادى الأولى ١٤٤٨ هـ");
+  assert.equal(formatHijri("2026-10-13", { year: true }), "٢ جمادى الأولى ١٤٤٨هـ");
 });
 
 test("Gregorian uses Arabic month names and Arabic-Indic digits", () => {
@@ -34,9 +34,12 @@ test("dual date: Hijri first by default, separated by the Arabic comma", () => {
   assert.ok(!dualDate("2026-10-13").includes("·"), "never the middle dot");
 });
 
-test("dual date adds years only outside the current Gregorian year", () => {
+test("dual date adds years only outside the current Hijri and Gregorian years", () => {
   assert.equal(dualDate("2026-12-01", { today: TODAY }), dualDate("2026-12-01"));
-  assert.match(dualDate("2027-01-05", { today: TODAY }), /١٤٤٨ هـ، ٥ يناير ٢٠٢٧$/);
+  assert.match(dualDate("2027-01-05", { today: TODAY }), /١٤٤٨هـ، ٥ يناير ٢٠٢٧$/);
+  // Another Hijri year in the same Gregorian one shows both years too.
+  assert.equal(dualDate("2027-06-20", { today: "2027-01-05" }), "١٥ محرم ١٤٤٩هـ، ٢٠ يونيو ٢٠٢٧");
+  assert.equal(dualDate("2026-06-01", { today: TODAY }), "١٥ ذو الحجة ١٤٤٧هـ، ١ يونيو ٢٠٢٦");
 });
 
 test("near days read as one word", () => {
@@ -62,6 +65,14 @@ test("due chip: overdue shows the full date in the overdue tone", () => {
   });
   assert.equal(dueChip("2026-10-13", { today: TODAY }).text, "اليوم");
   assert.equal(dueChip("2026-10-13", { today: TODAY }).tone, "default");
+});
+
+test("due chip: a done task is never overdue", () => {
+  assert.deepEqual(dueChip("2026-10-11", { today: TODAY, done: true }), {
+    text: "٣٠ ربيع الآخر، ١١ أكتوبر",
+    full: "٣٠ ربيع الآخر، ١١ أكتوبر",
+    tone: "default",
+  });
 });
 
 test("day headings pair the word with the dual date", () => {

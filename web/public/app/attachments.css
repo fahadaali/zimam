@@ -20,11 +20,6 @@
   list-style: none;
 }
 
-.attachment-list[hidden],
-.attachment-actions[hidden] {
-  display: none;
-}
-
 .attachment {
   display: flex;
   flex-wrap: wrap;

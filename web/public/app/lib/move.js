@@ -6,6 +6,9 @@ import { sidebarProjects } from "./sidebar.js";
 
 export const INBOX_NAME = "صندوق المهام";
 
+/** The drag data type a task row carries (main.js) and the sidebar's drop reads (shell.js). */
+export const TASK_DRAG_TYPE = "application/x-zimam-task";
+
 /** Projects a task can move into: projects (not folders), not archived, that the person edits. */
 export function movableProjects(projects) {
   return (projects ?? []).filter((p) => (p.kind ?? "project") === "project" && !p.archivedAt && canEdit(p.role ?? "owner"));
