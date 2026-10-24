@@ -412,6 +412,7 @@ export async function viewCalendar(ctx) {
     try {
       Object.assign(task, await boardApi.patchTask(id, patch));
       index();
+      ctx.onChanged?.(task); // the same task open beside the calendar follows
       ctx.announce(`نُقلت إلى ${where}.`);
     } catch (error) {
       Object.assign(task, previous);

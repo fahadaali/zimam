@@ -136,7 +136,8 @@ export function durationForm(task, ctx, { onSaved, onCancel }) {
     save.disabled = true;
     ctx.markLocalChange?.();
     try {
-      const saved = await boardApi.patchTask(task.id, patch);
+      const send = () => boardApi.patchTask(task.id, patch);
+      const saved = await (ctx.queueTaskRequest ? ctx.queueTaskRequest(task.id, send) : send());
       Object.assign(task, saved);
       ctx.announce?.(`صارت المدة: ${spanText(taskSpan(task), ctx)}.`);
       onSaved?.(task);

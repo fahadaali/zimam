@@ -172,6 +172,11 @@ export function createTaskPane(ctx) {
     delete els.shell.dataset.task;
     els.extras.replaceChildren();
     els.editor.replaceChildren();
+    // Nothing of the task stays in the hidden pane (a sign-out leaves it for the next account).
+    els.title.textContent = "";
+    els.details.replaceChildren();
+    els.attachments.replaceChildren();
+    attachments = null;
   }
 
   /**

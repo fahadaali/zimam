@@ -341,7 +341,8 @@ export function assigneeSection(task, ctx) {
         select.disabled = true;
         try {
           ctx.markLocalChange?.();
-          Object.assign(task, await boardApi.patchTask(task.id, { assigneeId: select.value || null }));
+          const send = () => boardApi.patchTask(task.id, { assigneeId: select.value || null });
+          Object.assign(task, await (ctx.queueTaskRequest ? ctx.queueTaskRequest(task.id, send) : send()));
           ctx.announce(select.value ? `أُسندت المهمة إلى ${select.selectedOptions[0].textContent}.` : "أُلغي الإسناد.");
           ctx.onChanged?.(task);
         } catch (failure) {

@@ -160,6 +160,7 @@ export function answer(method, url) {
     if (q.get("projectId") === "inbox") list = list.filter((t) => !t.projectId);
     else if (q.get("projectId")) list = list.filter((t) => t.projectId === q.get("projectId"));
     if (q.get("q")) list = list.filter((t) => t.title.includes(q.get("q")));
+    if (q.get("parentId")) list = list.filter((t) => t.parentId === q.get("parentId"));
     const offset = Number(q.get("offset") ?? 0);
     return ok({ tasks: list.slice(offset, offset + Number(q.get("limit") ?? 100)) });
   }

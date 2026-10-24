@@ -184,6 +184,7 @@ export async function viewMatrix(ctx) {
     paint(focus);
     try {
       Object.assign(task, await boardApi.patchTask(task.id, patch));
+      ctx.onChanged?.(task); // the same task open beside the matrix follows
       ctx.announce(`نُقلت إلى «${target.title}».`);
     } catch (error) {
       Object.assign(task, before);

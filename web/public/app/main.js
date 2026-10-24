@@ -125,6 +125,7 @@ function featureContext() {
     markLocalChange: () => (state.localChangeAt = Date.now()),
     onChanged: (task) => pane.refresh(task),
     addNextOccurrence,
+    queueTaskRequest,
     cutNote,
   };
 }
@@ -766,8 +767,27 @@ function refreshViewSoon() {
   }, 400);
 }
 
-/** Each task's edits not answered yet: { last: the PATCH sent last, waiting: how many }. */
+/** Each task's edits not answered yet: { last: the request sent last, waiting: how many }. */
 const savingTasks = new Map();
+
+/**
+ * Sends a request about a task after those still on their way for it, in order: the editor's
+ * fields, «إنجاز», «تغيير المدة» and the assignee all go through here, as the server reads, merges
+ * and writes the whole task for each, so two at once could undo each other.
+ */
+async function queueTaskRequest(id, send) {
+  const queue = savingTasks.get(id) ?? { last: Promise.resolve(), waiting: 0 };
+  savingTasks.set(id, queue);
+  queue.waiting += 1;
+  const sent = queue.last.catch(() => {}).then(send);
+  queue.last = sent;
+  try {
+    return await sent;
+  } finally {
+    queue.waiting -= 1;
+    if (queue.waiting === 0) savingTasks.delete(id);
+  }
+}
 
 let paneRedrawTimer;
 /**
@@ -801,21 +821,14 @@ async function saveTask(task, fields) {
   };
   merge({ ...fields, id: task.id });
   redrawPaneSoon(task.id);
-  const queue = savingTasks.get(task.id) ?? { last: Promise.resolve(), waiting: 0 };
-  savingTasks.set(task.id, queue);
-  queue.waiting += 1;
-  const sent = queue.last.catch(() => {}).then(() => api.patchTask(task.id, fields));
-  queue.last = sent;
   let saved;
   let failure;
   try {
-    saved = await sent;
+    saved = await queueTaskRequest(task.id, () => api.patchTask(task.id, fields));
   } catch (error) {
     failure = error;
   }
-  queue.waiting -= 1;
-  const last = queue.waiting === 0;
-  if (last) savingTasks.delete(task.id);
+  const last = !savingTasks.has(task.id);
   if (failure) {
     // The change did not hold: the task as the server has it, unless newer edits are on their way.
     if (last && failure.status !== 401) {
@@ -989,12 +1002,13 @@ async function toggleTask(task, li = findItem(task.id)) {
   clearError();
   state.localChangeAt = Date.now();
 
-  const call = done ? api.completeTask(task.id) : api.reopenTask(task.id);
+  const call = queueTaskRequest(task.id, () => (done ? api.completeTask(task.id) : api.reopenTask(task.id)));
   if (done && li?.leaveWhenDone) li.leaveTimer = setTimeout(() => leave(li, li.task), LEAVE_AFTER);
   try {
     const saved = await call;
     for (const copy of copies) Object.assign(copy, saved);
-    pane.refresh(saved);
+    // With edits still on their way, the last of their answers redraws the pane (saveTask).
+    if (!savingTasks.has(task.id)) pane.refresh(saved);
     announce(done ? "أُنجزت المهمة." : "أُعيدت المهمة إلى المفتوحة.");
     if (done && saved.recurrence) addNextOccurrence(saved);
     refreshProjects().then(() => frame.refreshSidebar());
