@@ -280,7 +280,7 @@ curl -s https://app-site-association.cdn-apple.com/a/v1/zimam.work  # ما تر�
 3. **Subscription Prices**: الأسعار تُحدَّد هنا وحدها (السعودية أساساً، ويحسب App Store بقية الدول). التطبيق يعرض السعر كما يعطيه App Store (`displayPrice`) بعملة حساب المستخدم وأرقامه، فلا سعر مكتوب في الكود. والأسعار في `Zimam.storekit` للتجربة المحلية فقط.
 4. **Family Sharing**: اتركه مطفأً؛ الخادم يربط الاشتراك بحساب زمام من اشتراه.
 5. **Review Information**: لقطة شاشة لصفحة «زمام الاحترافية» في التطبيق، وملاحظة للمراجع. يُرسل المنتجان للمراجعة مع أول إصدار يعرضهما.
-6. تشترط المراجعة رابطي الشروط والخصوصية للاشتراكات المتجددة: **App Privacy ← Privacy Policy URL** هو `https://zimam.work/privacy`، والشروط `https://zimam.work/terms` في وصف التطبيق أو في **App Information ← License Agreement**. وهما الرابطان في صفحة الاشتراك في التطبيق.
+6. تشترط المراجعة رابطي الشروط والخصوصية للاشتراكات المتجددة: **App Privacy ← Privacy Policy URL** هو `https://zimam.work/privacy/`، والشروط `https://zimam.work/terms/` في وصف التطبيق أو في **App Information ← License Agreement**. وهما الرابطان في صفحة الاشتراك في التطبيق.
 
 #### ٣. مفتاح In-App Purchase والأسرار الثلاثة
 

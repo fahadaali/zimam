@@ -11,7 +11,7 @@ import { addDays, dayIn, dualText, gregorianText, hijriText, localDateTime, week
 import { Mutator } from "./data/mutations";
 import { prayerPhrase, prayerTimes, type PrayerTimesOfDay } from "./data/prayers";
 import { listProjects, listTasks } from "./data/queries";
-import { nextOccurrence } from "./data/recurrence";
+import { followMove, nextOccurrence } from "./data/recurrence";
 import { reminderOut, type Row, taskOut, userOut } from "./data/rows";
 import { Id, PRAYERS } from "./data/schemas";
 import type { Env } from "./env";
@@ -248,9 +248,12 @@ export class Assistant {
     if (!parsed.success) return fail("invalid", issues(parsed.error));
     const row = await this.visibleTask(userId, id);
     if (!row) return fail("not_found", "Task not found");
+    const current = taskOut(row);
+    const changes = toTaskInput(parsed.data);
     const data = {
-      ...taskOut(row),
-      ...toTaskInput(parsed.data),
+      ...current,
+      ...changes,
+      ...followMove(current, changes),
       id: row.id as string,
       updatedAt: Math.max(Date.now(), (row.updated_at as number) + 1),
     };

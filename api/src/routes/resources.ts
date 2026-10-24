@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { failMutation, fail, readJson } from "../http";
 import type { Access } from "../data/access";
+import { followMove } from "../data/recurrence";
 import { OUT, type Row, TABLES } from "../data/rows";
 import type { EntityName } from "../data/schemas";
 import type { AppEnv } from "../types";
@@ -41,9 +42,11 @@ export async function updateResource(c: Context<AppEnv>, entity: "project" | "ta
   const row = await loadVisible(c, entity, id);
   if (!row) return fail(c, 404, "not_found", `${entity} not found`);
   const current = OUT[entity](row);
+  const changes = patch ?? stripServerFields(await readJson(c));
   const data = {
     ...current,
-    ...(patch ?? stripServerFields(await readJson(c))),
+    ...changes,
+    ...(entity === "task" ? followMove(current, changes) : {}),
     id: current.id,
     updatedAt: Math.max(Date.now(), (row.updated_at as number) + 1),
   };

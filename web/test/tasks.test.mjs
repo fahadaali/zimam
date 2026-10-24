@@ -60,3 +60,16 @@ test("today's list: due today or earlier, top-level, by date then time", async (
   );
   assert.deepEqual(list.map((t) => t.id), ["c", "a", "f", "b"]);
 });
+
+test("today's list puts a prayer task among the clock times, at the prayer's usual time", async () => {
+  const { todayList } = await import("../public/app/lib/tasks.js");
+  const list = todayList(
+    [
+      { id: "asr", dueDate: "2026-10-20", duePrayer: "asr", duePrayerOffset: 0 },
+      { id: "ten", dueDate: "2026-10-20", dueTime: "10:00" },
+      { id: "late", dueDate: "2026-10-20", dueTime: "18:00" },
+    ],
+    "2026-10-20",
+  );
+  assert.deepEqual(list.map((t) => t.id), ["ten", "asr", "late"]);
+});

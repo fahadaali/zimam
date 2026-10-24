@@ -232,16 +232,6 @@ export function recurrenceFromText(input: string): string | null {
   return null;
 }
 
-/** A TickTick/iCalendar RRULE kept only if it is a plain RFC 5545 rule. */
-export function cleanRrule(input: string): string | null {
-  const rule = input.trim().replace(/^RRULE:/i, "");
-  if (!/^FREQ=(SECONDLY|MINUTELY|HOURLY|DAILY|WEEKLY|MONTHLY|YEARLY)(;[A-Z_-]+=[A-Z0-9,+\-:T_]+)*$/i.test(rule)) return null;
-  const known = new Set(["FREQ", "INTERVAL", "COUNT", "UNTIL", "BYDAY", "BYMONTHDAY", "BYMONTH", "BYYEARDAY", "BYWEEKNO", "BYSETPOS", "WKST", "BYHOUR", "BYMINUTE"]);
-  const parts = rule.split(";").filter((p) => known.has(p.split("=")[0]!.toUpperCase()));
-  const out = parts.join(";").toUpperCase();
-  return out.length <= 500 && out.startsWith("FREQ=") ? out : null;
-}
-
 /** ISO 8601 duration ("-PT15M", "P0DT9H0M0S", "P1D") in milliseconds, or null. */
 export function durationMs(input: string): number | null {
   const m = input.trim().match(/^([+-])?P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);

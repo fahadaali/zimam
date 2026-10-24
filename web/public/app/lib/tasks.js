@@ -1,4 +1,5 @@
 // Pure helpers for task lists. Tasks are the API's shape (see api/DEVELOPMENT.md).
+import { minuteOfDay, orderDay } from "./calendar.js";
 import { arabicNumber } from "./numbers.js";
 
 /** API priority 0–3 → the TaskRow flag ("low" | "medium" | "high"), or null for none. */
@@ -20,18 +21,28 @@ export function groupByDay(tasks) {
     if (!groups.has(task.dueDate)) groups.set(task.dueDate, []);
     groups.get(task.dueDate).push(task);
   }
-  return [...groups.keys()].sort().map((date) => ({ date, tasks: groups.get(date) }));
+  // Each day as the app orders it (TodayTasks.ordered): by time of day, then manual order.
+  return [...groups.keys()].sort().map((date) => ({ date, tasks: orderDay(groups.get(date)) }));
 }
 
 /**
  * Today's list as the app shows it (TodayView.swift): open top-level tasks due today or earlier,
- * by date then time, all-day tasks of a day before its timed ones.
+ * by date then time of day (a prayer at its usual time), all-day tasks of a day before its timed ones.
  */
 export function todayList(tasks, today) {
   return tasks
     .filter((t) => !t.parentId && t.dueDate && t.dueDate <= today)
-    .map((task, index) => ({ task, index }))
-    .sort((a, b) => cmp(a.task.dueDate, b.task.dueDate) || cmp(a.task.dueTime ?? "", b.task.dueTime ?? "") || a.index - b.index)
+    .map((task, index) => ({ task, index, minute: minuteOfDay(task) }))
+    // As TodayTasks.ordered in the app: by day, then time of day (a prayer at its usual time,
+    // untimed first), then manual order.
+    .sort(
+      (a, b) =>
+        cmp(a.task.dueDate, b.task.dueDate) ||
+        a.minute - b.minute ||
+        (a.task.sortOrder ?? 0) - (b.task.sortOrder ?? 0) ||
+        (a.task.createdAt ?? 0) - (b.task.createdAt ?? 0) ||
+        a.index - b.index,
+    )
     .map(({ task }) => task);
 }
 

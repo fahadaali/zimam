@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { flatten } from "../src/imports/apply";
 import { decodeText, detectDelimiter, parseCsv } from "../src/imports/csv";
-import { cleanRrule, durationMs, isoWithOffset, localToInstant, parseDateText, parseTime, recurrenceFromText } from "../src/imports/dates";
+import { durationMs, isoWithOffset, localToInstant, parseDateText, parseTime, recurrenceFromText } from "../src/imports/dates";
 import { emptyBundle, fitTask, ImportError, type ImportedTask, orderTasks } from "../src/imports/model";
 import { genericPriority, parseGenericCsv } from "../src/imports/sources/generic-csv";
 import { parseGoogleTasks } from "../src/imports/sources/google-tasks";
@@ -93,8 +93,6 @@ describe("Dates", () => {
     expect(recurrenceFromText("every weekday")).toBe("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
     expect(recurrenceFromText("every other thursday")).toBeNull();
     expect(recurrenceFromText("every! 3 days")).toBeNull();
-    expect(cleanRrule("RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=TH;TT_SKIP=HOLIDAY")).toBe("FREQ=WEEKLY;INTERVAL=1;BYDAY=TH");
-    expect(cleanRrule("ERULE:NAME=CUSTOM")).toBeNull();
     expect(durationMs("-PT15M")).toBe(-15 * 60_000);
     expect(durationMs("P0DT9H0M0S")).toBe(9 * 3_600_000);
     expect(durationMs("P")).toBeNull();
@@ -234,7 +232,7 @@ describe("TickTick backup", () => {
   });
 
   it("keeps recurrence, marks completed tasks done, and skips notes", () => {
-    expect(byTitle(bundle.tasks, "ورد الصباح")).toMatchObject({ recurrence: "FREQ=DAILY;INTERVAL=1", dueDate: "2026-10-14", reminders: [] });
+    expect(byTitle(bundle.tasks, "ورد الصباح")).toMatchObject({ recurrence: "FREQ=DAILY", dueDate: "2026-10-14", reminders: [] });
     expect(byTitle(bundle.tasks, "تجديد الإقامة")).toMatchObject({
       done: true,
       completedAt: Date.parse("2026-09-29T12:15:00Z"),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextOccurrence } from "../src/data/recurrence";
+import { movedRule, nextOccurrence } from "../src/data/recurrence";
 
 // The cases of web/test/recurrence.test.mjs, so the server adds what the apps add.
 describe("Next occurrence", () => {
@@ -26,5 +26,56 @@ describe("Next occurrence", () => {
     expect(nextOccurrence("RRULE:FREQ=WEEKLY;WKST=SU;BYDAY=th", "2026-10-20")).toEqual({ day: "2026-10-22", recurrence: "FREQ=WEEKLY;BYDAY=TH" });
     expect(nextOccurrence("nonsense", "2026-10-20")).toBeNull();
     expect(nextOccurrence("FREQ=WEEKLY;BYDAY=2MO", "2026-10-20")).toBeNull();
+  });
+
+  it("keeps a monthly or yearly series on its day across a short month", () => {
+    const february = nextOccurrence("FREQ=MONTHLY", "2026-01-31");
+    expect(february).toEqual({ day: "2026-02-28", recurrence: "FREQ=MONTHLY;BYMONTHDAY=31" });
+    expect(nextOccurrence(february!.recurrence, february!.day)).toEqual({ day: "2026-03-31", recurrence: "FREQ=MONTHLY" });
+    // Completed late: the months on the way do not move it either.
+    expect(nextOccurrence("FREQ=MONTHLY", "2026-01-31", "2026-04-15")?.day).toBe("2026-04-30");
+    let day = "2028-02-29";
+    let rule = "FREQ=YEARLY";
+    const days: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const next = nextOccurrence(rule, day)!;
+      days.push(next.day);
+      day = next.day;
+      rule = next.recurrence;
+    }
+    expect(days).toEqual(["2029-02-28", "2030-02-28", "2031-02-28", "2032-02-29"]);
+    expect(rule).toBe("FREQ=YEARLY");
+  });
+
+  it("follows BYMONTHDAY and BYMONTH, and daily on some weekdays as weekly", () => {
+    expect(nextOccurrence("FREQ=MONTHLY;BYMONTHDAY=1", "2026-10-24")).toEqual({ day: "2026-11-01", recurrence: "FREQ=MONTHLY" });
+    expect(nextOccurrence("FREQ=MONTHLY;BYMONTHDAY=20", "2026-10-15")?.day).toBe("2026-10-20");
+    expect(nextOccurrence("FREQ=YEARLY;BYMONTH=3", "2026-10-24")?.day).toBe("2027-03-24");
+    expect(nextOccurrence("FREQ=DAILY;BYDAY=SU,MO,TU,WE,TH", "2026-10-15")).toEqual({ day: "2026-10-18", recurrence: "FREQ=WEEKLY;BYDAY=SU,MO,TU,WE,TH" });
+  });
+
+  it("follows no rule with parts that pick other days", () => {
+    for (const rule of [
+      "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=1",
+      "FREQ=MONTHLY;BYDAY=MO",
+      "FREQ=MONTHLY;BYMONTHDAY=1,15",
+      "FREQ=MONTHLY;BYMONTHDAY=-1",
+      "FREQ=YEARLY;BYMONTH=1,7",
+      "FREQ=YEARLY;BYMONTHDAY=15",
+      "FREQ=MONTHLY;BYMONTH=3",
+      "FREQ=DAILY;INTERVAL=2;BYDAY=MO",
+      "FREQ=DAILY;BYHOUR=9",
+      "FREQ=YEARLY;BYYEARDAY=100",
+    ]) {
+      expect(nextOccurrence(rule, "2026-10-20"), rule).toBeNull();
+    }
+  });
+
+  it("lets a moved occurrence take the series with it", () => {
+    expect(nextOccurrence("FREQ=MONTHLY;BYMONTHDAY=31", "2026-02-10")?.day).toBe("2026-02-28");
+    expect(movedRule("FREQ=MONTHLY;BYMONTHDAY=31", "2026-02-28")).toBe("FREQ=MONTHLY");
+    expect(nextOccurrence("FREQ=MONTHLY", "2026-02-10")?.day).toBe("2026-03-10");
+    expect(movedRule("FREQ=MONTHLY;BYMONTHDAY=20", "2026-10-15")).toBe("FREQ=MONTHLY;BYMONTHDAY=20");
+    expect(movedRule("FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=29", "2029-02-28")).toBe("FREQ=YEARLY");
   });
 });

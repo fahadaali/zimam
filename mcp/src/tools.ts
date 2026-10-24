@@ -30,7 +30,7 @@ const taskFields = {
   duePrayerOffset: z.number().int().min(-720).max(720).nullable().optional().describe("Minutes after (+) or before (-) duePrayer."),
   priority: PRIORITY.optional(),
   tags: z.array(z.string().min(1).max(50)).max(30).optional(),
-  recurrence: z.string().max(500).nullable().optional().describe('RFC 5545 RRULE, e.g. "FREQ=WEEKLY;BYDAY=TH".'),
+  recurrence: z.string().max(500).nullable().optional().describe('RFC 5545 RRULE in the subset Zimam repeats: FREQ=DAILY|WEEKLY|MONTHLY|YEARLY, INTERVAL, BYDAY with plain day codes (weekly), one BYMONTHDAY (monthly, or yearly with BYMONTH), one BYMONTH (yearly), COUNT, UNTIL. E.g. "FREQ=WEEKLY;BYDAY=TH". Other rules show as a custom repeat and do not add the next occurrence.'),
 };
 
 function answer<T>(outcome: Outcome<T>): CallToolResult {

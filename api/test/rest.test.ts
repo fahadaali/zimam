@@ -63,6 +63,16 @@ describe("Tasks API", () => {
     expect((await call("GET", "/v1/tasks", { token: b.token })).body.tasks).toEqual([]);
   });
 
+  it("lets a moved monthly task follow the move, as the app does", async () => {
+    const { token } = await signIn();
+    const task = await call("POST", "/v1/tasks", { token, body: { title: "الإيجار", dueDate: "2026-02-28", recurrence: "FREQ=MONTHLY;BYMONTHDAY=31" } });
+    const moved = await call("PATCH", `/v1/tasks/${task.body.id}`, { token, body: { dueDate: "2026-02-20" } });
+    expect(moved.body).toMatchObject({ dueDate: "2026-02-20", recurrence: "FREQ=MONTHLY" });
+    // A rule set in the same patch is kept as given.
+    const set = await call("PATCH", `/v1/tasks/${task.body.id}`, { token, body: { dueDate: "2026-03-31", recurrence: "FREQ=MONTHLY;BYMONTHDAY=31" } });
+    expect(set.body.recurrence).toBe("FREQ=MONTHLY;BYMONTHDAY=31");
+  });
+
   it("lists one task's subtasks with parentId, for those who see the task only", async () => {
     const a = await signIn();
     const parent = await call("POST", "/v1/tasks", { token: a.token, body: { title: "سفر" } });
