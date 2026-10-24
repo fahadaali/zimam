@@ -230,17 +230,12 @@ extension FocusedValues {
 }
 
 /// The menu, the one source of the shortcuts on the Mac and the iPad: «مهمة جديدة» in the File
-/// menu (on the Mac in place of «New Window»; on the iPad after it, which stays for a second
-/// window), and a «المهام» menu.
+/// menu, in place of «New Window», and a «المهام» menu.
 struct ZimamCommands: Commands {
     @FocusedValue(\.zimamActions) private var actions
 
     var body: some Commands {
-        #if os(macOS)
         CommandGroup(replacing: .newItem) { newTask }
-        #else
-        CommandGroup(after: .newItem) { newTask }
-        #endif
         CommandMenu("المهام") {
             Button("بحث") { actions?.search() }
                 .keyboardShortcut("f", modifiers: .command)
