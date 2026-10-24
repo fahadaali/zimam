@@ -49,15 +49,25 @@ nonisolated enum Keychain {
     /// False when the Keychain did not keep it.
     @discardableResult
     static func write(_ value: String, for account: String) -> Bool {
-        delete(account)
+        SecItemDelete(baseQuery(account) as CFDictionary)
         var attributes = baseQuery(account)
         attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         attributes[kSecValueData as String] = Data(value.utf8)
         return SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess
     }
 
+    /// Gone for good (signing out): on the Mac also a token an older build left in the login
+    /// keychain and never moved, which the next read would otherwise bring back.
     static func delete(_ account: String) {
         SecItemDelete(baseQuery(account) as CFDictionary)
+        #if os(macOS)
+        SecItemDelete([
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ] as CFDictionary)
+        UserDefaults.standard.set(true, forKey: "keychain.movedFromLogin.\(account)")
+        #endif
     }
 
     private static func baseQuery(_ account: String) -> [String: Any] {
