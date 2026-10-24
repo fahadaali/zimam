@@ -44,7 +44,7 @@ npm run typecheck
 | --- | --- |
 | `src/index.ts` | `OAuthProvider`، وصفحة الموافقة، ونقطة `/mcp` بلا حالة (Streamable HTTP) |
 | `src/consent.ts` | صفحات HTML بالعربية بمتغيرات `tokens.css` |
-| `src/tools.ts` | تعريف الأدوات السبع وتعليمات الخادم للنموذج |
+| `src/tools.ts` | تعريف الأدوات وتعليمات الخادم للنموذج |
 | `src/backend.ts` | شكل `ZimamService` في `api/src/service.ts`؛ يُحدَّث معه |
 
 صفحات الموافقة تأخذ الشعار وخط ثمانية و`tokens.css` من مجلد `design/` مباشرة (`assets` في `wrangler.jsonc`)، والملف `design/.assetsignore` يستثني ما لا يحتاجه المتصفح.

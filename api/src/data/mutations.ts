@@ -343,8 +343,23 @@ export class Mutator {
     ];
 
     if (moved) {
+      // Reminders are personal and live only while their user can see the task: those of anyone
+      // outside the new place (not a member of the project, or not the inbox's owner) go, as
+      // when a member is removed, logged to each reminder's owner.
+      const tree = `${DESCENDANTS}, tree(id) AS (SELECT ?1 UNION SELECT id FROM sub)`;
+      const outsiders = `task_id IN tree AND deleted_at IS NULL AND CASE WHEN ?2 IS NULL THEN user_id <> ?3
+        ELSE user_id NOT IN (SELECT user_id FROM project_members WHERE project_id = ?2) END`;
       // Tell the old audience, then carry subtasks and comments to the new place.
       statements.push(
+        this.db
+          .prepare(
+            `${tree} INSERT INTO changes (entity, entity_id, project_id, user_id, at)
+             SELECT 'reminder', id, NULL, user_id, ?4 FROM reminders WHERE ${outsiders}`,
+          )
+          .bind(t.id, t.projectId, ownerId, now),
+        this.db
+          .prepare(`${tree} UPDATE reminders SET deleted_at = ?4, updated_at = ?4 WHERE ${outsiders}`)
+          .bind(t.id, t.projectId, ownerId, now),
         this.logChange("task", t.id, this.taskScope(existing), now),
         this.db
           .prepare(

@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { addMember, call, pullAll, push, signIn, uuid } from "./helpers";
 
@@ -191,6 +192,49 @@ describe("Sync", () => {
     const sub = ownerView.changes.find((c) => c.id === subtaskId)!;
     expect(sub.op).toBe("upsert");
     expect(sub.data!.projectId).toBeNull();
+  });
+
+  it("removes the reminders of whoever cannot see a task where it moves", async () => {
+    const owner = await signIn();
+    const stays = await signIn(); // a member of both projects
+    const leaves = await signIn(); // a member of the first only
+    const from = uuid();
+    const to = uuid();
+    const taskId = uuid();
+    const subtaskId = uuid();
+    await push(owner.token, [
+      project(from, 1000),
+      project(to, 1000),
+      task(taskId, 1000, { projectId: from }),
+      task(subtaskId, 1000, { projectId: from, parentId: taskId }),
+    ]);
+    await addMember(from, stays.userId, "editor");
+    await addMember(to, stays.userId, "viewer");
+    await addMember(from, leaves.userId, "viewer");
+    const reminder = (id: string, on: string) => ({
+      op: "upsert",
+      entity: "reminder",
+      data: { id, taskId: on, kind: "time", at: "2027-01-10T09:00:00+03:00", updatedAt: 1000 },
+    });
+    const [mine, kept, gone, goneOnSubtask] = [uuid(), uuid(), uuid(), uuid()];
+    await push(owner.token, [reminder(mine, taskId)]);
+    await push(stays.token, [reminder(kept, taskId)]);
+    await push(leaves.token, [reminder(gone, taskId), reminder(goneOnSubtask, subtaskId)]);
+    const { cursor } = await pullAll(leaves.token);
+
+    expect((await push(owner.token, [task(taskId, 2000, { projectId: to })]))[0]!.status).toBe("applied");
+
+    const { results } = await env.DB.prepare(`SELECT id FROM reminders WHERE task_id IN (?, ?) AND deleted_at IS NULL`)
+      .bind(taskId, subtaskId)
+      .all<{ id: string }>();
+    expect(results.map((r) => r.id).sort()).toEqual([mine, kept].sort());
+    const leaverView = await pullAll(leaves.token, cursor);
+    expect(leaverView.changes.filter((c) => c.entity === "reminder").map((c) => [c.id, c.op]).sort()).toEqual(
+      [
+        [gone, "delete"],
+        [goneOnSubtask, "delete"],
+      ].sort(),
+    );
   });
 
   it("rejects subtask cycles and cross-project parents", async () => {

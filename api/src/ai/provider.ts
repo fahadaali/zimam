@@ -33,9 +33,19 @@ export interface AiProvider {
   complete(request: AiRequest): Promise<AiResult>;
 }
 
-/** The provider failed, refused, was cut off, or returned something that is not JSON. */
+/**
+ * The provider failed, refused, was cut off, or returned something that is not JSON. `billed`
+ * is false when no model answered (unreachable, an HTTP error, not configured), so the call
+ * cost nothing; the quota counts only billed failures (src/ai/quota.ts).
+ */
 export class AiError extends Error {
   override name = "AiError";
+  constructor(
+    message: string,
+    readonly billed = true,
+  ) {
+    super(message);
+  }
 }
 
 type Fetch = typeof fetch;
@@ -78,11 +88,11 @@ async function post(doFetch: Fetch, url: string, headers: Record<string, string>
   try {
     response = await doFetch(url, { method: "POST", headers, body: JSON.stringify(body) });
   } catch (err) {
-    throw new AiError(`Provider unreachable: ${(err as Error).message}`);
+    throw new AiError(`Provider unreachable: ${(err as Error).message}`, false);
   }
   if (!response.ok) {
     const detail = (await response.text().catch(() => "")).slice(0, 300);
-    throw new AiError(`Provider returned ${response.status}: ${detail}`);
+    throw new AiError(`Provider returned ${response.status}: ${detail}`, false);
   }
   try {
     return await response.json();
@@ -176,7 +186,7 @@ class MissingProvider implements AiProvider {
     private readonly reason: string,
   ) {}
   async complete(): Promise<AiResult> {
-    throw new AiError(this.reason);
+    throw new AiError(this.reason, false);
   }
 }
 

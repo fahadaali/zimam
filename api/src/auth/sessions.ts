@@ -37,3 +37,12 @@ export async function resolveSession(db: D1Database, token: string): Promise<str
 export async function deleteSession(db: D1Database, token: string) {
   await db.prepare(`DELETE FROM sessions WHERE token_hash = ?`).bind(await sha256Hex(token)).run();
 }
+
+/**
+ * Deletes the sessions that expired, with their devices and realtime tickets (ON DELETE CASCADE).
+ * The cron runs it before reminder pushes, so an install whose session expired, which can no
+ * longer unregister itself, gets nothing more.
+ */
+export async function deleteExpiredSessions(db: D1Database, now = Date.now()) {
+  await db.prepare(`DELETE FROM sessions WHERE expires_at <= ?`).bind(now).run();
+}

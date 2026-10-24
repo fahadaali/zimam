@@ -1,9 +1,9 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { z } from "zod";
-import type { AiRequest } from "../ai/provider";
+import { AiError, type AiRequest } from "../ai/provider";
 import { breakdownRequest, parseRequest, type SummaryTask, summaryRequest } from "../ai/prompts";
-import { checkQuota, planMonthlyLimit, recordUsage } from "../ai/quota";
+import { planMonthlyLimit, reserveRequest, settleRequest } from "../ai/quota";
 import { validateSubtasks, validateSuggestion, validateSummary } from "../ai/validate";
 import { Assistant, type AssistantTask } from "../assistant";
 import { dayIn, timeIn } from "../data/dates";
@@ -37,13 +37,14 @@ function issues(error: z.ZodError): string {
 }
 
 /**
- * Checks the monthly quota, calls the provider, validates its answer, then counts the request.
- * Provider failures and unusable answers are not counted.
+ * Reserves a request from the monthly quota, calls the provider, and validates its answer. A
+ * failure gives the request back; one the provider was paid for still counts as failed, and the
+ * month's failures have the same limit (src/ai/quota.ts).
  */
 async function runAi<T>(c: Ctx, request: AiRequest, validate: (json: unknown) => T | null): Promise<Run<T>> {
   const now = new Date();
   const plan = await limitsPlan(c.env, c.var.userId);
-  const quota = await checkQuota(c.env.DB, c.var.userId, planMonthlyLimit(c.env, plan), now);
+  const quota = await reserveRequest(c.env.DB, c.var.userId, planMonthlyLimit(c.env, plan), now);
   if (!quota.allowed) {
     const error = {
       code: "ai_quota_exceeded",
@@ -56,23 +57,23 @@ async function runAi<T>(c: Ctx, request: AiRequest, validate: (json: unknown) =>
     return { ok: false, response: c.json({ error }, 429) };
   }
   const provider = c.var.deps.ai(c.env);
-  const unavailable = (): Run<T> => ({
-    ok: false,
-    response: fail(c, 503, "ai_unavailable", "The assistant is unavailable, try again later"),
-  });
+  const unavailable = async (billed: boolean): Promise<Run<T>> => {
+    await settleRequest(c.env.DB, c.var.userId, now, { ok: false, billed });
+    return { ok: false, response: fail(c, 503, "ai_unavailable", "The assistant is unavailable, try again later") };
+  };
   let result;
   try {
     result = await provider.complete(request);
   } catch (err) {
     console.error(`ai ${provider.name} ${request.name} failed:`, (err as Error).message);
-    return unavailable();
+    return unavailable(!(err instanceof AiError) || err.billed);
   }
   const value = validate(result.json);
   if (value === null) {
     console.error(`ai ${provider.name} ${request.name} returned an unusable answer`);
-    return unavailable();
+    return unavailable(true);
   }
-  await recordUsage(c.env.DB, c.var.userId, result.usage, now);
+  await settleRequest(c.env.DB, c.var.userId, now, { ok: true, usage: result.usage });
   return { ok: true, value };
 }
 

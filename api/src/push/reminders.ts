@@ -1,3 +1,4 @@
+import { deleteExpiredSessions } from "../auth/sessions";
 import { addDays, dayIn, localDateTime } from "../data/dates";
 import { prayerInstants } from "../data/prayers";
 import { userOut } from "../data/rows";
@@ -26,10 +27,24 @@ const DAY = 24 * 60 * MINUTE;
 
 /** The app's local window: `ReminderPlanner.windowDays` (14). Keep the two in step. */
 export const LOCAL_WINDOW_MS = 14 * DAY;
-/** The cron interval; each run sends what fired in (now - window, now]. */
+/** The cron interval; each run reads at least what fired in (now - window, now]. */
 export const CRON_WINDOW_MS = 5 * MINUTE;
 /** How long sent-push records are kept for idempotency. */
 const SENT_RETENTION_MS = 30 * DAY;
+/** How far back a run picks up reminders an earlier run left (its cap, a failure, no run). */
+const MAX_CATCH_UP_MS = 60 * MINUTE;
+/**
+ * The most notifications one run sends. With its claims (`CLAIM_CHUNK` a statement) and fixed
+ * queries it stays well under a Worker invocation's 1,000 D1 queries and 1,000 subrequests,
+ * which the attachments purge in the same run shares.
+ */
+export const MAX_SENDS_PER_RUN = 400;
+/** Claims per INSERT: five bound parameters each, within D1's 100. */
+const CLAIM_CHUNK = 18;
+/** Notifications in flight at once: a Worker keeps six connections open at a time. */
+const SEND_CONCURRENCY = 6;
+/** The run's row in `cron_cursors` (migrations/0020). */
+const CURSOR = "reminder_pushes";
 /** APNs keeps trying an offline device this long after the reminder's time. */
 const DELIVERY_GRACE_S = 24 * 60 * 60;
 /**
@@ -90,6 +105,14 @@ const NEEDS_PUSH = (user: string, changed: string) => `
 
 const HAS_LOCATION = `(CASE WHEN json_valid(u.settings) THEN json_extract(u.settings, '$.location') END) IS NOT NULL`;
 
+/**
+ * The reminder's user still sees its task: the inbox's owner, or a member of its project. Moving a
+ * task or removing a member deletes the reminders of whoever loses it (src/data/mutations.ts,
+ * src/data/membership.ts); this keeps a push from carrying a task's title to anyone else anyway.
+ */
+const SEES_TASK = `CASE WHEN t.project_id IS NULL THEN t.owner_id = r.user_id
+  ELSE EXISTS (SELECT 1 FROM project_members m WHERE m.project_id = t.project_id AND m.user_id = r.user_id) END`;
+
 interface RelativeRow {
   source: string;
   user_id: string;
@@ -143,6 +166,7 @@ export async function dueReminders(db: D1Database, from: number, to: number): Pr
          AND r.deleted_at IS NULL
          AND unixepoch(r.at) > ?1 AND unixepoch(r.at) <= ?2
          AND t.deleted_at IS NULL AND t.status <> 'done'
+         AND ${SEES_TASK}
          AND ${NEEDS_PUSH("r.user_id", "r.updated_at")}`,
     )
     .bind(Math.floor(from / 1000), Math.floor(to / 1000), surelyCoveredSince)
@@ -188,6 +212,7 @@ export async function dueReminders(db: D1Database, from: number, to: number): Pr
          AND t.deleted_at IS NULL AND t.status <> 'done'
          AND (t.due_date IS NULL OR t.due_date BETWEEN ?1 AND ?2)
          AND ${HAS_LOCATION}
+         AND ${SEES_TASK}
          AND ${NEEDS_PUSH("r.user_id", "MAX(r.updated_at, t.updated_at)")}`,
     )
     .bind(dayMin, dayMax, surelyCoveredSince)
@@ -208,6 +233,7 @@ export async function dueReminders(db: D1Database, from: number, to: number): Pr
        WHERE r.kind = 'relative' AND r.deleted_at IS NULL
          AND t.deleted_at IS NULL AND t.status <> 'done'
          AND (t.due_date BETWEEN ?1 AND ?4 OR (t.due_date IS NULL AND t.due_prayer IS NOT NULL))
+         AND ${SEES_TASK}
          AND ${NEEDS_PUSH("r.user_id", "MAX(r.updated_at, t.updated_at)")}`,
     )
     .bind(dayMin, dayMax, surelyCoveredSince, addDays(dayMax, Math.ceil(-RELATIVE_REMINDER_MIN / (24 * 60))))
@@ -325,52 +351,127 @@ export function reminderPayload(due: DueReminder): Record<string, unknown> {
 }
 
 /**
- * The cron's work: pushes the reminders that fired in (now - 5 min, now] and that no
- * device scheduled. Each (user, task, minute) is claimed in `reminder_pushes` before
- * sending, so a reminder is pushed at most once even if a run repeats.
+ * The cron's work: deletes expired sessions (and with them their devices), then pushes the
+ * reminders that fired since the last run and that no device scheduled. Each (user, task, minute)
+ * is claimed in `reminder_pushes` before sending, so a reminder is pushed at most once even if a
+ * window is read again.
+ *
+ * A run reads from where the previous one stopped (`cron_cursors`): the last 5 minutes, or further
+ * back, up to an hour, after a run that hit its cap, failed or did not run. It sends at most
+ * `MAX_SENDS_PER_RUN` notifications, claiming in batches and sending a few at a time, so it stays
+ * within a Worker's limits on D1 queries and subrequests; what is left waits for the next run.
  */
 export async function sendDueReminders(db: D1Database, sender: PushSender | null, now: number): Promise<PushRunResult> {
+  await deleteExpiredSessions(db, now);
   if (!sender) {
     console.warn("push: APNS_KEY_ID or APNS_PRIVATE_KEY is not set; reminder pushes skipped");
     return { due: 0, sent: 0, removedDevices: 0, skipped: "no_sender" };
   }
   await db.prepare(`DELETE FROM reminder_pushes WHERE sent_at < ?`).bind(now - SENT_RETENTION_MS).run();
 
-  const due = await dueReminders(db, now - CRON_WINDOW_MS, now);
+  const last = await db.prepare(`SELECT until_at FROM cron_cursors WHERE name = ?`).bind(CURSOR).first<{ until_at: number }>();
+  const from = Math.max(now - MAX_CATCH_UP_MS, Math.min(last?.until_at ?? now, now - CRON_WINDOW_MS));
+  const due = await dueReminders(db, from, now);
   const result: PushRunResult = { due: due.length, sent: 0, removedDevices: 0 };
-  if (due.length === 0) return result;
 
   const devices = await devicesOf(db, [...new Set(due.map((d) => d.userId))]);
   const dead = new Set<string>();
-  for (const reminder of due) {
-    const claim = await db
-      .prepare(
-        `INSERT OR IGNORE INTO reminder_pushes (user_id, task_id, fire_minute, source, sent_at) VALUES (?, ?, ?, ?, ?)`,
-      )
-      .bind(reminder.userId, reminder.taskId, Math.floor(reminder.fireAt / MINUTE), reminder.source, now)
-      .run();
-    if (!claim.meta.changes) continue;
+  let budget = MAX_SENDS_PER_RUN;
+  let next = 0;
+  while (next < due.length) {
+    // The next claims: no more than the notifications left could send, so nothing claimed goes
+    // unsent (the run's first reminder always goes).
+    const first = next;
+    const chunk: DueReminder[] = [];
+    let most = 0;
+    for (; next < due.length && chunk.length < CLAIM_CHUNK; next++) {
+      const cost = devices.get(due[next]!.userId)?.length ?? 0;
+      if (most + cost > budget && !(chunk.length === 0 && budget === MAX_SENDS_PER_RUN)) break;
+      most += cost;
+      chunk.push(due[next]!);
+    }
+    if (chunk.length === 0) break;
 
-    const payload = reminderPayload(reminder);
-    for (const device of devices.get(reminder.userId) ?? []) {
-      if (dead.has(device.token)) continue;
+    let claimed: Set<string>;
+    try {
+      claimed = await claim(db, chunk, now);
+    } catch (err) {
+      // Nothing in the chunk was claimed: the next run starts from it.
+      console.error("push: claiming reminders failed:", (err as Error).message);
+      next = first;
+      break;
+    }
+    const pushes: { reminder: DueReminder; device: DeviceRow }[] = [];
+    for (const reminder of chunk) {
+      // One notification per claim: reminders of a task in the same minute share it, and one
+      // claimed before (a window read again) costs nothing.
+      if (!claimed.delete(claimKey(reminder.userId, reminder.taskId, Math.floor(reminder.fireAt / MINUTE)))) continue;
+      const targets = devices.get(reminder.userId) ?? [];
+      budget -= targets.length;
+      for (const device of targets) pushes.push({ reminder, device });
+    }
+    await pool(pushes, SEND_CONCURRENCY, async ({ reminder, device }) => {
+      if (dead.has(device.token)) return;
       const sent = await sender.send({
         token: device.token,
         environment: device.environment,
         topic: device.bundle_id,
-        payload,
+        payload: reminderPayload(reminder),
         expiration: Math.floor(reminder.fireAt / 1000) + DELIVERY_GRACE_S,
       });
       if (sent.status === 200) {
         result.sent += 1;
       } else if (isDeadToken(sent)) {
         dead.add(device.token);
-        await db.prepare(`DELETE FROM devices WHERE token = ?`).bind(device.token).run();
-        result.removedDevices += 1;
       } else {
         console.error(`push: APNs ${sent.status} ${sent.reason ?? ""} for ${reminder.source}`);
       }
-    }
+    });
   }
+
+  const tokens = [...dead];
+  for (let i = 0; i < tokens.length; i += 90) {
+    const chunk = tokens.slice(i, i + 90);
+    await db.prepare(`DELETE FROM devices WHERE token IN (${chunk.map(() => "?").join(", ")})`).bind(...chunk).run();
+  }
+  result.removedDevices = tokens.length;
+
+  // The next run starts at the first reminder this one left, or at its end.
+  const until = next < due.length ? due[next]!.fireAt - 1 : now;
+  await db
+    .prepare(`INSERT INTO cron_cursors (name, until_at) VALUES (?1, ?2) ON CONFLICT (name) DO UPDATE SET until_at = excluded.until_at`)
+    .bind(CURSOR, until)
+    .run();
   return result;
+}
+
+const claimKey = (userId: string, taskId: string, fireMinute: number) => `${userId}|${taskId}|${fireMinute}`;
+
+/** Claims a chunk of reminders in one statement; returns the keys claimed now, not before. */
+async function claim(db: D1Database, chunk: DueReminder[], now: number): Promise<Set<string>> {
+  const { results } = await db
+    .prepare(
+      `INSERT OR IGNORE INTO reminder_pushes (user_id, task_id, fire_minute, source, sent_at)
+       VALUES ${chunk.map(() => "(?, ?, ?, ?, ?)").join(", ")}
+       RETURNING user_id, task_id, fire_minute`,
+    )
+    .bind(...chunk.flatMap((r) => [r.userId, r.taskId, Math.floor(r.fireAt / MINUTE), r.source, now]))
+    .all<{ user_id: string; task_id: string; fire_minute: number }>();
+  return new Set(results.map((r) => claimKey(r.user_id, r.task_id, r.fire_minute)));
+}
+
+/** Runs `work` over `items`, `size` at a time. One that throws is logged; the rest go on. */
+async function pool<T>(items: T[], size: number, work: (item: T) => Promise<void>) {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const item = items[next++]!;
+      try {
+        await work(item);
+      } catch (err) {
+        console.error("push: send failed:", (err as Error).message);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, worker));
 }

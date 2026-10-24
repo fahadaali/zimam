@@ -15,7 +15,7 @@ import {
   type PushResult,
   type PushSender,
 } from "../src/push/apns";
-import { CRON_WINDOW_MS, isCovered, LOCAL_WINDOW_MS, sendDueReminders } from "../src/push/reminders";
+import { CRON_WINDOW_MS, isCovered, LOCAL_WINDOW_MS, MAX_SENDS_PER_RUN, sendDueReminders } from "../src/push/reminders";
 import { addMember, call, pullAll, push as syncPush, signIn, uuid } from "./helpers";
 
 const MINUTE = 60_000;
@@ -50,6 +50,10 @@ async function setSeen(token: string, at: number) {
 /** A signed-in user with one registered device, never pulled (so nothing is covered). */
 async function userWithDevice(settings?: Record<string, unknown>, sub?: string) {
   const user = await signIn(sub);
+  // The cron deletes expired sessions (180 days unused), and these tests run it in 2027.
+  await env.DB.prepare(`UPDATE sessions SET expires_at = ? WHERE token_hash = ?`)
+    .bind(Date.UTC(2100, 0, 1), await sha256Hex(user.token))
+    .run();
   const apns = deviceToken();
   const res = await call("PUT", `/v1/devices/${apns}`, { token: user.token, body: deviceBody });
   expect(res.status).toBe(204);
@@ -181,6 +185,8 @@ describe("Reminder pushes", () => {
     const deleted = await addReminder(user.token, inProject, { kind: "time", at: iso(now - MINUTE) });
     await syncPush(user.token, [{ op: "delete", entity: "reminder", id: deleted, updatedAt: 2000 }]);
 
+    // The previous run sent the one before this window.
+    await sendDueReminders(env.DB, new FakePush(), now - CRON_WINDOW_MS);
     const fake = new FakePush();
     const run = await sendDueReminders(env.DB, fake, now);
     expect(run).toMatchObject({ due: 2, sent: 2 });
@@ -381,6 +387,83 @@ describe("Reminder pushes", () => {
     expect(fake.to(user.apns)).toHaveLength(2);
     await sendDueReminders(env.DB, fake, windowEnd(asr));
     expect(fake.to(user.apns).map((m) => m.payload.taskId)).toEqual([report, meeting, visit]);
+  });
+
+  it("pushes nothing to someone who no longer sees the task", async () => {
+    const now = Date.UTC(2027, 8, 1, 12, 0, 0);
+    const owner = await userWithDevice();
+    const member = await userWithDevice();
+    const projectId = uuid();
+    await syncPush(owner.token, [{ op: "upsert", entity: "project", data: { id: projectId, name: "البيت", updatedAt: 1000 } }]);
+    await addMember(projectId, member.userId, "editor");
+    const task = await addTask(owner.token, { title: "سقي الزرع", projectId });
+    await addReminder(member.token, task, { kind: "time", at: iso(now - MINUTE) });
+    await addReminder(owner.token, task, { kind: "time", at: iso(now - MINUTE) });
+    // Out of the project without the Mutator's cleanup, as moved tasks once left reminders behind.
+    await env.DB.prepare(`DELETE FROM project_members WHERE project_id = ? AND user_id = ?`).bind(projectId, member.userId).run();
+
+    const fake = new FakePush();
+    await sendDueReminders(env.DB, fake, now);
+    expect(fake.to(owner.apns)).toHaveLength(1);
+    expect(fake.to(member.apns)).toHaveLength(0);
+  });
+
+  it("deletes expired sessions with their devices before sending", async () => {
+    const now = Date.UTC(2027, 8, 2, 12, 0, 0);
+    const user = await userWithDevice();
+    const task = await addTask(user.token);
+    await addReminder(user.token, task, { kind: "time", at: iso(now - MINUTE) });
+    // Unused for 180 days: signed out, the install can no longer unregister itself.
+    const hash = await sha256Hex(user.token);
+    await env.DB.prepare(`UPDATE sessions SET expires_at = ? WHERE token_hash = ?`).bind(now - DAY, hash).run();
+
+    const fake = new FakePush();
+    expect(await sendDueReminders(env.DB, fake, now)).toMatchObject({ due: 0, sent: 0 });
+    expect(fake.sent).toHaveLength(0);
+    expect(await device(user.apns)).toBeNull();
+    expect(await env.DB.prepare(`SELECT 1 FROM sessions WHERE token_hash = ?`).bind(hash).first()).toBeNull();
+  });
+
+  it("sends at most a run's share and leaves the rest to the next run", async () => {
+    const now = Date.UTC(2027, 8, 3, 12, 0, 0);
+    const user = await userWithDevice();
+    // More reminders in one window than a run sends, each on its own task.
+    const extra = 25;
+    const rows = [];
+    for (let i = 0; i < MAX_SENDS_PER_RUN + extra; i++) {
+      const task = uuid();
+      rows.push(
+        env.DB.prepare(`INSERT INTO tasks (id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, 1000, 1000)`).bind(
+          task,
+          user.userId,
+          `مهمة ${i}`,
+        ),
+        env.DB.prepare(
+          `INSERT INTO reminders (id, user_id, task_id, kind, at, created_at, updated_at) VALUES (?, ?, ?, 'time', ?, 1000, 1000)`,
+        ).bind(uuid(), user.userId, task, iso(now - 4 * MINUTE + (i % 180) * 1000)),
+      );
+    }
+    await env.DB.batch(rows);
+
+    const fake = new FakePush();
+    expect(await sendDueReminders(env.DB, fake, now)).toMatchObject({ due: MAX_SENDS_PER_RUN + extra, sent: MAX_SENDS_PER_RUN });
+    // The next run starts where this one stopped, before its own five minutes.
+    expect(await sendDueReminders(env.DB, fake, now + CRON_WINDOW_MS)).toMatchObject({ sent: extra });
+    expect(new Set(fake.to(user.apns).map((m) => m.payload.taskId)).size).toBe(MAX_SENDS_PER_RUN + extra);
+    expect(await sendDueReminders(env.DB, fake, now + 2 * CRON_WINDOW_MS)).toMatchObject({ due: 0, sent: 0 });
+  });
+
+  it("sends what a run that did not happen would have", async () => {
+    const now = Date.UTC(2027, 8, 4, 12, 0, 0);
+    const user = await userWithDevice();
+    const task = await addTask(user.token);
+    await sendDueReminders(env.DB, new FakePush(), now);
+    await addReminder(user.token, task, { kind: "time", at: iso(now + 7 * MINUTE) });
+
+    // The run at now + 10 minutes was missed; the next one covers its window too.
+    const fake = new FakePush();
+    expect(await sendDueReminders(env.DB, fake, now + 15 * MINUTE)).toMatchObject({ due: 1, sent: 1 });
+    expect(fake.to(user.apns)[0]!.payload.taskId).toBe(task);
   });
 
   it("removes devices APNs no longer accepts", async () => {
