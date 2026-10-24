@@ -77,8 +77,10 @@ async function addTask(token: string, extra: Record<string, unknown> = {}, updat
 
 async function addReminder(token: string, taskId: string, data: Record<string, unknown>, updatedAt = 1000) {
   const id = uuid();
-  const [result] = await syncPush(token, [{ op: "upsert", entity: "reminder", data: { id, taskId, updatedAt, ...data } }]);
+  const [result] = await syncPush(token, [{ op: "upsert", entity: "reminder", data: { id, taskId, updatedAt: 1000, ...data } }]);
   expect(result!.status).toBe("applied");
+  // Set directly: these tests run in 2027, and the Mutator caps versions ahead of the real clock.
+  if (updatedAt !== 1000) await env.DB.prepare(`UPDATE reminders SET updated_at = ? WHERE id = ?`).bind(updatedAt, id).run();
   return id;
 }
 
@@ -596,6 +598,28 @@ describe("APNs sender", () => {
     expect(requests).toHaveLength(2);
     expect(requests[1]!.headers.get("authorization")).not.toBe(requests[0]!.headers.get("authorization"));
     expect(await sender.send(message())).toEqual({ status: 410, reason: "Unregistered" });
+  });
+
+  it("signs one token for sends made at the same time, and replaces a refused one once", async () => {
+    const clock = Date.UTC(2027, 0, 4, 10, 0, 0);
+    const { requests, doFetch } = fakeApns();
+    const sender = new ApnsSender({
+      teamId: "72V86SZ2XC",
+      keyId: "KEY1122334",
+      privateKey: pem,
+      store: new MemoryTokenStore(),
+      fetch: doFetch,
+      now: () => clock,
+    });
+    await Promise.all(Array.from({ length: 6 }, () => sender.send(message())));
+    expect(new Set(requests.map((r) => r.headers.get("authorization"))).size).toBe(1);
+
+    const first = await sender.providerToken();
+    const replaced = await Promise.all(Array.from({ length: 3 }, () => sender.providerToken(first)));
+    expect(new Set(replaced).size).toBe(1);
+    expect(replaced[0]).not.toBe(first);
+    // Refused again by a send that started with the old one: the new one stays.
+    expect(await sender.providerToken(first)).toBe(replaced[0]);
   });
 
   it("accepts the key as a bare base64 body", () => {

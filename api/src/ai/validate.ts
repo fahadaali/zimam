@@ -100,11 +100,15 @@ export function validateSuggestion(
   const dueDate = m.dueHijri ? dayOfHijri(m.dueHijri, today) : m.dueDate;
   if (dueDate) suggestion.dueDate = dueDate;
 
-  if (m.duePrayer) {
-    suggestion.duePrayer = m.duePrayer;
-    suggestion.duePrayerOffset = m.duePrayerOffset ?? 0;
-  } else if (m.dueTime) {
-    suggestion.dueTime = m.dueTime;
+  // A Hijri date that does not exist (the 30th of a 29-day month) leaves the task undated: its
+  // time or prayer belongs to that day, and kept alone it would mean today, here and in the app.
+  if (!(m.dueHijri && !dueDate)) {
+    if (m.duePrayer) {
+      suggestion.duePrayer = m.duePrayer;
+      suggestion.duePrayerOffset = m.duePrayerOffset ?? 0;
+    } else if (m.dueTime) {
+      suggestion.dueTime = m.dueTime;
+    }
   }
   // A time or prayer without a day means today.
   if (!suggestion.dueDate && (suggestion.dueTime || suggestion.duePrayer)) suggestion.dueDate = today;

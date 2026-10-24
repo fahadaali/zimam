@@ -54,11 +54,18 @@ function projectChangesForUser(db: D1Database, projectId: string, userId: string
   ].map((sql) => db.prepare(sql).bind(projectId, userId, now));
 }
 
-/** Adds a member and queues the whole project for their next pull. */
+/**
+ * Adds a member, or raises a viewer to `role`, and queues the whole project for their next pull.
+ * A member already there keeps the higher role: two invites accepted at once, or a role read
+ * before another request added them, do not fail on the primary key.
+ */
 export function addMemberStatements(db: D1Database, projectId: string, userId: string, role: MemberRole, now: number) {
   return [
     db
-      .prepare(`INSERT INTO project_members (project_id, user_id, role, added_at) VALUES (?, ?, ?, ?)`)
+      .prepare(
+        `INSERT INTO project_members (project_id, user_id, role, added_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (project_id, user_id) DO UPDATE SET role = excluded.role WHERE project_members.role = 'viewer'`,
+      )
       .bind(projectId, userId, role, now),
     ...projectChangesForUser(db, projectId, userId, now),
   ];

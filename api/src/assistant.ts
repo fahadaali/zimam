@@ -11,7 +11,8 @@ import { addDays, dayIn, dualText, gregorianText, hijriText, localDateTime, week
 import { Mutator } from "./data/mutations";
 import { prayerPhrase, prayerTimes, type PrayerTimesOfDay } from "./data/prayers";
 import { listProjects, listTasks } from "./data/queries";
-import { type Row, taskOut, userOut } from "./data/rows";
+import { nextOccurrence } from "./data/recurrence";
+import { reminderOut, type Row, taskOut, userOut } from "./data/rows";
 import { Id, PRAYERS } from "./data/schemas";
 import type { Env } from "./env";
 
@@ -253,7 +254,18 @@ export class Assistant {
       id: row.id as string,
       updatedAt: Math.max(Date.now(), (row.updated_at as number) + 1),
     };
-    return this.write(userId, row.id as string, data);
+    const written = await this.write(userId, row.id as string, data);
+    // Completing a repeating task adds its next occurrence, as the apps do when the user ticks it.
+    // The completion is stored by then, so a failure here is logged and the completion still
+    // answered: reported as a failure, a retry would find the task done and add nothing either.
+    if (written.ok && row.status !== "done" && written.value.status === "done" && written.value.recurrence) {
+      try {
+        await this.addNextOccurrence(userId, row.id as string);
+      } catch (error) {
+        console.error("assistant: could not add the next occurrence", error);
+      }
+    }
+    return written;
   }
 
   async completeTask(userId: string, id: string): Promise<Outcome<AssistantTask>> {
@@ -402,6 +414,75 @@ export class Assistant {
     return (await new Access(this.db, userId).canSeeTask(row)) ? row : null;
   }
 
+  /**
+   * Adds the next occurrence of a repeating task just completed, as the apps do (`addNextOccurrence`
+   * in apple/Shared/Model/Store.swift and web/public/app/main.js): a copy due on the rule's next day,
+   * from today on, its COUNT one less and its span kept, with the user's reminders on it moved by as
+   * many days. An open task with the same title already on that day, in the same place, is the next
+   * occurrence (another device added it), so nothing is added twice.
+   */
+  private async addNextOccurrence(userId: string, id: string) {
+    const user = await this.activeUser(userId);
+    const row = await this.db.prepare(`SELECT * FROM tasks WHERE id = ?`).bind(id).first<Row>();
+    if (!user || !row) return;
+    const task = taskOut(row);
+    const today = dayIn(userOut(user).settings.timeZone);
+    const base = task.dueDate ?? today;
+    const next = task.recurrence ? nextOccurrence(task.recurrence, base, today) : null;
+    if (!next) return;
+
+    const twin = await this.db
+      .prepare(
+        `SELECT 1 FROM tasks
+         WHERE id <> ?1 AND deleted_at IS NULL AND status <> 'done' AND due_date = ?2 AND title = ?3
+           AND parent_id IS ?4 AND project_id IS ?5 AND (project_id IS NOT NULL OR owner_id = ?6)
+         LIMIT 1`,
+      )
+      .bind(id, next.day, task.title, task.parentId, task.projectId, task.ownerId)
+      .first();
+    if (twin) return;
+
+    const mutator = new Mutator(this.db, new Access(this.db, userId));
+    const copyId = crypto.randomUUID();
+    const now = Date.now();
+    const span = task.startDate && task.dueDate ? daysBetween(task.startDate, task.dueDate) : 0;
+    const created = await mutator.apply({
+      op: "upsert",
+      entity: "task",
+      data: {
+        ...task,
+        id: copyId,
+        status: "todo",
+        completedAt: null,
+        dueDate: next.day,
+        startDate: span > 0 ? addDays(next.day, -span) : null,
+        recurrence: next.recurrence,
+        updatedAt: now,
+      },
+    });
+    if (created.status !== "applied") return;
+
+    // Times, alone or with a place, move with the task; a place's race starts again.
+    const shift = daysBetween(base, next.day);
+    const { results } = await this.db
+      .prepare(`SELECT * FROM reminders WHERE task_id = ? AND user_id = ? AND deleted_at IS NULL ORDER BY created_at`)
+      .bind(id, userId)
+      .all<Row>();
+    for (const reminder of results.map(reminderOut)) {
+      let { at, firedAt } = reminder;
+      if (reminder.kind === "time" || (reminder.kind === "location" && at)) {
+        at = shiftedTime(at, shift);
+        if (!at) continue;
+        firedAt = null;
+      }
+      await mutator.apply({
+        op: "upsert",
+        entity: "reminder",
+        data: { ...reminder, id: crypto.randomUUID(), taskId: copyId, at, firedAt, updatedAt: now },
+      });
+    }
+  }
+
   private async write(userId: string, id: string, data: Record<string, unknown>): Promise<Outcome<AssistantTask>> {
     const result = await new Mutator(this.db, new Access(this.db, userId)).apply({ op: "upsert", entity: "task", data });
     if (result.status !== "applied") return fail(result.status, result.message ?? result.status);
@@ -441,6 +522,17 @@ export class Assistant {
       };
     });
   }
+}
+
+/** Whole days from one local day to another ("2026-10-13" to "2026-10-20" is 7). */
+function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
+}
+
+/** An ISO time moved by whole days, its clock time and offset kept; null if it cannot be read. */
+function shiftedTime(at: string | null, days: number): string | null {
+  const m = /^(\d{4}-\d{2}-\d{2})(T.*)$/.exec(at ?? "");
+  return m ? `${addDays(m[1]!, days)}${m[2]}` : null;
 }
 
 /** Maps assistant field names onto the sync schema, keeping only the fields that were given. */

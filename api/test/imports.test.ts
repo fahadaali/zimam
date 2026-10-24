@@ -418,6 +418,24 @@ describe("Imports API", () => {
     expect(await r2Keys(job.id)).toBe(0);
   });
 
+  it("does not fail a job when the next chunk's message dead-letters before this chunk saves", async () => {
+    const { token } = await signIn();
+    const rows = Array.from({ length: 120 }, (_, i) => `مهمة رقم ${i + 1}`);
+    const res = await upload(token, "csv", `العنوان\n${rows.join("\n")}\n`, "مهام.csv");
+    const id = res.body.job.id;
+    await deliver(sent.shift()!);
+    expect((await getJob(token, id)).progress.processed).toBe(CHUNK_SIZE);
+
+    // The second chunk sent the third's message, then failed to save: the third waited out its
+    // retries and reached the dead-letter queue while the second is still being retried.
+    const ahead = await deliver({ jobId: id, cursor: 2 * CHUNK_SIZE }, 1, IMPORT_DEAD_LETTER_QUEUE);
+    expect(ahead.explicitAcks).toHaveLength(1);
+    expect((await getJob(token, id)).status).toBe("running");
+
+    await drain();
+    expect(await getJob(token, id)).toMatchObject({ status: "done", progress: { processed: 120, total: 120 } });
+  });
+
   it("deletes a user's imports with their account, and the queue drops what is left", async () => {
     const { token } = await signIn();
     const res = await upload(token, "csv", "title\nأ\n", "a.csv");

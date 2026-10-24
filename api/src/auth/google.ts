@@ -21,14 +21,14 @@ export interface GoogleIdentity {
 
 /**
  * Verifies a Google ID token: Google's signature, issuer, audience (one of our
- * OAuth client IDs), expiry, and — when the client sent one — that the token
- * carries the SHA-256 (hex) of its nonce, as with Sign in with Apple.
+ * OAuth client IDs), expiry, and that the token carries the SHA-256 (hex) of the
+ * client's nonce, always, as with Sign in with Apple.
  */
 export async function verifyGoogleToken(
   token: string,
   keys: JWTVerifyGetKey,
   audiences: string[],
-  nonce?: string,
+  nonce: string,
 ): Promise<GoogleIdentity> {
   if (audiences.length === 0) throw new Error("No Google client IDs configured");
   const { payload } = await jwtVerify(token, keys, {
@@ -37,7 +37,7 @@ export async function verifyGoogleToken(
     algorithms: ["RS256"],
   });
   if (typeof payload.sub !== "string" || payload.sub === "") throw new Error("Token has no subject");
-  if (nonce !== undefined && payload.nonce !== (await sha256Hex(nonce))) throw new Error("Nonce mismatch");
+  if (typeof payload.nonce !== "string" || payload.nonce !== (await sha256Hex(nonce))) throw new Error("Nonce mismatch");
   const email = typeof payload.email === "string" && payload.email !== "" ? payload.email : null;
   const verified = payload.email_verified === true || payload.email_verified === "true";
   const authoritative = typeof payload.hd === "string" && payload.hd !== "" || /@(gmail|googlemail)\.com$/i.test(email ?? "");

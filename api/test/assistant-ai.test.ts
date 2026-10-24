@@ -157,6 +157,20 @@ describe("POST /v1/assistant/parse", () => {
     expect(res.body.dueDate > "2026-10-13").toBe(true);
   });
 
+  it("leaves a task undated, without its prayer or time, when the Hijri date does not exist", async () => {
+    const { token } = await signIn();
+    // Ramadan 1448 has 29 days in Umm al-Qura.
+    expect(dayOfHijri({ year: 1448, month: 9, day: 30 }, "2026-10-13")).toBeNull();
+    fakeAi.answer(suggestion({ title: "الاتصال بأبي", dueHijri: { year: null, month: 9, day: 30 }, duePrayer: "maghrib" }));
+    let res = await call("POST", "/v1/assistant/parse", { token, body: { text: "ذكرني أتصل بأبي ٣٠ رمضان بعد المغرب", now: NOW } });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ title: "الاتصال بأبي", priority: "none", tags: [] });
+
+    fakeAi.answer(suggestion({ title: "الاتصال بأبي", dueHijri: { year: null, month: 9, day: 30 }, dueTime: "17:00" }));
+    res = await call("POST", "/v1/assistant/parse", { token, body: { text: "ذكرني أتصل بأبي ٣٠ رمضان الساعة ٥", now: NOW } });
+    expect(res.body).toEqual({ title: "الاتصال بأبي", priority: "none", tags: [] });
+  });
+
   it("returns 503 and gives the request back when the model's answer is unusable", async () => {
     const { token, userId } = await signIn();
     const body = { text: "مهمة", now: NOW };

@@ -94,10 +94,15 @@ export function retryDelay(attempts: number, error: unknown): number {
   return Math.min(Math.max(asked, 10 * 3 ** (attempts - 1)), 900);
 }
 
-/** A message that crashed the consumer past its retries. Fails the job unless it moved on. */
+/**
+ * A message that crashed the consumer past its retries. Fails the job only when it is the chunk
+ * the job is at. One behind is a duplicate. One ahead was sent by a chunk whose progress is not
+ * saved yet, and spent its retries waiting (each wait counts as one): that chunk is still alive,
+ * and sends a fresh copy when it saves, or fails the job itself.
+ */
 async function failDeadLetter(db: D1Database, deps: ImportDeps, body: ImportMessage) {
   const job = await getJob(db, body.jobId);
-  if (!job || job.processed > body.cursor) return;
+  if (!job || job.processed !== body.cursor) return;
   if (job.lease_until !== null && job.lease_until > Date.now()) return;
   await failJob(db, deps.files, job.id, "internal", MESSAGES.internal);
 }

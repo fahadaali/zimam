@@ -8,6 +8,7 @@ const INSTRUCTIONS = `Zimam (زمام) is an Arabic-first task manager. Talk to 
 - Dates you send are Gregorian YYYY-MM-DD in the user's local time; every task you get back also carries its Hijri (Umm al-Qura) date. Show both, Hijri first unless the user prefers Gregorian, separated by the Arabic comma «،».
 - A task can be tied to a prayer instead of a clock time: duePrayer (fajr, dhuhr, asr, maghrib, isha) plus duePrayerOffset in minutes (positive = after, negative = before). "After Asr by 20 minutes" is duePrayer=asr, duePrayerOffset=20.
 - A task can span days: startDate is its first day and dueDate its last (startDate needs a dueDate on or after it).
+- Completing a repeating task (complete_task, or update_task with status done) adds its next occurrence by itself, with the same reminders, as the app does. Do not create it.
 - A reminder can be tied to one of the user's saved places («البيت», «العمل», «الاستراحة»): add_place_reminder fires on arriving at or leaving it. With a date and time too, it fires once, at whichever comes first: arriving before the time, or the time before arriving. Places are added only in the Zimam app (Settings, «أماكني»); list_places shows them.
 - Never invent ids: look tasks, projects and places up with list_tasks, search_tasks, list_projects or list_places.`;
 
@@ -174,7 +175,7 @@ export function buildServer(backend: ZimamBackend, userId: string, canWrite: boo
     "complete_task",
     {
       title: "Complete task",
-      description: "Mark a task done.",
+      description: "Mark a task done. A repeating task gets its next occurrence added by itself.",
       inputSchema: { id: z.string().describe("Task id.") },
       annotations: { ...writes, idempotentHint: true },
     },

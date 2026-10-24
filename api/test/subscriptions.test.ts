@@ -15,7 +15,7 @@ import {
   type AppStoreTransaction,
   appStoreFromEnv,
 } from "../src/subscriptions/appstore";
-import { appleToken, fakeAi, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
+import { appleToken, fakeAi, TEST_NONCE, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
 
 // MARK: Fakes
 
@@ -111,7 +111,7 @@ async function request(method: string, path: string, o: { token?: string; body?:
 
 async function signInUser(email?: string) {
   const res = await request("POST", "/v1/auth/apple", {
-    body: { identityToken: await appleToken(`apple-${uuid()}`, email ? { email } : {}) },
+    body: { identityToken: await appleToken(`apple-${uuid()}`, email ? { email } : {}), nonce: TEST_NONCE },
   });
   expect(res.status).toBe(200);
   return { token: res.body.token as string, userId: res.body.user.id as string };

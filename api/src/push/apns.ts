@@ -129,6 +129,8 @@ export function normalizePem(key: string): string {
 
 export class ApnsSender implements PushSender {
   private signingKey: CryptoKey | null = null;
+  /** The token being looked up or signed, shared by the sends in flight at once. */
+  private pending: Promise<string> | null = null;
 
   constructor(private readonly o: ApnsOptions) {}
 
@@ -136,12 +138,23 @@ export class ApnsSender implements PushSender {
     return this.o.now ? this.o.now() : Date.now();
   }
 
-  /** The cached provider token, or a new one when it is 50 minutes old (or `force`). */
-  async providerToken(force = false): Promise<string> {
+  /**
+   * The cached provider token, or a new one when it is 50 minutes old or is `refused` (Apple said
+   * it expired). The cron sends a few at a time (src/push/reminders.ts), so they share one look-up
+   * and signing: a stale or refused token is replaced once, not by each of them.
+   */
+  providerToken(refused?: string): Promise<string> {
+    this.pending ??= this.currentToken(refused).finally(() => {
+      this.pending = null;
+    });
+    return this.pending;
+  }
+
+  private async currentToken(refused?: string): Promise<string> {
     const now = this.now();
-    if (!force) {
-      const cached = await this.o.store.get(this.o.keyId);
-      if (cached && now - cached.issuedAt < PROVIDER_TOKEN_REFRESH_MS && cached.issuedAt <= now) return cached.token;
+    const cached = await this.o.store.get(this.o.keyId);
+    if (cached && cached.token !== refused && now - cached.issuedAt < PROVIDER_TOKEN_REFRESH_MS && cached.issuedAt <= now) {
+      return cached.token;
     }
     this.signingKey ??= await importPKCS8(normalizePem(this.o.privateKey), "ES256");
     const token = await new SignJWT({})
@@ -154,10 +167,11 @@ export class ApnsSender implements PushSender {
   }
 
   async send(message: PushMessage): Promise<PushResult> {
-    let result = await this.post(message, await this.providerToken());
-    // Another isolate may hold a newer token, or Apple expired ours early: sign a new one once.
+    const token = await this.providerToken();
+    let result = await this.post(message, token);
+    // Another isolate may hold a newer token, or Apple expired ours early: replace it once.
     if (result.status === 403 && (result.reason === "ExpiredProviderToken" || result.reason === "InvalidProviderToken")) {
-      result = await this.post(message, await this.providerToken(true));
+      result = await this.post(message, await this.providerToken(token));
     }
     return result;
   }
