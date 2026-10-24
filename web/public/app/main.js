@@ -124,6 +124,7 @@ function featureContext() {
     },
     markLocalChange: () => (state.localChangeAt = Date.now()),
     onChanged: (task) => pane.refresh(task),
+    addNextOccurrence,
     cutNote,
   };
 }

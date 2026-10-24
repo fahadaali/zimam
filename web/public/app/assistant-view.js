@@ -338,6 +338,11 @@ export function breakdownSection(task, ctx) {
       try {
         ctx.markLocalChange?.();
         Object.assign(t, done ? await boardApi.patchTask(t.id, { status: "todo" }) : await boardApi.completeTask(t.id));
+        // A repeating subtask comes back on its next day, as in the lists.
+        if (!done && t.recurrence && ctx.addNextOccurrence) {
+          await ctx.addNextOccurrence(t);
+          await loadChildren();
+        }
         ctx.announce(done ? "أُعيدت المهمة الفرعية إلى المفتوحة." : "أُنجزت المهمة الفرعية.");
         if (ctx.isCurrent()) drawList();
       } catch (failure) {
@@ -362,8 +367,8 @@ export function breakdownSection(task, ctx) {
   const loadChildren = async ({ quiet = false } = {}) => {
     let read;
     try {
-      const { tasks } = await boardApi.tasks({ projectId: task.projectId ?? "inbox" });
-      read = tasks.filter((t) => t.parentId === task.id).sort(byManualOrder);
+      const { tasks } = await boardApi.tasks({ parentId: task.id });
+      read = tasks.sort(byManualOrder);
     } catch (failure) {
       if (failure.status === 401 || !ctx.isCurrent() || quiet) return false;
       if (!loaded) list.replaceChildren();

@@ -63,6 +63,20 @@ describe("Tasks API", () => {
     expect((await call("GET", "/v1/tasks", { token: b.token })).body.tasks).toEqual([]);
   });
 
+  it("lists one task's subtasks with parentId, for those who see the task only", async () => {
+    const a = await signIn();
+    const parent = await call("POST", "/v1/tasks", { token: a.token, body: { title: "سفر" } });
+    const other = await call("POST", "/v1/tasks", { token: a.token, body: { title: "أخرى" } });
+    await call("POST", "/v1/tasks", { token: a.token, body: { title: "حجز", parentId: parent.body.id } });
+    await call("POST", "/v1/tasks", { token: a.token, body: { title: "حقيبة", parentId: other.body.id } });
+    const mine = await call("GET", `/v1/tasks?parentId=${parent.body.id}`, { token: a.token });
+    expect(mine.body.tasks.map((t: { title: string }) => t.title)).toEqual(["حجز"]);
+
+    const b = await signIn();
+    expect((await call("GET", `/v1/tasks?parentId=${parent.body.id}`, { token: b.token })).body.tasks).toEqual([]);
+    expect((await call("GET", "/v1/tasks?parentId=not-an-id", { token: a.token })).status).toBe(400);
+  });
+
   it("searches Arabic text regardless of diacritics, letter forms and digits", async () => {
     const { token } = await signIn();
     await call("POST", "/v1/tasks", { token, body: { title: "مُراجَعة العقد ١٢", notes: "مع الإدارة" } });
