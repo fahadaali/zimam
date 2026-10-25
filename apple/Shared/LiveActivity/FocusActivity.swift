@@ -11,6 +11,10 @@ nonisolated struct FocusActivityAttributes: ActivityAttributes {
     nonisolated struct ContentState: Codable, Hashable {
         /// When the focus started; the timer counts up from here.
         var startedAt: Date
+        /// The task's title and project once renamed or moved while it runs. Attributes cannot
+        /// change after the start, the state can; nil until then, so the attributes show.
+        var title: String? = nil
+        var projectName: String? = nil
     }
 
     var taskId: UUID
@@ -54,16 +58,29 @@ enum FocusActivity {
     }
 
     /// Ends the focus when its task was completed or deleted elsewhere: in the Today list, from a
-    /// notification, by Siri, or on another device. The app calls it after every change.
+    /// notification, by Siri, or on another device; and shows its new title or project when it
+    /// was renamed or moved. The app calls it after every change.
     static func endFinished(in context: ModelContext) {
-        let ids = Set(running.map(\.attributes.taskId))
-        guard !ids.isEmpty else { return }
-        for id in ids {
+        for activity in running {
+            let id = activity.attributes.taskId
             var descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.id == id })
             descriptor.fetchLimit = 1
-            let task = try? context.fetch(descriptor).first
-            if task == nil || task?.isDone == true || task?.pendingDelete == true {
+            guard let task = try? context.fetch(descriptor).first, !task.isDone, !task.pendingDelete else {
                 Task { await FocusActivity.end(taskId: id) }
+                continue
+            }
+            var projectName: String?
+            if let projectId = task.projectId {
+                var projects = FetchDescriptor<ProjectItem>(predicate: #Predicate { $0.id == projectId })
+                projects.fetchLimit = 1
+                projectName = (try? context.fetch(projects).first)?.name
+            }
+            let state = activity.content.state
+            let shownTitle = state.title ?? activity.attributes.title
+            let shownProject = state.title == nil ? activity.attributes.projectName : state.projectName
+            if task.title != shownTitle || projectName != shownProject {
+                let title = task.title
+                Task { await FocusActivity.retitle(taskId: id, title: title, projectName: projectName) }
             }
         }
     }
@@ -80,6 +97,18 @@ enum FocusActivity {
         where activity.activityState == .active || activity.activityState == .stale {
             guard taskId == nil || activity.attributes.taskId == taskId else { continue }
             await activity.end(nil, dismissalPolicy: .immediate)
+        }
+    }
+
+    /// Puts the task's current title and project in the activity's state, keeping its start and
+    /// stale date, so the timer is unaffected. Off the main actor, as `endActivities`.
+    @concurrent nonisolated private static func retitle(taskId: UUID, title: String, projectName: String?) async {
+        for activity in Activity<FocusActivityAttributes>.activities
+        where activity.attributes.taskId == taskId && (activity.activityState == .active || activity.activityState == .stale) {
+            var state = activity.content.state
+            state.title = title
+            state.projectName = projectName
+            await activity.update(ActivityContent(state: state, staleDate: activity.content.staleDate))
         }
     }
 

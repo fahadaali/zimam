@@ -88,13 +88,17 @@ export const app = createApp({
   appleTokens: () => (fakeApple.configured ? fakeApple : null),
 });
 
+/** The raw nonce test tokens carry (as its SHA-256) unless told otherwise, and sign-ins send. */
+export const TEST_NONCE = "test-nonce";
+
 interface AppleTokenOptions {
   audience?: string;
   issuer?: string;
   email?: string;
   /** Apple sends "true" for every address it gives; pass false to test an unverified claim. */
   emailVerified?: boolean;
-  nonce?: string;
+  /** `TEST_NONCE` by default; null leaves the claim out. */
+  nonce?: string | null;
   expiresIn?: string;
   key?: CryptoKey;
 }
@@ -106,7 +110,8 @@ export async function appleToken(sub: string, o: AppleTokenOptions = {}) {
     claims.email = o.email;
     claims.email_verified = String(o.emailVerified ?? true);
   }
-  if (o.nonce) claims.nonce = await sha256Hex(o.nonce);
+  const nonce = o.nonce === undefined ? TEST_NONCE : o.nonce;
+  if (nonce) claims.nonce = await sha256Hex(nonce);
   return new SignJWT(claims)
     .setProtectedHeader({ alg: "RS256", kid: "test-key" })
     .setSubject(sub)
@@ -125,7 +130,8 @@ interface GoogleTokenOptions {
   /** Google Workspace domain claim. */
   hd?: string;
   name?: string;
-  nonce?: string;
+  /** `TEST_NONCE` by default; null leaves the claim out. */
+  nonce?: string | null;
   expiresIn?: string;
   key?: CryptoKey;
 }
@@ -139,7 +145,8 @@ export async function googleToken(sub: string, o: GoogleTokenOptions = {}) {
   }
   if (o.hd) claims.hd = o.hd;
   if (o.name) claims.name = o.name;
-  if (o.nonce) claims.nonce = await sha256Hex(o.nonce);
+  const nonce = o.nonce === undefined ? TEST_NONCE : o.nonce;
+  if (nonce) claims.nonce = await sha256Hex(nonce);
   return new SignJWT(claims)
     .setProtectedHeader({ alg: "RS256", kid: "google-test-key" })
     .setSubject(sub)
@@ -172,7 +179,7 @@ export async function call(
 
 /** Signs in a fresh Apple user and returns their session token and id. */
 export async function signIn(sub = `apple-${crypto.randomUUID()}`, name?: string) {
-  const res = await call("POST", "/v1/auth/apple", { body: { identityToken: await appleToken(sub), name } });
+  const res = await call("POST", "/v1/auth/apple", { body: { identityToken: await appleToken(sub), nonce: TEST_NONCE, name } });
   if (res.status !== 200) throw new Error(`sign-in failed: ${JSON.stringify(res.body)}`);
   return { token: res.body.token as string, userId: res.body.user.id as string };
 }

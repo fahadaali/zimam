@@ -103,9 +103,9 @@ public struct AppleCalendarEvent: Equatable, Identifiable, Sendable {
         guard !trimmedTitle.isEmpty else { return nil }
         var taskTitle = trimmedTitle
         var lines: [String] = []
-        if taskTitle.count > AppleRemindersImport.maxTitle {
+        if ServerText.exceeds(taskTitle, ServerText.maxTitle) {
             lines.append(taskTitle)
-            taskTitle = String(taskTitle.prefix(AppleRemindersImport.maxTitle))
+            taskTitle = ServerText.clip(taskTitle, to: ServerText.maxTitle)
         }
         if let place = self.location?.trimmingCharacters(in: .whitespacesAndNewlines), !place.isEmpty {
             lines.append("المكان: \(place)")
@@ -117,9 +117,7 @@ public struct AppleCalendarEvent: Equatable, Identifiable, Sendable {
             lines.append(link.absoluteString)
         }
         var taskNotes = lines.joined(separator: "\n\n")
-        if taskNotes.count > AppleRemindersImport.maxNotes {
-            taskNotes = String(taskNotes.prefix(AppleRemindersImport.maxNotes))
-        }
+        taskNotes = ServerText.clip(taskNotes, to: ServerText.maxNotes)
 
         let days = self.span(timeZone: timeZone)
         var time: String?
@@ -203,9 +201,14 @@ public enum AppleCalendarImport {
         let until = rule.until.map { AppleRemindersImport.dayString($0, timeZone: timeZone) }
         let weekdays = rule.frequency == .weekly ? rule.weekdays : []
         var count = rule.count
+        // The series' own day of the month, so a short month on the way does not move the
+        // occurrences after it (`Recurrence`).
+        let seriesMonthDay = seriesStartDay.flatMap { Int($0.suffix(2)) }
+        let seriesMonth = seriesStartDay.flatMap { Int($0.dropFirst(5).prefix(2)) }
         if let total = rule.count {
             guard let first = seriesStartDay, first <= anchorDay else { return nil }
-            let stepper = Recurrence(frequency: rule.frequency, interval: rule.interval, weekdays: weekdays)
+            let stepper = Recurrence(frequency: rule.frequency, interval: rule.interval, weekdays: weekdays,
+                                     monthDay: seriesMonthDay, month: seriesMonth)
             var day = first
             var before = 0
             while day < anchorDay {
@@ -216,8 +219,11 @@ public enum AppleCalendarImport {
             }
             count = total - before
         }
+        // An anchor moved earlier by a short month (the series' 31st on a 30th) carries that day.
+        let moved = seriesStartDay.map { $0.suffix(2) != anchorDay.suffix(2) } ?? false
         return Recurrence(frequency: rule.frequency, interval: rule.interval, weekdays: weekdays,
-                          count: count, until: until).rrule
+                          count: count, until: until,
+                          monthDay: moved ? seriesMonthDay : nil, month: moved ? seriesMonth : nil).rrule
     }
 
     /// Turns events into projects and tasks. Calendars are imported in the order given, events by
@@ -342,8 +348,7 @@ public enum AppleCalendarImport {
     static func projectName(_ title: String) -> String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return "تقويم" }
-        return trimmed.count > AppleRemindersImport.maxProjectName
-            ? String(trimmed.prefix(AppleRemindersImport.maxProjectName)) : trimmed
+        return ServerText.clip(trimmed, to: ServerText.maxName)
     }
 
     /// «أُضيفت ١٢ مهمة.» and what was left out, for the screen after an import.

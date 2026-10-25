@@ -6,6 +6,7 @@ struct RootView: View {
     @Environment(SyncEngine.self) private var sync
     @Environment(NotificationScheduler.self) private var notifications
     @Environment(LocationProvider.self) private var location
+    @Environment(SubscriptionStore.self) private var subscriptions
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -23,15 +24,23 @@ struct RootView: View {
                                                  longitude: location.coordinate?.longitude)
                         await sync.sync()
                         await ReminderBridge.shared.run()
+                        // Day words in Spotlight («اليوم», «غداً») follow the date, even when the
+                        // sync brought nothing new.
+                        TaskSpotlight.shared.scheduleUpdate()
                     }
                     .onChange(of: scenePhase) { _, phase in
                         // Each return also moves the rolling notification window forward.
                         if phase == .active {
+                            // A day that turned over while away moves the screens to it (DayClock).
+                            DayClock.shared.refresh()
                             notifications.reschedule()
+                            TaskSpotlight.shared.scheduleUpdate()
                             Task {
                                 await sync.sync()
                                 // What was said to Siri («ذكرني …») while away.
                                 await ReminderBridge.shared.run()
+                                // Settings changed on another device or on the web meanwhile.
+                                await session.loadUser()
                             }
                         }
                         // Leaving: ask the system to wake the app to renew the window while it is closed.
@@ -44,6 +53,10 @@ struct RootView: View {
                         case .background: sync.stopRealtime()
                         default: break
                         }
+                    }
+                    // Back online: what waited goes out now, not at the next edit or return.
+                    .onChange(of: NetworkMonitor.shared.isOnline) { _, online in
+                        if online { Task { await sync.sync() } }
                     }
                     // Signing out replaces this view, and its socket closes with it.
                     .onDisappear { sync.stopRealtime() }
@@ -65,14 +78,18 @@ struct RootView: View {
                 SignInView()
             }
         }
-        .environment(\.dateFormatterZimam, DualDateFormatter(primary: session.user?.settings.calendar ?? .hijri, locale: ZimamLocale.current))
+        // In the zone DayClock read, so today moves with it when the zone changes.
+        .environment(\.dateFormatterZimam, DualDateFormatter(primary: session.user?.settings.calendar ?? .hijri,
+                                                              locale: ZimamLocale.current, timeZone: DayClock.shared.timeZone))
         .environment(\.prayerScheduleZimam, location.schedule(session.user?.settings))
         .onAppear {
             // Weak: the engine owns this closure. A local, so the weak capture is of it rather than
             // of the strong one this closure already holds.
             let engine = sync
-            engine.onUnauthorized = { [session, weak engine] in
+            engine.onUnauthorized = { [session, subscriptions, weak engine] in
                 session.endSession()
+                // As a sign-out: the next account does not see this one's plan.
+                subscriptions.signedOut()
                 engine?.reset()
             }
         }

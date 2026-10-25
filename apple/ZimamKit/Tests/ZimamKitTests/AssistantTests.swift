@@ -94,7 +94,7 @@ struct AssistantTests {
 
     @Test func deviceTimeIsSentWithItsOffset() {
         let date = Date(timeIntervalSince1970: 1_791_878_400) // 2026-10-13T08:00:00Z
-        let text = APIClient.isoString(date, timeZone: TimeZone(identifier: "Asia/Riyadh")!)
+        let text = ReminderPlanner.isoString(from: date, timeZone: TimeZone(identifier: "Asia/Riyadh")!)
         #expect(text == "2026-10-13T11:00:00+03:00")
     }
 }

@@ -391,5 +391,33 @@ public struct User: Codable, Equatable, Sendable {
             try c.encodeIfPresent(asrMadhab, forKey: .asrMadhab)
             try c.encodeIfPresent(prayerAlerts, forKey: .prayerAlerts)
         }
+
+        /// What these settings change from `base`, for `PATCH /v1/me`.
+        public func changes(from base: Settings) -> Changes {
+            Changes(base: base, new: self)
+        }
+
+        /// Only the keys that differ from what the device last had. The server merges them into
+        /// the account's settings, so a device whose copy is behind does not send back what
+        /// another device or the web changed meanwhile.
+        public struct Changes: Encodable, Equatable, Sendable {
+            public let base: Settings
+            public let new: Settings
+
+            public var isEmpty: Bool { base == new }
+
+            /// A cleared location goes as `null`, which clears it on the server. The server takes
+            /// no null for the others, so a key that became nil is left out.
+            public func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: CodingKeys.self)
+                if new.calendar != base.calendar { try c.encode(new.calendar, forKey: .calendar) }
+                if new.prayerMethod != base.prayerMethod { try c.encode(new.prayerMethod, forKey: .prayerMethod) }
+                if new.weekStart != base.weekStart { try c.encode(new.weekStart, forKey: .weekStart) }
+                if new.timeZone != base.timeZone { try c.encodeIfPresent(new.timeZone, forKey: .timeZone) }
+                if new.location != base.location { try c.encode(new.location, forKey: .location) }
+                if new.asrMadhab != base.asrMadhab { try c.encodeIfPresent(new.asrMadhab, forKey: .asrMadhab) }
+                if new.prayerAlerts != base.prayerAlerts { try c.encodeIfPresent(new.prayerAlerts, forKey: .prayerAlerts) }
+            }
+        }
     }
 }

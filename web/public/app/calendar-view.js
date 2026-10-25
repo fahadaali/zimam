@@ -14,6 +14,7 @@
 import { Button, h } from "./lib/components.js";
 import { addDays, dayHeading, dualDate, isIsoDate, relativeDay, weekdayName } from "./lib/dates.js";
 import { boardApi } from "./lib/feature-api.js";
+import { icon } from "./lib/icons.js";
 import { addMonths, dayDots, dayTitles, keyMove, monthDays, monthTitle, rangeTitle, weekDays, weekdayHeaders } from "./lib/calendar.js";
 import { arabicNumber } from "./lib/numbers.js";
 import { isMultiDay, rowBars, shiftTo, singleDayByDay, spanText, taskSpan, tasksByOccupiedDay } from "./lib/spans.js";
@@ -37,7 +38,7 @@ let draggedId = null;
 
 /**
  * The view. `ctx`: { primary, today, me, taskItem(task, options), announce, showError, render,
- * markLocalChange, canEditTask(task) } from main.js. Returns its nodes, like the other views.
+ * markLocalChange, canEditTask(task), cutNote() } from main.js. Returns its nodes, like the other views.
  */
 export async function viewCalendar(ctx) {
   const root = h("div", { className: "calendar" });
@@ -57,8 +58,8 @@ export async function viewCalendar(ctx) {
 
   async function load(from, to) {
     // Due up to SPAN_LOOKAHEAD days later, for tasks that start in view; those that do not touch it are left out.
-    const { tasks } = await boardApi.tasks({ status: "open", dueFrom: from, dueTo: addDays(to, SPAN_LOOKAHEAD) });
-    data = { from, to, tasks: tasks.filter((t) => { const s = taskSpan(t); return s && s.start <= to; }) };
+    const { tasks, truncated } = await boardApi.tasks({ status: "open", dueFrom: from, dueTo: addDays(to, SPAN_LOOKAHEAD) });
+    data = { from, to, truncated, tasks: tasks.filter((t) => { const s = taskSpan(t); return s && s.start <= to; }) };
     index();
   }
 
@@ -76,7 +77,11 @@ export async function viewCalendar(ctx) {
       }
     }
     if (id !== painting) return;
-    root.replaceChildren(header(shown), ...(view.mode === "month" ? [monthGrid(shown), selectedDay()] : [weekColumns(shown)]));
+    root.replaceChildren(
+      header(shown),
+      ...(data.truncated ? [ctx.cutNote()] : []),
+      ...(view.mode === "month" ? [monthGrid(shown), selectedDay()] : [weekColumns(shown)]),
+    );
     if (focus) root.querySelector(focus)?.focus();
   }
 
@@ -407,6 +412,7 @@ export async function viewCalendar(ctx) {
     try {
       Object.assign(task, await boardApi.patchTask(id, patch));
       index();
+      ctx.onChanged?.(task); // the same task open beside the calendar follows
       ctx.announce(`نُقلت إلى ${where}.`);
     } catch (error) {
       Object.assign(task, previous);
@@ -420,18 +426,5 @@ export async function viewCalendar(ctx) {
   return [root];
 }
 
-/** Back and forward chevrons; in Arabic «السابق» points right. */
-function chevron(direction) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 16 16");
-  svg.setAttribute("width", "16");
-  svg.setAttribute("height", "16");
-  svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("class", "zm-ico chevron");
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  // Drawn for right-to-left: back points right, forward points left.
-  path.setAttribute("d", direction < 0 ? "M6 3l5 5-5 5" : "M10 3L5 8l5 5");
-  for (const [k, v] of Object.entries({ fill: "none", stroke: "currentColor", "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round" })) path.setAttribute(k, v);
-  svg.append(path);
-  return svg;
-}
+/** Back and forward chevrons from the shared set, which follow the reading direction: in Arabic «السابق» points right. */
+const chevron = (direction) => icon(direction < 0 ? "chevron-back" : "chevron-forward", { size: "sm" });

@@ -31,6 +31,19 @@ interface Scope {
 
 const MAX_TASK_DEPTH = 10;
 
+/** How far ahead of the server's clock a device's clock may run before its versions are capped. */
+export const MAX_CLOCK_SKEW_MS = 5 * 60_000;
+
+/**
+ * The version a write is stored with: the client's own, but no later than a few minutes past the
+ * server's clock, or than one past the stored version when that is later already. A device whose
+ * clock runs ahead would otherwise win every conflict, and a version at the largest safe integer
+ * would leave no newer one to send. Clients take the stored version with their next pull.
+ */
+function capVersion(version: number, row: Row | null): number {
+  return Math.min(version, Math.max(Date.now() + MAX_CLOCK_SKEW_MS, ((row?.updated_at as number | undefined) ?? 0) + 1));
+}
+
 /** Ids of every task below `?1` (not including it). UNION stops on cycles. */
 const DESCENDANTS = `WITH RECURSIVE sub(id) AS (
   SELECT id FROM tasks WHERE parent_id = ?1
@@ -111,11 +124,15 @@ export class Mutator {
     return this.db.prepare(`SELECT * FROM ${TABLES[entity]} WHERE id = ?`).bind(id).first<Row>();
   }
 
-  /** Loads the current row and enforces deletion and last-writer-wins. */
-  private async current(entity: EntityName, id: string, updatedAt: number): Promise<Row | null> {
-    const row = await this.load(entity, id);
+  /**
+   * Loads the current row, caps the input's `updatedAt` (`capVersion`) so everything below writes
+   * the capped one, and enforces deletion and last-writer-wins.
+   */
+  private async current(entity: EntityName, input: { id: string; updatedAt: number }): Promise<Row | null> {
+    const row = await this.load(entity, input.id);
     if (row?.deleted_at != null) reject("gone", `${entity} was deleted`);
-    if (row && (row.updated_at as number) > updatedAt) reject("stale", `${entity} has a newer version`);
+    input.updatedAt = capVersion(input.updatedAt, row);
+    if (row && (row.updated_at as number) > input.updatedAt) reject("stale", `${entity} has a newer version`);
     return row;
   }
 
@@ -140,13 +157,43 @@ export class Mutator {
   // MARK: Projects
 
   private async upsertProject(p: ProjectInput) {
-    const existing = await this.current("project", p.id, p.updatedAt);
+    const existing = await this.current("project", p);
     if (existing && !(await this.access.canEditProject(p.id))) reject("forbidden", "Cannot edit this project");
-    if (p.parentId) {
+    // The kind and the folder belong to the owner. An editor's app sends back the values it has
+    // with every rename, so theirs are kept as stored, not refused.
+    if (existing && (await this.access.role(p.id)) !== "owner") {
+      p.kind = existing.kind as ProjectInput["kind"];
+      p.parentId = (existing.parent_id as string | null) ?? null;
+    }
+    // Shared means another member, or an invite still open: accepted later, it would share a folder.
+    if (existing && p.kind === "folder" && existing.kind !== "folder") {
+      const shared = await this.db
+        .prepare(
+          `SELECT 1 FROM project_members WHERE project_id = ?1 AND role <> 'owner'
+           UNION ALL
+           SELECT 1 FROM invites WHERE project_id = ?1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > ?2
+           LIMIT 1`,
+        )
+        .bind(p.id, Date.now())
+        .first();
+      if (shared) reject("invalid", "A shared project, or one with an open invite, cannot become a folder");
+    }
+    // Checked when the folder changes, so a project the owner put in their folder stays editable.
+    if (p.parentId && p.parentId !== ((existing?.parent_id as string | null | undefined) ?? null)) {
       if (p.parentId === p.id) reject("invalid", "A project cannot contain itself");
       const parent = await this.load("project", p.parentId);
       if (!parent || parent.deleted_at != null || parent.kind !== "folder") reject("invalid", "Parent must be a folder");
-      if (!(await this.access.canEditProject(p.parentId))) reject("forbidden", "Cannot edit the parent folder");
+      if ((await this.access.role(p.parentId)) !== "owner") reject("forbidden", "Cannot edit the parent folder");
+      const loop = await this.db
+        .prepare(
+          `WITH RECURSIVE up(id) AS (
+             SELECT ?1 UNION SELECT f.parent_id FROM projects f JOIN up ON f.id = up.id WHERE f.parent_id IS NOT NULL
+           )
+           SELECT 1 FROM up WHERE id = ?2`,
+        )
+        .bind(p.parentId, p.id)
+        .first();
+      if (loop) reject("invalid", "A folder cannot be inside itself");
     }
     const now = Date.now();
     const statements = [
@@ -235,7 +282,7 @@ export class Mutator {
   // MARK: Sections
 
   private async upsertSection(s: SectionInput) {
-    const existing = await this.current("section", s.id, s.updatedAt);
+    const existing = await this.current("section", s);
     if (existing && existing.project_id !== s.projectId) reject("invalid", "A section cannot move between projects");
     if (!(await this.access.canEditProject(s.projectId))) reject("forbidden", "Cannot edit this project");
     const now = Date.now();
@@ -272,7 +319,7 @@ export class Mutator {
   // MARK: Tasks
 
   private async upsertTask(t: TaskInput) {
-    const existing = await this.current("task", t.id, t.updatedAt);
+    const existing = await this.current("task", t);
     if (existing && !(await this.access.canEditTask(existing))) reject("forbidden", "Cannot edit this task");
     const ownerId = (existing?.owner_id as string | undefined) ?? this.me;
 
@@ -343,8 +390,23 @@ export class Mutator {
     ];
 
     if (moved) {
+      // Reminders are personal and live only while their user can see the task: those of anyone
+      // outside the new place (not a member of the project, or not the inbox's owner) go, as
+      // when a member is removed, logged to each reminder's owner.
+      const tree = `${DESCENDANTS}, tree(id) AS (SELECT ?1 UNION SELECT id FROM sub)`;
+      const outsiders = `task_id IN tree AND deleted_at IS NULL AND CASE WHEN ?2 IS NULL THEN user_id <> ?3
+        ELSE user_id NOT IN (SELECT user_id FROM project_members WHERE project_id = ?2) END`;
       // Tell the old audience, then carry subtasks and comments to the new place.
       statements.push(
+        this.db
+          .prepare(
+            `${tree} INSERT INTO changes (entity, entity_id, project_id, user_id, at)
+             SELECT 'reminder', id, NULL, user_id, ?4 FROM reminders WHERE ${outsiders}`,
+          )
+          .bind(t.id, t.projectId, ownerId, now),
+        this.db
+          .prepare(`${tree} UPDATE reminders SET deleted_at = ?4, updated_at = ?4 WHERE ${outsiders}`)
+          .bind(t.id, t.projectId, ownerId, now),
         this.logChange("task", t.id, this.taskScope(existing), now),
         this.db
           .prepare(
@@ -437,7 +499,7 @@ export class Mutator {
   // MARK: Reminders
 
   private async upsertReminder(r: ReminderInput) {
-    const existing = await this.current("reminder", r.id, r.updatedAt);
+    const existing = await this.current("reminder", r);
     if (existing && existing.user_id !== this.me) reject("forbidden", "Reminders are personal");
     if (existing && existing.task_id !== r.taskId) reject("invalid", "A reminder cannot move between tasks");
     const task = await this.loadTask(r.taskId);
@@ -478,7 +540,7 @@ export class Mutator {
    * or widening it moves every reminder there, in apps that predate places too.
    */
   private async upsertPlace(p: PlaceInput) {
-    const existing = await this.current("place", p.id, p.updatedAt);
+    const existing = await this.current("place", p);
     if (existing && existing.user_id !== this.me) reject("forbidden", "Places are personal");
     const now = Date.now();
     const linked = `user_id = ?1 AND deleted_at IS NULL AND kind = 'location' AND json_valid(location)
@@ -541,7 +603,7 @@ export class Mutator {
   // MARK: Comments
 
   private async upsertComment(c: CommentInput) {
-    const existing = await this.current("comment", c.id, c.updatedAt);
+    const existing = await this.current("comment", c);
     if (existing && existing.author_id !== this.me) reject("forbidden", "Only the author can edit a comment");
     if (existing && existing.task_id !== c.taskId) reject("invalid", "A comment cannot move between tasks");
     const task = await this.loadTask(c.taskId);
@@ -560,11 +622,12 @@ export class Mutator {
 
   // MARK: Deletes
 
-  private async delete(entity: EntityName, id: string, at: number) {
+  private async delete(entity: EntityName, id: string, version: number) {
     const row = await this.load(entity, id);
     if (!row) return reject("invalid", `${entity} not found`);
     // Deleting twice is a no-op, so a retried request still succeeds.
     if (row.deleted_at != null) return;
+    const at = capVersion(version, row);
     if ((row.updated_at as number) > at) reject("stale", `${entity} has a newer version`);
     switch (entity) {
       case "project":

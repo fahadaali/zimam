@@ -1,23 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomNonce, sha256Hex } from "../public/app/lib/nonce.js";
-import { arabicNumber, parseDigits } from "../public/app/lib/numbers.js";
-import { groupByDay, priorityKey, progressPercent, progressText, splitToday, taskCount } from "../public/app/lib/tasks.js";
+import { arabicNumber } from "../public/app/lib/numbers.js";
+import { groupByDay, priorityKey, progressText, taskCount } from "../public/app/lib/tasks.js";
 
 const task = (id, dueDate, extra = {}) => ({ id, title: id, status: "todo", dueDate, ...extra });
 
 test("project progress reads «٧ من ١٢»", () => {
   assert.equal(progressText(7, 12), "٧ من ١٢");
-  assert.equal(progressPercent(7, 12), 58);
-  assert.equal(progressPercent(0, 0), 0);
 });
 
-test("Arabic-Indic digits in and out", () => {
+test("Arabic-Indic digits", () => {
   assert.equal(arabicNumber(2026), "٢٠٢٦");
-  assert.equal(parseDigits("٢٠"), 20);
-  assert.equal(parseDigits("۱۵"), 15);
-  assert.equal(parseDigits(" 45 "), 45);
-  assert.ok(Number.isNaN(parseDigits("٢٠ د")));
 });
 
 test("task counts agree with the number", () => {
@@ -36,12 +30,6 @@ test("upcoming tasks group by day in date order", () => {
       ["2026-10-15", ["b", "c"]],
     ],
   );
-});
-
-test("today splits overdue from due today", () => {
-  const { overdue, due } = splitToday([task("old", "2026-10-01"), task("now", "2026-10-13")], "2026-10-13");
-  assert.deepEqual(overdue.map((t) => t.id), ["old"]);
-  assert.deepEqual(due.map((t) => t.id), ["now"]);
 });
 
 test("API priority maps to the row flag", () => {
@@ -71,4 +59,17 @@ test("today's list: due today or earlier, top-level, by date then time", async (
     "2026-10-20",
   );
   assert.deepEqual(list.map((t) => t.id), ["c", "a", "f", "b"]);
+});
+
+test("today's list puts a prayer task among the clock times, at the prayer's usual time", async () => {
+  const { todayList } = await import("../public/app/lib/tasks.js");
+  const list = todayList(
+    [
+      { id: "asr", dueDate: "2026-10-20", duePrayer: "asr", duePrayerOffset: 0 },
+      { id: "ten", dueDate: "2026-10-20", dueTime: "10:00" },
+      { id: "late", dueDate: "2026-10-20", dueTime: "18:00" },
+    ],
+    "2026-10-20",
+  );
+  assert.deepEqual(list.map((t) => t.id), ["ten", "asr", "late"]);
 });

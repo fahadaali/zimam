@@ -5,10 +5,10 @@
 import { dualDate, isIsoDate, timeLabel } from "./dates.js";
 import { arabicNumber } from "./numbers.js";
 import { prayerPhrase } from "./prayer.js";
+import { PRIORITY_NAMES } from "./tasks.js";
 
 /** The assistant names priorities; tasks store 0 to 3. */
 export const PRIORITY_FROM_NAME = { none: 0, low: 1, medium: 2, high: 3 };
-const PRIORITY_NAMES = { 0: "بلا أولوية", 1: "منخفضة", 2: "متوسطة", 3: "عالية" };
 
 export function suggestionPriority(value) {
   if (typeof value === "number" && value >= 0 && value <= 3) return Math.trunc(value);

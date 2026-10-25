@@ -17,14 +17,15 @@ export interface AppleIdentity {
 
 /**
  * Verifies a Sign in with Apple identity token: Apple's signature, issuer,
- * audience (our bundle id or web Services ID), expiry, and — when the client
- * sent one — that the token carries the SHA-256 of its nonce.
+ * audience (our bundle id or web Services ID), expiry, and that the token
+ * carries the SHA-256 of the client's nonce. The nonce is always required, so a
+ * token captured on its way cannot be exchanged for a session without it.
  */
 export async function verifyAppleToken(
   token: string,
   keys: JWTVerifyGetKey,
   audiences: string[],
-  nonce?: string,
+  nonce: string,
 ): Promise<AppleIdentity> {
   const { payload } = await jwtVerify(token, keys, {
     issuer: APPLE_ISSUER,
@@ -32,7 +33,7 @@ export async function verifyAppleToken(
     algorithms: ["RS256"],
   });
   if (typeof payload.sub !== "string" || payload.sub === "") throw new Error("Token has no subject");
-  if (nonce !== undefined && payload.nonce !== (await sha256Hex(nonce))) throw new Error("Nonce mismatch");
+  if (typeof payload.nonce !== "string" || payload.nonce !== (await sha256Hex(nonce))) throw new Error("Nonce mismatch");
   // jwtVerify already checked that one of the token's audiences is ours.
   const audience = [payload.aud ?? []].flat().find((aud) => audiences.includes(aud))!;
   const email = typeof payload.email === "string" && payload.email !== "" ? payload.email : null;

@@ -19,9 +19,10 @@ public struct DualDateFormatter {
         self.timeZone = timeZone
     }
 
-    /// «٢ جمادى الأولى» or «٢ جمادى الأولى ١٤٤٨».
+    /// «٢ جمادى الأولى» or «٢ جمادى الأولى ١٤٤٨هـ», the year written as the calendar titles and the web write it.
     public func hijri(_ date: Date, withYear: Bool = false) -> String {
-        format(date, calendar: .islamicUmmAlQura, pattern: withYear ? "d MMMM y" : "d MMMM")
+        let text = format(date, calendar: .islamicUmmAlQura, pattern: withYear ? "d MMMM y" : "d MMMM")
+        return withYear ? text + CalendarKind.hijri.yearSuffix : text
     }
 
     /// «١٣ أكتوبر» or «١٣ أكتوبر ٢٠٢٦».

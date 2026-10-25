@@ -117,11 +117,14 @@ struct TaskTimeRows: View {
         TaskTiming.clockString(from: date, timeZone: formatter.timeZone)
     }
 
-    /// An hour from now, on the hour: «٣:٠٠ م» at 2:20 p.m.
+    /// An hour from now, on the hour: «٣:٠٠ م» at 2:20 p.m. From 11 p.m. that hour is tomorrow
+    /// while the task keeps its day, so the day's last minute.
     private var nextHour: String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = formatter.timeZone
-        let hour = calendar.component(.hour, from: Date().addingTimeInterval(3600))
-        return String(format: "%02d:00", hour)
+        let now = Date()
+        let later = now.addingTimeInterval(3600)
+        guard calendar.isDate(later, inSameDayAs: now) else { return "23:59" }
+        return String(format: "%02d:00", calendar.component(.hour, from: later))
     }
 }

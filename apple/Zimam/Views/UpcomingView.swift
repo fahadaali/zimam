@@ -19,6 +19,7 @@ struct UpcomingView: View {
     }
 
     @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.prayerScheduleZimam) private var schedule
     @Environment(\.taskSelection) private var taskSelection
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(filter: #Predicate<TaskItem> { !$0.pendingDelete }, sort: [SortDescriptor(\TaskItem.sortOrder)])
@@ -28,15 +29,17 @@ struct UpcomingView: View {
     @State private var sheet: SheetRoute?
 
     private var days: [DayGroup] {
-        let today = formatter.dayString(from: Date())
+        let today = formatter.dayString(from: DayClock.shared.now)
         let upcoming = tasks.filter { (!$0.isDone || lingering.contains($0.id)) && $0.parentId == nil && ($0.dueDate ?? "") > today }
         return Dictionary(grouping: upcoming) { $0.dueDate ?? "" }
-            .map { DayGroup(day: $0.key, tasks: $0.value) }
+            // Each day as Today orders it: untimed first, then by clock or prayer time.
+            .map { DayGroup(day: $0.key, tasks: TodayTasks.ordered($0.value, schedule: schedule, formatter: formatter)) }
             .sorted { $0.day < $1.day }
     }
 
     var body: some View {
         let names = projectNames(projects)
+        let now = DayClock.shared.now
         // Once per render, not once per use.
         let days = self.days
         List(selection: taskSelection) {
@@ -51,7 +54,7 @@ struct UpcomingView: View {
                         TaskListItem(task: task, projectName: task.projectId.flatMap { names[$0] }, onCompleted: linger)
                     }
                 } header: {
-                    Text(formatter.date(fromDay: group.day).map { formatter.label(for: $0) } ?? group.day)
+                    Text(formatter.date(fromDay: group.day).map { formatter.label(for: $0, now: now) } ?? group.day)
                         .font(ZimamType.headline)
                         .foregroundStyle(ZimamColor.ink)
                         .textCase(nil)
@@ -59,6 +62,7 @@ struct UpcomingView: View {
             }
         }
         .zimamList()
+        .roomForAddButton()
         .overlay(alignment: .bottomTrailing) { AddTaskButton { sheet = .add } }
         .sheet(item: $sheet) { route in
             switch route {

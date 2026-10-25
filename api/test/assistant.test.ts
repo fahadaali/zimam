@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Assistant } from "../src/assistant";
-import { appleToken, call, signIn, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
+import { dayIn } from "../src/data/dates";
+import { appleToken, call, push, signIn, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
 
 const assistant = new Assistant(env, { apple: testAppleKeys, google: testGoogleKeys });
 
@@ -56,6 +57,96 @@ describe("Assistant (MCP backend)", () => {
     expect(done.completedAt).toMatch(/^\d{4}-/);
     expect(value(await assistant.listTasks(userId, {}))).toEqual([]);
     expect(value(await assistant.listTasks(userId, { status: "done" })).map((t) => t.id)).toEqual([created.id]);
+  });
+
+  it("adds the next occurrence when it completes a repeating task, once, with the reminders moved", async () => {
+    const { token, userId } = await signIn();
+    // Thursday 5 March 2099, weekly on Thursdays, three times left, over two days. Far ahead, since
+    // the next occurrence is never before today.
+    const task = value(
+      await assistant.createTask(userId, {
+        title: "المراجعة الأسبوعية",
+        startDate: "2099-03-04",
+        dueDate: "2099-03-05",
+        dueTime: "09:00",
+        recurrence: "FREQ=WEEKLY;BYDAY=TH;COUNT=3",
+      }),
+    );
+    const place = { latitude: 24.7, longitude: 46.6, radius: 200, name: "العمل", trigger: "arrive", placeId: null };
+    await push(token, [
+      { op: "upsert", entity: "reminder", data: { id: uuid(), taskId: task.id, kind: "time", at: "2099-03-05T08:00:00+03:00", updatedAt: 1000 } },
+      {
+        op: "upsert",
+        entity: "reminder",
+        data: { id: uuid(), taskId: task.id, kind: "location", location: place, at: "2099-03-05T10:00:00+03:00", firedAt: 1000, updatedAt: 1000 },
+      },
+    ]);
+
+    expect(value(await assistant.completeTask(userId, task.id)).status).toBe("done");
+    const [next, ...more] = value(await assistant.listTasks(userId, {}));
+    expect(more).toEqual([]);
+    expect(next).toMatchObject({
+      title: "المراجعة الأسبوعية",
+      status: "todo",
+      due: { date: "2099-03-12", time: "09:00" },
+      start: { date: "2099-03-11" },
+      recurrence: "FREQ=WEEKLY;BYDAY=TH;COUNT=2",
+      completedAt: null,
+    });
+    const { results } = await env.DB.prepare(
+      `SELECT kind, at, offset_minutes, fired_at FROM reminders WHERE task_id = ? AND user_id = ? ORDER BY kind`,
+    )
+      .bind(next!.id, userId)
+      .all();
+    expect(results).toEqual([
+      { kind: "location", at: "2099-03-12T10:00:00+03:00", offset_minutes: null, fired_at: null },
+      { kind: "relative", at: null, offset_minutes: 0, fired_at: null },
+      { kind: "time", at: "2099-03-12T08:00:00+03:00", offset_minutes: null, fired_at: null },
+    ]);
+
+    // Completing it again, or reopening and completing it, adds nothing more.
+    value(await assistant.completeTask(userId, task.id));
+    value(await assistant.updateTask(userId, task.id, { status: "todo" }));
+    value(await assistant.updateTask(userId, task.id, { status: "done" }));
+    expect(value(await assistant.listTasks(userId, {})).map((t) => t.id)).toEqual([next!.id]);
+
+    // The last of the series adds none.
+    value(await assistant.updateTask(userId, next!.id, { status: "done" }));
+    const [last] = value(await assistant.listTasks(userId, {}));
+    expect(last).toMatchObject({ due: { date: "2099-03-19" }, recurrence: "FREQ=WEEKLY;BYDAY=TH;COUNT=1" });
+    value(await assistant.completeTask(userId, last!.id));
+    expect(value(await assistant.listTasks(userId, {}))).toEqual([]);
+  });
+
+  it("schedules an overdue repeating task's next occurrence from today", async () => {
+    const { userId } = await signIn();
+    const task = value(await assistant.createTask(userId, { title: "سقي الزرع", dueDate: "2026-01-01", recurrence: "FREQ=DAILY" }));
+    value(await assistant.completeTask(userId, task.id));
+    const [next] = value(await assistant.listTasks(userId, {}));
+    expect(next).toMatchObject({ title: "سقي الزرع", due: { date: dayIn("Asia/Riyadh") }, recurrence: "FREQ=DAILY" });
+  });
+
+  it("answers a completion as done when adding the next occurrence fails", async () => {
+    const { userId } = await signIn();
+    const task = value(await assistant.createTask(userId, { title: "سقي الزرع", recurrence: "FREQ=DAILY" }));
+    // D1 fails once the copy is written, on the reminders to move onto it.
+    const db = {
+      prepare: (sql: string) => {
+        if (sql.includes("FROM reminders WHERE task_id = ? AND user_id = ?")) throw new Error("D1 is unavailable");
+        return env.DB.prepare(sql);
+      },
+      batch: (statements: D1PreparedStatement[]) => env.DB.batch(statements),
+    } as Partial<D1Database> as D1Database;
+    const failing = new Assistant({ ...env, DB: db }, { apple: testAppleKeys, google: testGoogleKeys });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(value(await failing.completeTask(userId, task.id)).status).toBe("done");
+      expect(logged).toHaveBeenCalledWith("assistant: could not add the next occurrence", expect.any(Error));
+    } finally {
+      logged.mockRestore();
+    }
+    const stored = await env.DB.prepare(`SELECT status FROM tasks WHERE id = ?`).bind(task.id).first<{ status: string }>();
+    expect(stored!.status).toBe("done");
   });
 
   it("keeps users apart and validates input", async () => {

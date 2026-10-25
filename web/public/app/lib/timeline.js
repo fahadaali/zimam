@@ -5,7 +5,7 @@
 // directions. Only the pointer, which the browser reports in physical pixels from the left, needs
 // the direction (dayAtPointer, pointerDelta).
 // Pure functions, no DOM; tested in test/timeline.test.mjs.
-import { addDays, dayDiff, parseIsoDate } from "./dates.js";
+import { addDays, dayDiff } from "./dates.js";
 import { calendarParts, monthYear, otherKind, weekday } from "./calendar.js";
 import { arabicNumber } from "./numbers.js";
 import { spanFields, taskSpan } from "./spans.js";
@@ -185,13 +185,3 @@ export function groupRows(tasks, groups, groupOf, { undated = true } = {}) {
   };
   return groups.map((g) => ({ id: g.id, name: g.name, tasks: buckets.get(g.id).sort(order) })).filter((g) => g.tasks.length);
 }
-
-/** Whether `iso` is a real day inside the range. */
-export const inRange = (iso, { from, to }) => {
-  try {
-    parseIsoDate(iso);
-  } catch {
-    return false;
-  }
-  return iso >= from && iso <= to;
-};

@@ -249,10 +249,12 @@
   transition: background-color var(--duration-complete) ease;
 }
 
-/* The task title opens its details; it keeps the body style and grows to a 44px target. */
+/* The task title opens its details; it keeps the body style and grows to a 44px target, in compact
+   rows too (board, matrix, timeline), whose shorter line would leave it 40px. */
 .zm-task-open {
   display: block;
   inline-size: 100%;
+  min-block-size: var(--space-11);
   margin-block: calc(var(--space-2) * -1);
   padding-block: var(--space-2);
   padding-inline: 0;
@@ -349,10 +351,6 @@
   align-items: center;
 }
 
-.inbox-link {
-  margin-block-start: var(--space-4);
-}
-
 .search-form {
   display: flex;
   flex-direction: column;
@@ -441,10 +439,6 @@ legend {
   flex-direction: column;
   gap: var(--space-2);
   margin-block-start: var(--space-2);
-}
-
-.minutes {
-  inline-size: calc(var(--space-11) * 2);
 }
 
 .choices {

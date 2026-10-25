@@ -347,7 +347,10 @@ export interface PendingRow {
   used_at: number | null;
 }
 
-/** Deletes used and expired pending records: a used one only answers 410 until its time is up. */
+/**
+ * Deletes expired pending records, used ones too once their 10 minutes are up; until then a used
+ * one answers 410. Runs at start and at the callback, not at the confirm.
+ */
 const sweepPending = (db: D1Database, now: number) => db.prepare(`DELETE FROM import_oauth_pending WHERE expires_at < ?`).bind(now);
 
 /**

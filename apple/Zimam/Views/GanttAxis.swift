@@ -61,11 +61,6 @@ struct GanttAxis: View {
     /// Consecutive days of the same month in `kind`, with «جمادى الأولى ١٤٤٨هـ».
     private func segments(_ days: [GanttAxisDay], in kind: CalendarKind) -> [GanttMonthSegment] {
         let calendar = self.calendar(kind)
-        let names = DateFormatter()
-        names.calendar = calendar
-        names.locale = formatter.locale
-        names.timeZone = formatter.timeZone
-        names.dateFormat = "MMMM y"
         var result: [GanttMonthSegment] = []
         var key: DateComponents?
         for day in days {
@@ -74,7 +69,7 @@ struct GanttAxis: View {
                 result.append(GanttMonthSegment(id: last.id, count: last.count + 1, title: last.title))
             } else {
                 key = month
-                result.append(GanttMonthSegment(id: day.id, count: 1, title: names.string(from: day.date) + kind.yearSuffix))
+                result.append(GanttMonthSegment(id: day.id, count: 1, title: "\(formatter.monthName(day.date, in: kind)) \(formatter.yearTitle(day.date, in: kind))"))
             }
         }
         return result

@@ -19,7 +19,10 @@ const SPAN = 30;
  * announce, errorText, onChange() } — onChange redraws the view once the times arrive or change.
  */
 export function createPrayers(ctx) {
-  let cache = { key: null, days: [], timeZone: null, location: null, loading: null };
+  const empty = () => ({ key: null, days: [], timeZone: null, location: null, loading: null });
+  let cache = empty();
+  /** Bumped by forget(): an answer for the account that signed out is dropped. */
+  let generation = 0;
 
   const keyOf = () => {
     const s = ctx.me()?.settings ?? {};
@@ -31,16 +34,27 @@ export function createPrayers(ctx) {
     const key = keyOf();
     if (!force && (cache.key === key || cache.loading)) return cache.loading ?? Promise.resolve();
     const from = ctx.today();
+    const gen = generation;
     cache.loading = request("GET", `/v1/prayers?from=${from}&to=${addDays(from, SPAN)}`)
       .then((answer) => {
+        if (gen !== generation) return;
         const changed = JSON.stringify(answer.days) !== JSON.stringify(cache.days);
         cache = { key, days: answer.days ?? [], timeZone: answer.timeZone, location: answer.location, loading: null };
         if (changed) ctx.onChange();
       })
       .catch(() => {
-        cache.loading = null; // an older server without the route, or offline: phrases stay
+        if (gen === generation) cache.loading = null; // an older server without the route, or offline: phrases stay
       });
     return cache.loading;
+  }
+
+  /**
+   * Forgets the times read for the account that signed out (main.js forgetAccount): they come from
+   * its location, so the next account's chips and line wait for its own.
+   */
+  function forget() {
+    generation++;
+    cache = empty();
   }
 
   const hasLocation = () => !!ctx.me()?.settings?.location;
@@ -246,5 +260,5 @@ export function createPrayers(ctx) {
     );
   }
 
-  return { load, chipFor, nextLine, openSheet, hasLocation };
+  return { load, forget, chipFor, nextLine, openSheet, hasLocation };
 }

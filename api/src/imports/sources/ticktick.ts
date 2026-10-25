@@ -1,5 +1,6 @@
 import { csvRecords, parseCsv } from "../csv";
-import { cleanRrule, durationMs, isoWithOffset, isTimeZone, localToInstant, parseDateText } from "../dates";
+import { durationMs, isoWithOffset, isTimeZone, localToInstant, parseDateText } from "../dates";
+import { zimamRule } from "../recurrence";
 import {
   addNote,
   fitName,
@@ -117,7 +118,7 @@ export function parseTickTickCsv(text: string, ctx: ParseContext): ImportBundle 
     let recurrence: string | null = null;
     const repeat = get("repeat");
     if (repeat) {
-      recurrence = cleanRrule(repeat);
+      recurrence = when ? zimamRule(repeat, when.date) : null;
       if (!recurrence) {
         notes = addNote(notes, `التكرار في TickTick: ${repeat}`);
         warnings.add("recurrenceKept");

@@ -32,6 +32,13 @@ async function usage(userId: string) {
     .first<{ requests: number; input_tokens: number; output_tokens: number }>();
 }
 
+async function failures(userId: string) {
+  const row = await env.DB.prepare(`SELECT failed_requests FROM ai_usage WHERE user_id = ? AND month = ?`)
+    .bind(userId, monthOf(new Date()))
+    .first<{ failed_requests: number }>();
+  return row?.failed_requests ?? 0;
+}
+
 async function createProject(token: string, name: string): Promise<string> {
   const res = await call("POST", "/v1/projects", { token, body: { name } });
   return res.body.id as string;
@@ -150,7 +157,21 @@ describe("POST /v1/assistant/parse", () => {
     expect(res.body.dueDate > "2026-10-13").toBe(true);
   });
 
-  it("returns 503 without counting usage when the model's answer is unusable", async () => {
+  it("leaves a task undated, without its prayer or time, when the Hijri date does not exist", async () => {
+    const { token } = await signIn();
+    // Ramadan 1448 has 29 days in Umm al-Qura.
+    expect(dayOfHijri({ year: 1448, month: 9, day: 30 }, "2026-10-13")).toBeNull();
+    fakeAi.answer(suggestion({ title: "الاتصال بأبي", dueHijri: { year: null, month: 9, day: 30 }, duePrayer: "maghrib" }));
+    let res = await call("POST", "/v1/assistant/parse", { token, body: { text: "ذكرني أتصل بأبي ٣٠ رمضان بعد المغرب", now: NOW } });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ title: "الاتصال بأبي", priority: "none", tags: [] });
+
+    fakeAi.answer(suggestion({ title: "الاتصال بأبي", dueHijri: { year: null, month: 9, day: 30 }, dueTime: "17:00" }));
+    res = await call("POST", "/v1/assistant/parse", { token, body: { text: "ذكرني أتصل بأبي ٣٠ رمضان الساعة ٥", now: NOW } });
+    expect(res.body).toEqual({ title: "الاتصال بأبي", priority: "none", tags: [] });
+  });
+
+  it("returns 503 and gives the request back when the model's answer is unusable", async () => {
     const { token, userId } = await signIn();
     const body = { text: "مهمة", now: NOW };
 
@@ -171,7 +192,14 @@ describe("POST /v1/assistant/parse", () => {
     expect(res.body.error.code).toBe("ai_unavailable");
 
     expect(fakeAi.requests).toHaveLength(4);
-    expect(await usage(userId)).toBeNull();
+    // None used the quota, but each was paid for, so each counts as failed.
+    expect(await usage(userId)).toMatchObject({ requests: 0 });
+    expect(await failures(userId)).toBe(4);
+
+    // No model answered (unreachable, an HTTP error): given back, and not a failure either.
+    fakeAi.fail(new AiError("Provider returned 503: overloaded", false));
+    expect((await call("POST", "/v1/assistant/parse", { token, body })).status).toBe(503);
+    expect(await failures(userId)).toBe(4);
   });
 
   it("rejects bad input and requires sign-in", async () => {
@@ -208,6 +236,34 @@ describe("monthly quota", () => {
     await env.DB.prepare(`INSERT INTO ai_usage (user_id, month, requests) VALUES (?, '2020-01', 1000)`).bind(other.userId).run();
     fakeAi.answer(suggestion());
     expect((await call("POST", "/v1/assistant/parse", { token: other.token, body: { text: "مهمة" } })).status).toBe(200);
+  });
+
+  it("lets only one of the requests sent together at the limit through", async () => {
+    const { token, userId } = await signIn();
+    await env.DB.prepare(`INSERT INTO ai_usage (user_id, month, requests) VALUES (?, ?, ?)`)
+      .bind(userId, monthOf(new Date()), 299)
+      .run();
+    for (let i = 0; i < 5; i++) fakeAi.answer(suggestion());
+    const responses = await Promise.all(
+      Array.from({ length: 5 }, () => call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" } })),
+    );
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 429, 429, 429, 429]);
+    expect(fakeAi.requests).toHaveLength(1);
+    expect((await usage(userId))!.requests).toBe(300);
+  });
+
+  it("closes the month once as many paid-for requests failed as the limit allows", async () => {
+    const { token, userId } = await signIn();
+    const vars = { AI_MONTHLY_LIMIT_PRO: "2" };
+    for (let i = 0; i < 2; i++) {
+      fakeAi.answer(suggestion({ title: "🙂" }));
+      expect((await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" }, env: vars })).status).toBe(503);
+    }
+    expect(await usage(userId)).toMatchObject({ requests: 0 });
+    const res = await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" }, env: vars });
+    expect(res.status).toBe(429);
+    expect(res.body.error).toMatchObject({ code: "ai_quota_exceeded", limit: 2 });
+    expect(fakeAi.requests).toHaveLength(2);
   });
 
   it("gives everyone the pro limit while plans are not enforced", async () => {
@@ -295,7 +351,8 @@ describe("POST /v1/assistant/breakdown", () => {
     fakeAi.answer({ subtasks: ["جمع البيانات", "جمع البيانات", "كتابة التقرير"] });
     const res = await call("POST", "/v1/assistant/breakdown", { token, body: { taskId: task } });
     expect(res.status).toBe(503);
-    expect(await usage(userId)).toBeNull();
+    expect(await usage(userId)).toMatchObject({ requests: 0 });
+    expect(await failures(userId)).toBe(1);
   });
 });
 

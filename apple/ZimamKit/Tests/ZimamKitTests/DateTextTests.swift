@@ -10,6 +10,7 @@ final class DateTextTests {
 
     @Test func hijriAndGregorianUseArabicDigits() {
         #expect(formatter.hijri(tuesday) == "٢ جمادى الأولى")
+        #expect(formatter.hijri(tuesday, withYear: true) == "٢ جمادى الأولى ١٤٤٨هـ")
         #expect(formatter.gregorian(tuesday) == "١٣ أكتوبر")
     }
 

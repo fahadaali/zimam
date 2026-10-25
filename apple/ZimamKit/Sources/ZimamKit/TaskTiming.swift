@@ -68,6 +68,45 @@ public enum TaskTiming {
         }
     }
 
+    /// A usual time for each prayer, in minutes after midnight: close enough to order a day's tasks
+    /// by when there is no place (the web's `USUAL_PRAYER_MINUTE` in lib/calendar.js).
+    public static func usualMinute(of prayer: Prayer) -> Int {
+        switch prayer {
+        case .fajr: 5 * 60
+        case .dhuhr: 12 * 60
+        case .asr: 15 * 60
+        case .maghrib: 18 * 60
+        case .isha: 19 * 60 + 30
+        }
+    }
+
+    /// Minutes after midnight, to order a day's tasks: nil all day, the clock time, or the prayer's
+    /// time with its offset. `prayerTimes` are the day's (`PrayerSchedule.times(on:)`), passed in so a
+    /// day's list solves them once; without them a prayer takes its usual time.
+    public static func minuteOfDay(_ mode: TaskTimeMode, prayerTimes: [Prayer: Date]?, timeZone: TimeZone) -> Int? {
+        switch mode {
+        case .allDay:
+            return nil
+        case .clock(let hhmm):
+            return clockParts(hhmm).map { $0.hour * 60 + $0.minute }
+        case .prayer(let prayer, let offset):
+            guard let time = prayerTimes?[prayer] else { return usualMinute(of: prayer) + offset }
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = timeZone
+            let parts = calendar.dateComponents([.hour, .minute], from: time.addingTimeInterval(TimeInterval(offset * 60)))
+            return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+        }
+    }
+
+    /// The same on `day` ("2026-11-20"), solving that day's prayer times when the task needs them.
+    public static func minuteOfDay(_ mode: TaskTimeMode, on day: String?, schedule: PrayerSchedule?,
+                                   formatter: DualDateFormatter) -> Int? {
+        let times: [Prayer: Date]? = mode.prayer == nil ? nil : day
+            .flatMap(formatter.date(fromDay:))
+            .flatMap { start in schedule?.times(on: start.addingTimeInterval(12 * 3600)) }
+        return minuteOfDay(mode, prayerTimes: times, timeZone: formatter.timeZone)
+    }
+
     /// The clock time to show for a task with a time: on its due day, or today when it has none
     /// (a prayer-anchored task without a day repeats every day). Nil for an all-day task.
     public static func shownTime(of mode: TaskTimeMode, dueDay: String?, schedule: PrayerSchedule?,

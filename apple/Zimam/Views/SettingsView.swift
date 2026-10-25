@@ -85,7 +85,7 @@ struct SettingsView: View {
                             SettingsAccountSection(
                                 isDeletingAccount: isDeletingAccount,
                                 deleteFailed: deleteFailed,
-                                onSignOut: { signOut() },
+                                onSignOut: { dismiss() },
                                 onDeleteAccount: { deleteAccount() }
                             )
                         }
@@ -103,7 +103,7 @@ struct SettingsView: View {
                 }
             }
             .task { await notifications.refreshStatus() }
-            .task { await subscriptions.refresh(signedIn: session.isSignedIn) }
+            .task { await subscriptions.refresh(signedIn: session.isSignedIn, userId: session.user?.id) }
         }
         #if os(macOS)
         .frame(minWidth: ZimamSpacing.space8 * 14, minHeight: ZimamSpacing.space8 * 18)
@@ -118,16 +118,6 @@ struct SettingsView: View {
             let saved = await session.updateSettings(updated)
             saveFailed = !saved
             notifications.reschedule()
-        }
-    }
-
-    /// Closes the settings sheet itself (this view's `dismiss`), not the page the button is on.
-    private func signOut() {
-        dismiss()
-        subscriptions.signedOut()
-        Task {
-            await session.signOut()
-            sync.reset()
         }
     }
 

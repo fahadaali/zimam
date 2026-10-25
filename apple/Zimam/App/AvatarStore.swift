@@ -46,9 +46,9 @@ final class AvatarStore {
     /// Crops the picked image to a square of `AvatarImage.side` and uploads it. False when the image
     /// could not be read or the server could not be reached.
     func upload(_ original: Data, session: SessionStore) async -> Bool {
-        guard let jpeg = AvatarImage.squareJPEG(from: original) else { return false }
         isSaving = true
         defer { isSaving = false }
+        guard let jpeg = await Self.squareJPEG(original) else { return false }
         do {
             let user = try await session.api.uploadAvatar(jpeg: jpeg)
             session.setUser(user)
@@ -57,6 +57,11 @@ final class AvatarStore {
         } catch {
             return false
         }
+    }
+
+    /// Decodes and scales the photo off the main actor: a full-size camera photo takes a moment.
+    @concurrent nonisolated private static func squareJPEG(_ original: Data) async -> Data? {
+        AvatarImage.squareJPEG(from: original)
     }
 
     func remove(session: SessionStore) async -> Bool {

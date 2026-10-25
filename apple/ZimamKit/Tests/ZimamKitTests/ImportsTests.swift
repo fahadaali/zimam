@@ -352,4 +352,26 @@ struct AppleRemindersImportTests {
         #expect(task.notes?.contains("https://zimam.work") ?? false)
         #expect(task.notes?.contains("لا يدعمها زمام") ?? false)
     }
+
+    /// A vowelled title counts its marks on the server: 300 letters with a damma each are 600
+    /// code points, over the 500 a title may have, so it is cut, between whole letters, and kept
+    /// in full in the notes.
+    @Test func vowelledTitlesAreCutAsTheServerCounts() {
+        let vowelled = String(repeating: "مُ", count: 300)
+        #expect(vowelled.count == 300)
+        let items = [AppleRemindersImport.Item(externalId: "r1", listId: "L1", title: vowelled)]
+        let plan = AppleRemindersImport.plan(items: items, lists: [home], knownTasks: [:], knownProjects: [:], timeZone: riyadh, now: now)
+        let task = plan.tasks[0]
+        #expect(task.title.unicodeScalars.count <= ServerText.maxTitle)
+        #expect(task.title == String(repeating: "مُ", count: 250))
+        #expect(task.notes?.hasPrefix(vowelled) ?? false)
+    }
+
+    @Test func serverTextCutsWholeCharacters() {
+        #expect(ServerText.clip("زمام", to: 10) == "زمام")
+        // A flag is two code points (four UTF-16 units): it fits whole or not at all.
+        #expect(ServerText.clip("أ🇸🇦", to: 4) == "أ")
+        #expect(ServerText.clip("أ🇸🇦", to: 5) == "أ🇸🇦")
+        #expect(ServerText.exceeds(String(repeating: "بِ", count: 251), ServerText.maxTitle))
+    }
 }

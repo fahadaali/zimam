@@ -7,7 +7,7 @@ import ZimamKit
 /// day numbers, today ringed, and each day's tasks as chips with their time over the title; tasks
 /// over several days are bars across them.
 struct WeekWidget: Widget {
-    static let kind = "app.zimam.week"
+    static let kind = ZimamShared.WidgetKind.week
 
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: Self.kind, intent: CalendarWidgetConfiguration.self, provider: CalendarWidgetProvider()) { entry in

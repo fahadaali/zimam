@@ -91,7 +91,7 @@ struct PriorityFlag: View {
             Image(systemName: "flag.fill")
                 .font(ZimamType.caption)
                 .foregroundStyle(color)
-                .accessibilityLabel(label)
+                .accessibilityLabel(priority.spokenLabel ?? "")
         }
     }
 
@@ -102,12 +102,16 @@ struct PriorityFlag: View {
         default: ZimamColor.priorityLow
         }
     }
+}
 
-    private var label: String {
-        switch priority {
+extension TaskPriority {
+    /// The flag's spoken text, also read on a kanban card; nil for no priority.
+    var spokenLabel: String? {
+        switch self {
+        case .none: nil
         case .high: "أولوية عالية"
         case .medium: "أولوية متوسطة"
-        default: "أولوية منخفضة"
+        case .low: "أولوية منخفضة"
         }
     }
 }

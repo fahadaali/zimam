@@ -8,7 +8,7 @@ import ZimamKit
 /// time or day and a completion circle, and «+n أخرى» for the rest. Four of them side by side make
 /// the whole matrix.
 struct MatrixWidget: Widget {
-    static let kind = "app.zimam.matrix"
+    static let kind = ZimamShared.WidgetKind.matrix
 
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: Self.kind, intent: MatrixWidgetConfiguration.self, provider: MatrixProvider()) { entry in
@@ -79,7 +79,7 @@ struct MatrixProvider: AppIntentTimelineProvider {
         let entries = snapshot.entryDates(now: now, atTaskTimes: true).map {
             MatrixEntry(date: $0, snapshot: snapshot, quadrant: configuration.quadrant.quadrant)
         }
-        return Timeline(entries: entries, policy: .after(snapshot.nextMidnight))
+        return Timeline(entries: entries, policy: .after(snapshot.reloadDate(now: now)))
     }
 }
 
@@ -125,6 +125,8 @@ struct MatrixWidgetView: View {
             }
         }
         .zimamWidget(padding: ZimamSpacing.space2)
+        // Outside a task's title, a tap opens «المصفوفة» rather than the last screen.
+        .widgetURL(AppLink.matrix.url)
     }
 
     /// The quadrant's open tasks: dated ones first by day and time, then by priority and the

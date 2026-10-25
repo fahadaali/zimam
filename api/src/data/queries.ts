@@ -6,6 +6,8 @@ import { Id } from "./schemas";
 export const TaskQuery = z.object({
   /** A project id, or "inbox" for tasks outside any project. */
   projectId: z.union([z.literal("inbox"), Id]).optional(),
+  /** The subtasks of one task. */
+  parentId: Id.optional(),
   /** "open" means todo or doing. */
   status: z.enum(["todo", "doing", "done", "open"]).optional(),
   dueFrom: z.iso.date().optional(),
@@ -32,6 +34,7 @@ export async function listTasks(db: D1Database, userId: string, q: TaskQuery): P
   };
   if (q.projectId === "inbox") where.push("t.project_id IS NULL");
   else if (q.projectId) where.push(`t.project_id = ${bind(q.projectId)}`);
+  if (q.parentId) where.push(`t.parent_id = ${bind(q.parentId)}`);
   if (q.status === "open") where.push("t.status != 'done'");
   else if (q.status) where.push(`t.status = ${bind(q.status)}`);
   if (q.dueFrom) where.push(`t.due_date >= ${bind(q.dueFrom)}`);

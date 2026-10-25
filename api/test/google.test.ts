@@ -9,6 +9,7 @@ import {
   call,
   GOOGLE_WEB_CLIENT,
   googleToken,
+  TEST_NONCE,
   testAppleKeys,
   testGoogleKeys,
   uuid,
@@ -17,11 +18,11 @@ import {
 const email = () => `person-${uuid()}@gmail.com`;
 
 async function google(sub: string, options: Parameters<typeof googleToken>[1] = {}, extra: Record<string, unknown> = {}) {
-  return call("POST", "/v1/auth/google", { body: { idToken: await googleToken(sub, options), ...extra } });
+  return call("POST", "/v1/auth/google", { body: { idToken: await googleToken(sub, options), nonce: TEST_NONCE, ...extra } });
 }
 
 async function apple(sub: string, options: Parameters<typeof appleToken>[1] = {}) {
-  return call("POST", "/v1/auth/apple", { body: { identityToken: await appleToken(sub, options) } });
+  return call("POST", "/v1/auth/apple", { body: { identityToken: await appleToken(sub, options), nonce: TEST_NONCE } });
 }
 
 const userId = (res: { body: { user: { id: string } } }) => res.body.user.id;
@@ -83,24 +84,25 @@ describe("Sign in with Google", () => {
     expect((await google(`g-${uuid()}`, { key: privateKey })).status).toBe(401);
     // An Apple token never passes as a Google one.
     const appleSigned = await appleToken(`a-${uuid()}`, { audience: GOOGLE_WEB_CLIENT });
-    expect((await call("POST", "/v1/auth/google", { body: { idToken: appleSigned } })).status).toBe(401);
+    expect((await call("POST", "/v1/auth/google", { body: { idToken: appleSigned, nonce: TEST_NONCE } })).status).toBe(401);
   });
 
-  it("checks the nonce when the client sends one", async () => {
+  it("requires the nonce and checks it", async () => {
     const idToken = await googleToken(`g-${uuid()}`, { nonce: "n-123" });
     expect((await call("POST", "/v1/auth/google", { body: { idToken, nonce: "n-123" } })).status).toBe(200);
     expect((await call("POST", "/v1/auth/google", { body: { idToken, nonce: "other" } })).status).toBe(401);
-    const without = await googleToken(`g-${uuid()}`);
+    expect((await call("POST", "/v1/auth/google", { body: { idToken } })).status).toBe(400);
+    const without = await googleToken(`g-${uuid()}`, { nonce: null });
     expect((await call("POST", "/v1/auth/google", { body: { idToken: without, nonce: "n-123" } })).status).toBe(401);
   });
 
   it("requires an ID token", async () => {
-    expect((await call("POST", "/v1/auth/google", { body: {} })).status).toBe(400);
+    expect((await call("POST", "/v1/auth/google", { body: { nonce: TEST_NONCE } })).status).toBe(400);
   });
 
   it("answers 503 google_unavailable when no client ID is configured", async () => {
     const res = await call("POST", "/v1/auth/google", {
-      body: { idToken: await googleToken(`g-${uuid()}`) },
+      body: { idToken: await googleToken(`g-${uuid()}`), nonce: TEST_NONCE },
       env: { GOOGLE_CLIENT_IDS: "" },
     });
     expect(res.status).toBe(503);

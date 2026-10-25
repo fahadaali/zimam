@@ -105,7 +105,7 @@ struct PrayerAlertSection: View {
                 .frame(minHeight: ZimamSpacing.space11)
             if alert.iqama {
                 Stepper(value: $alert.iqamaMinutes, in: PrayerAlert.iqamaRange, step: 5) {
-                    Text("بعد الأذان بـ\(minutes(alert.iqamaMinutes)) دقيقة")
+                    Text("بعد الأذان بـ\(ArabicCount.minutes(alert.iqamaMinutes, locale: ZimamLocale.current))")
                 }
                 .frame(minHeight: ZimamSpacing.space11)
             }
@@ -114,38 +114,66 @@ struct PrayerAlertSection: View {
         }
         .disabled(session.user == nil)
     }
+}
 
-    private func minutes(_ value: Int) -> String {
-        value.formatted(.number.locale(ZimamLocale.current).grouping(.never))
+extension ArabicCount {
+    /// «٥ دقائق»، «١٠ دقائق»، «١٥ دقيقة»: the iqama wait (`PrayerAlert.iqamaRange`, 5...60), after «بـ».
+    /// One and two are left out: after «بـ» they would read «بدقيقة» and «بدقيقتين».
+    static func minutes(_ count: Int, locale: Locale) -> String {
+        let number = count.formatted(.number.locale(locale).grouping(.never))
+        switch count % 100 {
+        case 3...10: return "\(number) دقائق"
+        default: return "\(number) دقيقة"
+        }
     }
 }
 
-/// Prayer times in Claude and ChatGPT: shares the city-level place with the server when on.
+/// Prayer times in Claude and ChatGPT: shares the city-level place with the server when on. The
+/// switch is the account's (a location in its settings), so every device and the web agree, and
+/// the place follows the device in use.
 struct PrayerShareSection: View {
     @Environment(SessionStore.self) private var session
     @Environment(LocationProvider.self) private var location
-    @AppStorage(SessionStore.shareLocationKey) private var shareLocation = false
+    /// What the switch was just set to, until the account says so (or the save failed).
+    @State private var pending: Bool?
 
     init() {}
 
+    private var isSharing: Bool { pending ?? session.sharesPlace }
+
+    private var isOn: Binding<Bool> {
+        Binding(get: { isSharing }, set: { share($0) })
+    }
+
+    /// Turning it on needs this device's place.
+    private var canTurnOn: Bool { location.coordinate != nil }
+
     var body: some View {
         Section {
-            Toggle("أوقات الصلاة في كلود وChatGPT", isOn: $shareLocation)
+            Toggle("أوقات الصلاة في كلود وChatGPT", isOn: isOn)
                 .frame(minHeight: ZimamSpacing.space11)
-                .onChange(of: shareLocation) { _, _ in
-                    sharePlace()
-                }
+                .disabled(session.user == nil || (!isSharing && !canTurnOn))
         } footer: {
-            Text(shareLocation
-                 ? "تُحسب الأوقات على جهازك، ويُحفظ في خادم زمام موقع تقريبي على مستوى المدينة لتظهر الأوقات في جدولك عند كلود وChatGPT."
-                 : "تُحسب الأوقات على جهازك، ولا يُرسل موقعك إلى أي خادم.")
+            Text(footer)
         }
     }
 
-    private func sharePlace() {
+    private var footer: String {
+        if isSharing {
+            return "تُحسب الأوقات على جهازك، ويُحفظ في خادم زمام موقع تقريبي على مستوى المدينة لتظهر الأوقات في جدولك عند كلود وChatGPT. يسري الاختيار على حسابك في كل أجهزتك."
+        }
+        if !canTurnOn {
+            return "تُحسب الأوقات على جهازك، ولا يُرسل موقعك إلى أي خادم. حدّد موقعك أولاً لتفعيله."
+        }
+        return "تُحسب الأوقات على جهازك، ولا يُرسل موقعك إلى أي خادم."
+    }
+
+    private func share(_ on: Bool) {
+        pending = on
         Task {
             await session.sharePlace(latitude: location.coordinate?.latitude,
-                                     longitude: location.coordinate?.longitude)
+                                     longitude: location.coordinate?.longitude, share: on)
+            pending = nil
         }
     }
 }

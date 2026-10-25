@@ -126,6 +126,11 @@ members.post("/:id/invites", async (c) => {
   // Sharing a folder would not share the projects inside it.
   const project = await loadVisible(c, "project", me.projectId);
   if (project?.kind !== "project") return fail(c, 400, "invalid", "Only projects can be shared");
+  // A folder turned back into a project still holding projects (the owner's, unshared) is one too.
+  const holds = await c.env.DB.prepare(`SELECT 1 FROM projects WHERE parent_id = ? AND deleted_at IS NULL LIMIT 1`)
+    .bind(me.projectId)
+    .first();
+  if (holds) return fail(c, 400, "invalid", "A project that holds projects cannot be shared");
 
   const code = randomToken();
   const id = crypto.randomUUID();

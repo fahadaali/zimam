@@ -94,7 +94,10 @@ code {
   inset: calc((100% - var(--space-11)) / 2);
 }
 
-.visually-hidden:where(:not(:focus-within, :active)) {
+/* `visually-hidden` shows again while it has focus (the skip links); `sr-only` stays hidden even
+   then, for a heading that takes focus only so screen readers land on it (the open task's title). */
+.visually-hidden:where(:not(:focus-within, :active)),
+.sr-only {
   position: absolute !important;
   clip-path: inset(50%) !important;
   overflow: hidden !important;

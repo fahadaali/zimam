@@ -61,6 +61,11 @@ struct TaskRecurrenceSection: View {
                 Text(current.arabicDescription(locale: formatter.locale))
                     .font(ZimamType.caption)
                     .foregroundStyle(ZimamColor.inkMuted)
+            } else if choice == .custom {
+                // A rule from elsewhere (Claude, an import) with days Zimam cannot follow (`Recurrence`).
+                Text("تكرار لا يتبعه زمام، فلا تُضاف المهمة التالية عند الإنجاز.")
+                    .font(ZimamType.caption)
+                    .foregroundStyle(ZimamColor.inkMuted)
             }
         }
     }
@@ -81,15 +86,19 @@ struct TaskRecurrenceSection: View {
         let current = rule
         var interval = 1
         var weekdays: [Weekday] = []
+        var same: Recurrence?
         if let current, current.frequency == frequency {
             interval = current.interval
             weekdays = current.weekdays
+            same = current
         }
         if frequency == .weekly && weekdays.isEmpty {
             weekdays = [defaultWeekday]
         }
+        // The same frequency again keeps the series' day of the month (`BYMONTHDAY`).
         let updated = Recurrence(frequency: frequency, interval: interval, weekdays: weekdays,
-                                 count: current?.count, until: current?.until)
+                                 count: current?.count, until: current?.until,
+                                 monthDay: same?.monthDay, month: same?.month)
         store.update(task) { item in item.recurrence = updated.rrule }
     }
 

@@ -13,32 +13,6 @@
   margin-block-end: var(--space-6);
 }
 
-/* Draft notice at the top of the legal pages until the owner and a lawyer approve them. */
-.draft-notice {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  margin-block-end: var(--space-6);
-  padding: var(--space-4);
-  border: 1px solid var(--line-strong);
-  border-inline-start: var(--space-1) solid var(--priority-high);
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-}
-
-.draft-notice strong {
-  color: var(--priority-high);
-}
-
-/* A placeholder the owner fills before publishing, such as the contact email. */
-.placeholder {
-  padding-inline: var(--space-1);
-  border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
-  color: var(--ink);
-  font-weight: 600;
-}
-
 .toc {
   margin-block-end: var(--space-8);
 }

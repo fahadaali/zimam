@@ -5,7 +5,8 @@ import ZimamKit
 /// The calendar: a month (or a week) in Hijri or Gregorian, each day with the other calendar's
 /// day under it and dots for the open tasks due that day; a task that spans days is a bar from its
 /// start day to its due day, under the week (`SpanLanes`). The selected day's tasks show under the
-/// grid on iPhone and beside it on iPad and Mac. A task dragged onto a day moves there, keeping its
+/// grid on iPhone and beside it on iPad and Mac, under it there too when the screen is too narrow
+/// for both (the inspector open beside it, a narrow window). A task dragged onto a day moves there, keeping its
 /// time or prayer anchor; «نقل إلى…» in its context menu does the same with a date picker.
 struct CalendarView: View {
     enum Mode: Hashable { case month, week }
@@ -16,6 +17,7 @@ struct CalendarView: View {
     @Environment(SessionStore.self) private var session
     @Environment(LocationProvider.self) private var location
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.calendarDayChanged) private var calendarDayChanged
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -36,13 +38,18 @@ struct CalendarView: View {
     /// «أحداث التقويم»: its settings sheet, and the event whose details are open.
     @State private var showingEventSettings = false
     @State private var openEvent: ShownEvent?
+    /// The width the screen gets, which decides whether the day's list fits beside the month.
+    @State private var width: CGFloat = .infinity
 
     init() {}
 
     var body: some View {
-        let collected = tasksByDay()
+        // The days on screen, once per render: the grid, the tasks and the events all use them.
+        let days = visibleDays
+        let collected = tasksByDay(days)
         let names = projectNames(projects)
-        content(byDay: collected.byDay, spans: collected.spans, names: names, events: visibleEvents())
+        content(byDay: collected.byDay, spans: collected.spans, names: names, events: visibleEvents(days), days: days)
+            .onGeometryChange(for: CGFloat.self) { proxy in proxy.size.width } action: { width = $0 }
             .background(ZimamColor.surface)
             .overlay(alignment: .bottomTrailing) { AddTaskButton { showingAdd = true } }
             .sheet(isPresented: $showingAdd) { addTaskSheet }
@@ -93,21 +100,29 @@ struct CalendarView: View {
                 selectedDay = day
                 PlaceOpener.shared.pending = nil
             }
+            // A new day (DayClock) moves a selection that was on today; a day picked on purpose stays.
+            .onChange(of: today) { old, new in
+                if selectedDay == old { selectedDay = new }
+            }
+            // The menu's «مهمة جديدة» (⌘N) adds on the selected day too (MainView).
+            .onChange(of: selectedDay, initial: true) { _, day in
+                calendarDayChanged?(day)
+            }
     }
 
     // MARK: Layout
 
     @ViewBuilder
     private func content(byDay: [String: [TaskItem]], spans: [SpanItem], names: [UUID: String],
-                         events: [ShownEvent]) -> some View {
+                         events: [ShownEvent], days: [CalendarDay]) -> some View {
         switch mode {
         case .month:
-            if isRegular {
+            if sideBySide {
                 HStack(alignment: .top, spacing: 0) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: ZimamSpacing.space4) {
                             header
-                            monthGrid(byDay, spans: spans, events: events)
+                            monthGrid(byDay, spans: spans, events: events, days: days)
                         }
                         .padding(margin)
                     }
@@ -118,7 +133,21 @@ struct CalendarView: View {
                             .padding(margin)
                             .padding(.bottom, ZimamSpacing.space11 + ZimamSpacing.space8)
                     }
-                    .frame(minWidth: ZimamSpacing.space8 * 9, idealWidth: ZimamSpacing.space8 * 11, maxWidth: ZimamSpacing.space8 * 13)
+                    .frame(minWidth: dayListMinWidth, idealWidth: ZimamSpacing.space8 * 11, maxWidth: ZimamSpacing.space8 * 13)
+                }
+            } else if isRegular {
+                // Too narrow for both: the day's list under the grid, as on the iPhone, so each day
+                // keeps a 44pt column.
+                ScrollView {
+                    VStack(alignment: .leading, spacing: ZimamSpacing.space4) {
+                        header
+                        monthGrid(byDay, spans: spans, events: events, days: days)
+                        selectedDaySection(byDay, spans: spans, names: names, events: events)
+                            .padding(.top, ZimamSpacing.space2)
+                    }
+                    .padding(margin)
+                    // Room for the add button over the last row.
+                    .padding(.bottom, ZimamSpacing.space11 + ZimamSpacing.space8)
                 }
             } else {
                 ScrollView {
@@ -127,7 +156,7 @@ struct CalendarView: View {
                     LazyVStack(alignment: .leading, spacing: ZimamSpacing.space4, pinnedViews: [.sectionHeaders]) {
                         header
                         Section {
-                            monthGrid(byDay, spans: spans, events: events, compact: true)
+                            monthGrid(byDay, spans: spans, events: events, days: days, compact: true)
                         } header: {
                             WeekdayRow(grid: grid)
                                 .padding(.vertical, ZimamSpacing.space2)
@@ -142,7 +171,7 @@ struct CalendarView: View {
                 }
             }
         case .week:
-            let week = grid.weekDays(containing: selectedNoon)
+            let week = days
             ScrollView {
                 VStack(alignment: .leading, spacing: ZimamSpacing.space4) {
                     header
@@ -233,8 +262,8 @@ struct CalendarView: View {
 
     /// `compact`: the iPhone's quiet grid, under a weekday row the screen pins itself.
     private func monthGrid(_ byDay: [String: [TaskItem]], spans: [SpanItem], events: [ShownEvent],
-                           compact: Bool = false) -> some View {
-        MonthGrid(grid: grid, days: grid.monthDays(containing: selectedNoon), today: today,
+                           days: [CalendarDay], compact: Bool = false) -> some View {
+        MonthGrid(grid: grid, days: days, today: today,
                   selectedDay: $selectedDay, tasksByDay: byDay, spans: spans, onDrop: reschedule, events: events,
                   showsWeekdayRow: !compact, isCompact: compact)
     }
@@ -271,9 +300,16 @@ struct CalendarView: View {
     }
 
     private var addTaskSheet: some View {
-        let tomorrow = grid.dayString(from: grid.addingDays(1, to: Date()))
-        let due: AddTaskView.Due = selectedDay == today ? .today : selectedDay == tomorrow ? .tomorrow : .pickedDate
-        return AddTaskView(due: due, date: selectedNoon)
+        let new = Self.newTask(on: selectedDay, formatter: formatter)
+        return AddTaskView(due: new.due, date: new.date)
+    }
+
+    /// «إضافة مهمة» on a calendar day, from the add button here and the menu's «مهمة جديدة» (⌘N):
+    /// today and tomorrow by name, another day as picked, opening on its noon.
+    static func newTask(on day: String, formatter: DualDateFormatter) -> (due: AddTaskView.Due, date: Date) {
+        let today = formatter.dayString(from: DayClock.shared.now)
+        let due: AddTaskView.Due = day == today ? .today : day == DayMath.adding(1, to: today) ? .tomorrow : .pickedDate
+        return (due, (formatter.date(fromDay: day) ?? Date()).addingTimeInterval(12 * 3600))
     }
 
     // MARK: State
@@ -288,6 +324,15 @@ struct CalendarView: View {
 
     /// `space4` on the iPhone, `space6` on iPad and Mac (design/README.md, «المسافات»).
     private var margin: CGFloat { isRegular ? ZimamSpacing.space6 : ZimamSpacing.space4 }
+
+    /// The day's list beside the month at its narrowest.
+    private var dayListMinWidth: CGFloat { ZimamSpacing.space8 * 9 }
+
+    /// The day's list beside the month: on iPad and Mac when seven 44pt days, their gaps and
+    /// margins and the list all fit.
+    private var sideBySide: Bool {
+        isRegular && width >= ZimamSpacing.space11 * 7 + ZimamSpacing.space1 * 6 + margin * 2 + dayListMinWidth
+    }
 
     private var kind: CalendarKind { chosenKind ?? formatter.primary }
 
@@ -305,11 +350,18 @@ struct CalendarView: View {
         CalendarGrid(kind: kind, firstWeekday: firstWeekday, timeZone: formatter.timeZone)
     }
 
-    private var today: String { formatter.dayString(from: Date()) }
+    private var today: String { formatter.dayString(from: DayClock.shared.now) }
 
     /// Midday of the selected day, away from either edge of it.
     private var selectedNoon: Date {
         (grid.date(fromDay: selectedDay) ?? Date()).addingTimeInterval(12 * 3600)
+    }
+
+    /// The month's days (with the grid's padding days) or the week's.
+    private var visibleDays: [CalendarDay] {
+        let grid = self.grid
+        let noon = selectedNoon
+        return mode == .month ? grid.monthDays(containing: noon) : grid.weekDays(containing: noon)
     }
 
     private var periodTitle: String {
@@ -328,12 +380,11 @@ struct CalendarView: View {
 
     // MARK: Tasks
 
-    /// Open top-level tasks by due day (as in «اليوم» and «القادم»), ordered by time of day:
+    /// Open top-level tasks by due day, in the order of «اليوم» and «القادم» (`TodayTasks.ordered`):
     /// tasks without a time first, then by clock or prayer time. Tasks that span days come apart,
     /// as bars, with their start days; they reach the day lists through `dayList`.
     /// Only the days on screen (with the month grid's padding days) are collected.
-    private func tasksByDay() -> (byDay: [String: [TaskItem]], spans: [SpanItem]) {
-        let visible = mode == .month ? grid.monthDays(containing: selectedNoon) : grid.weekDays(containing: selectedNoon)
+    private func tasksByDay(_ visible: [CalendarDay]) -> (byDay: [String: [TaskItem]], spans: [SpanItem]) {
         guard let first = visible.first?.day, let last = visible.last?.day else { return ([:], []) }
         let schedule = location.schedule(session.user?.settings)
         var result: [String: [TaskItem]] = [:]
@@ -347,19 +398,15 @@ struct CalendarView: View {
                 result[span.end, default: []].append(task)
             }
         }
-        let byDay = result.mapValues { items in
-            items.map { (task: $0, minute: minuteOfDay($0, schedule: schedule) ?? -1) }
-                .sorted { ($0.minute, $0.task.sortOrder) < ($1.minute, $1.task.sortOrder) }
-                .map { $0.task }
-        }
+        // Single-day tasks are keyed by their due day, so each list solves its prayer times once.
+        let byDay = result.mapValues { TodayTasks.ordered($0, schedule: schedule, formatter: formatter) }
         return (byDay, spans.sorted { ($0.span.start, $0.span.end) < ($1.span.start, $1.span.end) })
     }
 
     // MARK: Calendar events
 
     /// Apple Calendar's events on the days on screen, when «إظهار أحداث التقويم» is on.
-    private func visibleEvents() -> [ShownEvent] {
-        let visible = mode == .month ? grid.monthDays(containing: selectedNoon) : grid.weekDays(containing: selectedNoon)
+    private func visibleEvents(_ visible: [CalendarDay]) -> [ShownEvent] {
         guard let first = visible.first?.day, let last = visible.last?.day else { return [] }
         return CalendarEvents.shared.events(from: first, to: last, timeZone: formatter.timeZone)
     }
@@ -372,33 +419,6 @@ struct CalendarView: View {
     /// A day's list: the tasks that span it first, then the ones due that day.
     private func dayList(_ day: String, byDay: [String: [TaskItem]], spans: [SpanItem]) -> [TaskItem] {
         spans.filter { $0.span.contains(day) }.map(\.task) + (byDay[day] ?? [])
-    }
-
-    /// Minutes after midnight for ordering: the clock time, or the prayer's time with its offset.
-    private func minuteOfDay(_ task: TaskItem, schedule: PrayerSchedule?) -> Int? {
-        if let prayer = task.duePrayer {
-            let offset = task.duePrayerOffset ?? 0
-            if let schedule, let day = task.dueDate.flatMap(formatter.date(fromDay:)),
-               let time = schedule.time(of: prayer, on: day.addingTimeInterval(12 * 3600), offsetMinutes: offset) {
-                var calendar = Calendar(identifier: .gregorian)
-                calendar.timeZone = formatter.timeZone
-                let parts = calendar.dateComponents([.hour, .minute], from: time)
-                return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
-            }
-            // No location yet: a usual time for each prayer is close enough to sort by.
-            let usual = switch prayer {
-            case .fajr: 5 * 60
-            case .dhuhr: 12 * 60
-            case .asr: 15 * 60
-            case .maghrib: 18 * 60
-            case .isha: 19 * 60 + 30
-            }
-            return usual + offset
-        }
-        guard let time = task.dueTime else { return nil }
-        let parts = time.split(separator: ":").compactMap { Int($0) }
-        guard parts.count >= 2 else { return nil }
-        return parts[0] * 60 + parts[1]
     }
 
     /// Moves tasks to `day`, keeping each one's time or prayer anchor. Used by drops and «نقل إلى…».

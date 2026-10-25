@@ -129,6 +129,10 @@ struct KanbanAddTaskControl: View {
     @State private var adding = false
     @State private var newTitle = ""
     @FocusState private var fieldFocused: Bool
+    /// Set by an add from Return: iOS gives up the field's focus after Return, and that loss then
+    /// brings the keyboard back for the next card instead of closing the field. It holds only for a
+    /// moment and for one loss, so a later tap elsewhere still closes the empty field. Typing clears it.
+    @State private var refocusUntil: ContinuousClock.Instant?
 
     private var store: Store { Store(context: context, sync: sync) }
 
@@ -153,6 +157,9 @@ struct KanbanAddTaskControl: View {
                 }
                 .onAppear { fieldFocused = true }
                 .onChange(of: fieldFocused) { _, focused in focusChanged(focused) }
+                .onChange(of: newTitle) { _, title in
+                    if !title.isEmpty { refocusUntil = nil }
+                }
         } else {
             Button { adding = true } label: {
                 Label("إضافة مهمة", systemImage: "plus")
@@ -170,40 +177,87 @@ struct KanbanAddTaskControl: View {
         }
     }
 
-    /// Leaving an empty field closes it; a typed title is kept.
+    /// Leaving an empty field closes it; a typed title is kept. Return after an add keeps it open.
     private func focusChanged(_ focused: Bool) {
+        if !focused, let until = refocusUntil {
+            refocusUntil = nil
+            if ContinuousClock.now < until {
+                fieldFocused = true
+                return
+            }
+        }
         if !focused && newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { adding = false }
     }
 
+    /// Adds the card and keeps the field for the next one. Return on an empty field adds nothing,
+    /// so it still closes the field as before.
     private func addTask() {
         let title = newTitle
         newTitle = ""
-        withAnimation(.zimam(reduceMotion: reduceMotion)) {
-            _ = store.addTask(title: title, projectId: projectId, sectionId: column.section?.id, below: column.tasks)
+        let added = withAnimation(.zimam(reduceMotion: reduceMotion)) {
+            store.addTask(title: title, projectId: projectId, sectionId: column.section?.id, below: column.tasks)
         }
+        guard added != nil else { return }
+        #if os(iOS)
+        refocusUntil = ContinuousClock.now.advanced(by: .milliseconds(500))
+        #endif
+        fieldFocused = true
     }
 }
 
-/// A task on the board: the task row in its compact form on a raised card.
-/// Tapping opens the task; the completion circle completes it.
+/// A task on the board: the task row in its compact form on a raised card, in brand-soft while it
+/// is open in the inspector (iPad and Mac). Tapping opens the task; the completion circle completes it.
+/// VoiceOver hears it as one element: the title, then what the row shows (date, time, priority).
 struct KanbanCard: View {
     let task: TaskItem
     let onToggle: () -> Void
     let onOpen: () -> Void
 
+    @Environment(\.taskSelection) private var taskSelection
+    @Environment(\.dateFormatterZimam) private var formatter
+    @Environment(\.prayerScheduleZimam) private var schedule
+
     var body: some View {
-        TaskRow(task: task, compact: true, onToggle: onToggle)
+        let selected = taskSelection?.wrappedValue?.id == task.id
+        TaskRow(task: task, compact: true, selected: selected, onToggle: onToggle)
             .padding(.horizontal, ZimamSpacing.space3)
             .padding(.vertical, ZimamSpacing.space1)
-            .background(ZimamColor.surfaceRaised, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
+            .background(selected ? ZimamColor.brandSoft : ZimamColor.surfaceRaised,
+                        in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
             .contentShape(RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
             .onTapGesture(perform: onOpen)
             .draggable(TaskDragItem(id: task.id)) { TaskDragPreview(title: task.title) }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(task.title)
-            .accessibilityValue(task.isDone ? "منجزة" : "")
-            .accessibilityAddTraits(.isButton)
+            .accessibilityValue(spokenDetails)
+            .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
             .accessibilityAction(.default, onOpen)
             .accessibilityAction(named: task.isDone ? "إلغاء الإنجاز" : "إنجاز", onToggle)
+    }
+
+    /// What `TaskRow` shows under and beside the title, in the words its chips speak in a list.
+    private var spokenDetails: String {
+        var parts: [String] = []
+        if task.isDone { parts.append("منجزة") }
+        if let notes = task.notes, !notes.isEmpty { parts.append(notes) }
+        let now = DayClock.shared.now
+        if let date = task.dueDate.flatMap(formatter.date(fromDay:)) {
+            let label = formatter.label(for: date, now: now)
+            let overdue = !task.isDone && date < Calendar.current.startOfDay(for: now)
+            parts.append(overdue ? "\(label)، متأخرة" : label)
+        }
+        let mode = task.timeMode
+        let time = TaskTiming.shownTime(of: mode, dueDay: task.dueDate, schedule: schedule, formatter: formatter)
+        switch mode {
+        case .allDay:
+            break
+        case .clock:
+            if let time { parts.append(formatter.time(time)) }
+        case .prayer(let prayer, let offset):
+            let phrase = PrayerPhrase.text(prayer, offsetMinutes: offset, locale: formatter.locale)
+            parts.append(time.map { "\(formatter.time($0))، \(phrase)" } ?? phrase)
+        }
+        if let priority = task.priority.spokenLabel { parts.append(priority) }
+        return parts.joined(separator: "، ")
     }
 }

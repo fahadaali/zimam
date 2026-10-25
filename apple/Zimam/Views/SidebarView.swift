@@ -47,7 +47,7 @@ struct SidebarView: View {
 
     var body: some View {
         let open = tasks.filter { !$0.isDone && $0.parentId == nil }
-        let today = formatter.dayString(from: Date())
+        let today = formatter.dayString(from: DayClock.shared.now)
         // Counted once, then looked up per row, rather than filtering every task per row.
         let openByProject = Dictionary(grouping: open, by: \.projectId).mapValues(\.count)
         let openBySection = Dictionary(grouping: open, by: \.sectionId).mapValues(\.count)
@@ -57,9 +57,9 @@ struct SidebarView: View {
                 row("اليوم", systemImage: "sun.max", item: .today,
                     count: open.filter { $0.dueDate.map { $0 <= today } ?? false }.count)
                 row("القادم", systemImage: "calendar", item: .upcoming)
-                row("صندوق المهام", systemImage: "tray", item: .inbox,
+                row(OverviewRoute.inbox.title, systemImage: OverviewRoute.inbox.systemImage, item: .inbox,
                     count: open.filter { $0.projectId == nil }.count)
-                    .modifier(taskDrop(.inbox, name: "صندوق المهام", project: nil, section: nil))
+                    .modifier(taskDrop(.inbox, name: OverviewRoute.inbox.title, project: nil, section: nil))
                 row("التقويم", systemImage: "calendar.circle", item: .calendar)
                 row(OverviewRoute.timeline.title, systemImage: OverviewRoute.timeline.systemImage, item: .timeline)
                 row(OverviewRoute.matrix.title, systemImage: OverviewRoute.matrix.systemImage, item: .matrix)
@@ -105,6 +105,13 @@ struct SidebarView: View {
                 break
             }
         }
+        // The open section deleted (from the board in another window, or on another device), or
+        // gone when the window reopens: back to its project, or to the inbox if that went too.
+        .onChange(of: sections.map(\.id), initial: true) { _, ids in
+            guard case .section(let project, let section)? = selection, !ids.contains(section) else { return }
+            let projectStays = projects.contains(where: { $0.id == project })
+            selection = projectStays ? SidebarItem.project(project) : .inbox
+        }
         // The system glass column on iOS and macOS 26, the sunken surface before.
         .zimamSidebarBackground()
         .navigationTitle("زمام")
@@ -116,8 +123,8 @@ struct SidebarView: View {
                 Button("الانضمام بدعوة", systemImage: "person.badge.plus") { joining = true }
             }
             ToolbarItem {
+                // ⌘F is the menu's «بحث» (ZimamCommands), which does the same.
                 Button("بحث", systemImage: "magnifyingglass", action: onSearch)
-                    .keyboardShortcut("f", modifiers: .command)
             }
         }
         .onAppear {

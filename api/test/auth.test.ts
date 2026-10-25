@@ -1,11 +1,11 @@
 import { generateKeyPair } from "jose";
 import { describe, expect, it } from "vitest";
-import { appleToken, call, signIn } from "./helpers";
+import { appleToken, call, signIn, TEST_NONCE } from "./helpers";
 
 describe("Sign in with Apple", () => {
   it("creates a user and session from a valid identity token", async () => {
     const res = await call("POST", "/v1/auth/apple", {
-      body: { identityToken: await appleToken("apple-001", { email: "a@example.com" }), name: "فهد" },
+      body: { identityToken: await appleToken("apple-001", { email: "a@example.com" }), nonce: TEST_NONCE, name: "فهد" },
     });
     expect(res.status).toBe(200);
     expect(res.body.token).toMatch(/^zs_/);
@@ -18,14 +18,14 @@ describe("Sign in with Apple", () => {
 
   it("returns the same user on the next sign-in and keeps the first name", async () => {
     const first = await signIn("apple-002", "سارة");
-    const second = await call("POST", "/v1/auth/apple", { body: { identityToken: await appleToken("apple-002") } });
+    const second = await call("POST", "/v1/auth/apple", { body: { identityToken: await appleToken("apple-002"), nonce: TEST_NONCE } });
     expect(second.body.user.id).toBe(first.userId);
     expect(second.body.user.name).toBe("سارة");
   });
 
   it("accepts the web Services ID as audience", async () => {
     const res = await call("POST", "/v1/auth/apple", {
-      body: { identityToken: await appleToken("apple-web", { audience: "app.zimam.ios.web" }) },
+      body: { identityToken: await appleToken("apple-web", { audience: "app.zimam.ios.web" }), nonce: TEST_NONCE },
     });
     expect(res.status).toBe(200);
   });
@@ -35,22 +35,28 @@ describe("Sign in with Apple", () => {
     ["a foreign issuer", { issuer: "https://evil.example" }],
     ["an expired token", { expiresIn: "-1m" }],
   ])("rejects %s", async (_, options) => {
-    const res = await call("POST", "/v1/auth/apple", { body: { identityToken: await appleToken("apple-003", options) } });
+    const res = await call("POST", "/v1/auth/apple", {
+      body: { identityToken: await appleToken("apple-003", options), nonce: TEST_NONCE },
+    });
     expect(res.status).toBe(401);
   });
 
   it("rejects a token signed by another key", async () => {
     const { privateKey } = await generateKeyPair("RS256");
     const res = await call("POST", "/v1/auth/apple", {
-      body: { identityToken: await appleToken("apple-004", { key: privateKey }) },
+      body: { identityToken: await appleToken("apple-004", { key: privateKey }), nonce: TEST_NONCE },
     });
     expect(res.status).toBe(401);
   });
 
-  it("checks the nonce when the client sends one", async () => {
+  it("requires the nonce and checks it", async () => {
     const token = await appleToken("apple-005", { nonce: "n-123" });
     expect((await call("POST", "/v1/auth/apple", { body: { identityToken: token, nonce: "n-123" } })).status).toBe(200);
     expect((await call("POST", "/v1/auth/apple", { body: { identityToken: token, nonce: "other" } })).status).toBe(401);
+    // A captured token is not a session without its nonce.
+    expect((await call("POST", "/v1/auth/apple", { body: { identityToken: token } })).status).toBe(400);
+    const without = await appleToken("apple-006", { nonce: null });
+    expect((await call("POST", "/v1/auth/apple", { body: { identityToken: without, nonce: "n-123" } })).status).toBe(401);
   });
 
   it("requires a session for protected routes", async () => {

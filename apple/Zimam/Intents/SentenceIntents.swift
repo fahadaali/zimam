@@ -95,6 +95,9 @@ struct AddTaskFromSentenceIntent: AppIntent {
         if let spoken = reading.suggestion.place {
             message += " " + (await Self.addPlaceReminder(spoken, to: task, reading: reading, formatter: formatter))
         }
+        // The reminders are replanned and the task sent before Siri answers: the system may
+        // suspend the app right after.
+        await LiveSync.flush?(LiveSync.sentenceWait)
         return message
     }
 
@@ -204,6 +207,6 @@ extension SessionStore {
         guard Keychain.read(tokenAccount) != nil else { return nil }
         let configured = Bundle.main.object(forInfoDictionaryKey: "ZimamAPIURL") as? String
         let baseURL = configured.flatMap(URL.init(string:)) ?? URL(string: "https://api.zimam.work")!
-        return APIClient(baseURL: baseURL) { Keychain.read(SessionStore.tokenAccount) }
+        return APIClient(baseURL: baseURL) { try Keychain.value(SessionStore.tokenAccount) }
     }
 }

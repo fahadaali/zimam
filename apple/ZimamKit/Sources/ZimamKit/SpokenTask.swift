@@ -37,9 +37,6 @@ public struct SpokenTask: Equatable, Sendable {
         return spoken
     }
 
-    /// Whether the assistant read the sentence.
-    public var isRead: Bool { problem == nil }
-
     /// Read on the device instead: the assistant could not, and a day, time or prayer was found.
     public var readLocally: Bool {
         problem != nil && (suggestion.dueDate != nil || suggestion.dueTime != nil || suggestion.duePrayer != nil)

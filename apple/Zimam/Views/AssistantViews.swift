@@ -95,11 +95,10 @@ private struct SuggestionLine: View {
 
 /// "21:30" on `day` in the user's clock format: «٩:٣٠ م».
 func clockTime(_ hhmm: String, on day: Date = Date(), formatter: DualDateFormatter) -> String? {
-    let parts = hhmm.split(separator: ":").compactMap { Int($0) }
-    guard parts.count >= 2 else { return nil }
+    guard let parts = TaskTiming.clockParts(hhmm) else { return nil }
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = formatter.timeZone
-    guard let date = calendar.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: day) else { return nil }
+    guard let date = calendar.date(bySettingHour: parts.hour, minute: parts.minute, second: 0, of: day) else { return nil }
     return formatter.time(date)
 }
 

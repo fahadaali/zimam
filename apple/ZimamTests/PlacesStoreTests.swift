@@ -45,17 +45,21 @@ struct PlacesStoreTests {
         #expect(store.reminders(at: home.id).map(\.id) == [linked.id])
     }
 
+    /// The reminder stays where the place was. It keeps the link until the deletion reaches the
+    /// server, which unlinks it (`SyncEngine`), so a deletion turned down leaves it linked.
     @Test func deletingAPlaceKeepsItsRemindersWhereItWas() {
         let home = store.addPlace(name: "البيت", latitude: 24.7, longitude: 46.6, radius: 200)
         let task = store.addTask(title: "شراء الخبز")
         let reminder = store.addLocationReminder(to: task.id, place: .init(place: home.record, trigger: .arrive))
+        reminder.isDirty = false
 
         store.deletePlace(home)
 
         #expect(home.pendingDelete)
-        #expect(reminder.record.location?.placeId == nil)
+        #expect(reminder.record.location?.placeId == home.id)
         #expect(reminder.record.location?.latitude == 24.7)
         #expect(!reminder.pendingDelete)
+        #expect(!reminder.isDirty)
     }
 
     @Test func aPlaceWithATimeWaitsThenFiresOnce() {

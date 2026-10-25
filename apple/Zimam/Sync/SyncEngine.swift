@@ -5,8 +5,9 @@ import SwiftData
 import ZimamKit
 
 /// Sends local edits to the API, then applies what changed on the server.
-/// Runs on launch, when the app returns to the foreground, shortly after each edit,
-/// and when the realtime channel says the server has changes this device has not pulled.
+/// Runs on launch, when the app returns to the foreground, shortly after each edit, when the
+/// realtime channel says the server has changes this device has not pulled, when the network
+/// comes back, and again by itself after a sync that failed (`scheduleRetry`).
 @MainActor
 @Observable
 final class SyncEngine {
@@ -17,7 +18,15 @@ final class SyncEngine {
     @ObservationIgnored private let api: APIClient
     @ObservationIgnored private let context: ModelContext
     @ObservationIgnored private var scheduled: Task<Void, Never>?
+    /// The sync in progress. A call made meanwhile waits for it (`sync()`).
+    @ObservationIgnored private var running: Task<Void, Never>?
     @ObservationIgnored private var runAgain = false
+    /// The next try after a failed sync, and how many failed in a row.
+    @ObservationIgnored private var retry: Task<Void, Never>?
+    @ObservationIgnored private var failures = 0
+    /// Whether the sync in progress changed what the app shows, so the listeners refresh once,
+    /// and not after a sync that found nothing new.
+    @ObservationIgnored private var savedChanges = false
     @ObservationIgnored private var realtime: RealtimeChannel?
     @ObservationIgnored private var remoteSync: Task<Void, Never>?
     /// Bumped by `reset()`. A sync started before it stops at its next step instead of writing
@@ -25,14 +34,21 @@ final class SyncEngine {
     @ObservationIgnored private var generation = 0
     /// Called when the server no longer accepts the session.
     @ObservationIgnored var onUnauthorized: (() -> Void)?
-    /// Called after local edits and after each sync, so what depends on the data
-    /// (scheduled notifications) can refresh.
+    /// Called after local edits and after each sync that changed something, so what depends on
+    /// the data (scheduled notifications, the widgets) can refresh.
     @ObservationIgnored var onDataChanged: (@MainActor () -> Void)?
 
     private static let cursorKey = "sync.cursor"
-    /// What the cursor was earned with (`APIClient.pullIncludes`). Pulls without saved places
-    /// moved past them, so asking for more starts once from zero.
+    /// What the cursor was earned with (`cursorBasis`). Pulls without saved places moved past
+    /// them, so asking for more starts once from zero.
     private static let includesKey = "sync.includes"
+    /// Raised when the way a pull is applied changes, so that a pull from zero puts right what an
+    /// older way left. 2: a deletion the server turned down used to stay hidden, or be removed, on
+    /// this device alone; every live record comes back with its latest version (`reveal`).
+    private static let applyVersion = 2
+    /// The pull's includes (`APIClient.pullIncludes`) and `applyVersion`: a cursor earned with
+    /// another starts once from zero.
+    private static var cursorBasis: String { "\(APIClient.pullIncludes);apply=\(applyVersion)" }
     /// Set before a wipe and cleared once it is saved. While set, nothing is sent, so a wipe
     /// that failed at sign-out never lets the next account push this one's records.
     private static let wipePendingKey = "sync.wipePending"
@@ -40,6 +56,14 @@ final class SyncEngine {
 
     /// The account changed under a sync in progress.
     private struct Superseded: Error {}
+    /// The server answered none of a push: the round ends as a failed sync, retried like one.
+    private struct NoProgress: Error {}
+    /// Records whose edit the server refused in this round's push (a viewer's edit, one it found
+    /// invalid): the pull that follows reads from the start and puts back the server's version,
+    /// and removes here what the server does not have.
+    @ObservationIgnored private var refused: Set<UUID> = []
+    /// «لم يقبل الخادم بعض التعديلات…» in the sync status, after such a restore, until new edits go out.
+    private(set) var refusedNotice: String?
 
     init(api: APIClient, context: ModelContext) {
         self.api = api
@@ -50,12 +74,12 @@ final class SyncEngine {
     /// empty, so the cursor starts from zero with it and the first sync refills it.
     private var cursor: Int64 {
         get {
-            guard ZimamShared.defaults.string(forKey: Self.includesKey) == APIClient.pullIncludes else { return 0 }
+            guard ZimamShared.defaults.string(forKey: Self.includesKey) == Self.cursorBasis else { return 0 }
             return Int64(ZimamShared.defaults.integer(forKey: Self.cursorKey))
         }
         set {
             ZimamShared.defaults.set(Int(newValue), forKey: Self.cursorKey)
-            ZimamShared.defaults.set(APIClient.pullIncludes, forKey: Self.includesKey)
+            ZimamShared.defaults.set(Self.cursorBasis, forKey: Self.includesKey)
         }
     }
 
@@ -74,26 +98,80 @@ final class SyncEngine {
         }
     }
 
+    /// Returns once the edits saved before the call are pushed and the pull after them is
+    /// applied, or once that sync failed. A call made during a sync waits for it, and for the
+    /// round it adds for this call, so a server request made next finds the record there.
     func sync() async {
-        guard !isSyncing else {
+        if let running {
             runAgain = true
+            await running.value
             return
         }
+        let run = Task { await runRounds() }
+        running = run
+        await run.value
+    }
+
+    /// Whether some edits on this device have not reached the account yet (signing out would lose them).
+    var hasUnsentChanges: Bool {
+        func dirty<Item: PersistentModel>(_ type: Item.Type, _ predicate: Predicate<Item>) -> Bool {
+            var descriptor = FetchDescriptor<Item>(predicate: predicate)
+            descriptor.fetchLimit = 1
+            return ((try? context.fetchCount(descriptor)) ?? 0) > 0
+        }
+        return dirty(ProjectItem.self, #Predicate<ProjectItem> { $0.isDirty })
+            || dirty(SectionItem.self, #Predicate<SectionItem> { $0.isDirty })
+            || dirty(TaskItem.self, #Predicate<TaskItem> { $0.isDirty })
+            || dirty(ReminderItem.self, #Predicate<ReminderItem> { $0.isDirty })
+            || dirty(PlaceItem.self, #Predicate<PlaceItem> { $0.isDirty })
+    }
+
+    /// `sync()`, waited for at most `limit`: for an intent or a background wake, which the system
+    /// may end first. True if it ended in time; if not, it goes on in its own task while the app
+    /// still runs. Cancelling a caller of `sync()` does not end its wait, so the time is kept here.
+    func sync(waitingAtMost limit: Duration) async -> Bool {
+        let (ended, end) = AsyncStream<Bool>.makeStream()
+        Task {
+            await sync()
+            end.yield(true)
+        }
+        let timer = Task {
+            try await Task.sleep(for: limit)
+            end.yield(false)
+        }
+        defer { timer.cancel() }
+        for await inTime in ended { return inTime }
+        return false
+    }
+
+    /// The sync itself, in a task of its own: cancelling a caller (a scheduled sync replaced by
+    /// a newer edit, a view that closed) does not cut its push or pull short.
+    private func runRounds() async {
+        defer { running = nil }
         guard wipeIfPending() else {
             lastError = "تعذّرت المزامنة، وستُعاد المحاولة تلقائياً."
-            onDataChanged?()
+            scheduleRetry(wipeOnly: true)
             return
         }
         isSyncing = true
+        savedChanges = false
         defer { isSyncing = false }
         repeat {
             runAgain = false
+            // This round sends every edit saved so far, so a sync scheduled for one of them
+            // (`scheduleSync`) would only push and pull again with nothing to send. An edit made
+            // from here on schedules its own.
+            scheduled?.cancel()
+            scheduled = nil
             let started = generation
             do {
                 try await push(started)
                 try await pull(started)
                 lastSyncedAt = Date()
                 lastError = nil
+                failures = 0
+                retry?.cancel()
+                retry = nil
             } catch is Superseded {
                 // Signed out mid-sync: the new account's request, if any, runs from scratch.
                 continue
@@ -101,12 +179,40 @@ final class SyncEngine {
                 onUnauthorized?()
                 return
             } catch {
+                // Signed out meanwhile: as for `Superseded`, no retry for the previous account,
+                // which would go out without a token and whose 401 could sign out the next one.
+                guard generation == started else { continue }
                 lastError = "تعذّرت المزامنة، وستُعاد المحاولة تلقائياً."
-                onDataChanged?()
-                return
+                scheduleRetry()
+                // Batches and pages saved before the failure still count below.
+                break
             }
         } while runAgain
-        onDataChanged?()
+        if savedChanges { onDataChanged?() }
+    }
+
+    /// After a failure: tries again by itself, 5 seconds later, then twice as long each time up
+    /// to 5 minutes, until a sync succeeds. An edit, a return to the app or the network coming
+    /// back tries sooner. A retry stops if the account changed before it (`reset`). After a wipe
+    /// that failed (`wipeOnly`), only the wipe is tried again, as it follows a sign-out: nothing
+    /// is sent, and the next sync asked for (a sign-in, an edit, a return) goes on from there.
+    private func scheduleRetry(wipeOnly: Bool = false) {
+        failures += 1
+        let seconds = min(300, 5 << min(failures - 1, 6))
+        let account = generation
+        retry?.cancel()
+        retry = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled, let self, self.generation == account else { return }
+            if !wipeOnly {
+                await self.sync()
+            } else if self.wipeIfPending() {
+                self.failures = 0
+                self.onDataChanged?()
+            } else {
+                self.scheduleRetry(wipeOnly: true)
+            }
+        }
     }
 
     // MARK: Realtime
@@ -152,6 +258,12 @@ final class SyncEngine {
     func reset() {
         generation += 1
         scheduled?.cancel()
+        retry?.cancel()
+        retry = nil
+        failures = 0
+        // The previous account's refusals and their notice are not the next one's.
+        refused = []
+        refusedNotice = nil
         stopRealtime()
         ZimamShared.defaults.set(true, forKey: Self.wipePendingKey)
         wipeIfPending()
@@ -183,7 +295,8 @@ final class SyncEngine {
 
     private struct Outgoing {
         let mutation: Mutation
-        let settle: (MutationResult) -> Void
+        /// True when the result changed what the app shows (a record removed or shown again).
+        let settle: (MutationResult) -> Bool
     }
 
     private func push(_ started: Int) async throws {
@@ -210,8 +323,11 @@ final class SyncEngine {
         for section in sections where !section.pendingDelete {
             upserts.append(outgoing(section, .upsert(.section(section.record))))
         }
-        let depth = try taskDepths()
-        for task in tasks.sorted(by: { depth[$0.id, default: 0] < depth[$1.id, default: 0] }) where !task.pendingDelete {
+        let sent = tasks.filter { !$0.pendingDelete }
+        // Parents first; the order only matters with more than one, so the usual single edit
+        // does not fetch every task to work it out.
+        let depth = try sent.count > 1 ? taskDepths() : [:]
+        for task in sent.sorted(by: { depth[$0.id, default: 0] < depth[$1.id, default: 0] }) {
             upserts.append(outgoing(task, .upsert(.task(task.record))))
         }
         for reminder in reminders {
@@ -232,43 +348,81 @@ final class SyncEngine {
         }
 
         let all = upserts + deletes
+        if !all.isEmpty { refusedNotice = nil }
         var start = 0
         while start < all.count {
             let batch = Array(all[start..<min(start + APIClient.maxPushBatch, all.count)])
             let results = try await api.push(batch.map(\.mutation))
             // After a reset these records are deleted: settling them would touch freed models.
             guard generation == started else { throw Superseded() }
-            for (item, result) in zip(batch, results) { item.settle(result) }
+            for (item, result) in zip(batch, results) {
+                if item.settle(result) { savedChanges = true }
+            }
             try context.save()
-            start += batch.count
+            // The server may answer fewer than it was sent (its D1 budget per request,
+            // api/DEVELOPMENT.md «المزامنة»); the rest go next, in order, so a child still follows its parent.
+            guard !results.isEmpty else { throw NoProgress() }
+            start += min(results.count, batch.count)
         }
     }
 
-    /// Wraps a mutation with what to do with its result. An edit made while the
-    /// request was in flight keeps the record dirty for the next round.
+    /// Wraps a mutation with what to do with its result. A record edited or deleted while the
+    /// request was in flight stays dirty and goes out on the next round.
     private func outgoing<Item: SyncedItem>(_ item: Item, _ mutation: Mutation) -> Outgoing {
         let sentVersion = item.updatedAt
-        return Outgoing(mutation: mutation) { [context] result in
+        let sentDelete: Bool
+        if case .delete = mutation { sentDelete = true } else { sentDelete = false }
+        let id = mutation.id
+        return Outgoing(mutation: mutation) { [context, weak self] result in
+            // As it was sent: neither edited nor deleted since.
+            let unchanged = item.updatedAt == sentVersion && item.pendingDelete == sentDelete
             switch result.status {
             case .applied:
-                if item.pendingDelete {
+                if sentDelete {
+                    // What its deletion hid goes with the server's, in the pull that follows.
+                    Self.releaseLinks(to: item, in: context)
                     context.delete(item)
-                } else if item.updatedAt == sentVersion {
+                } else if unchanged {
                     item.isDirty = false
                     item.syncError = nil
                 }
+                return false
             case .stale:
-                // The server's newer version arrives with the pull that follows.
-                item.isDirty = false
-            case .gone:
-                context.delete(item)
-            case .forbidden, .invalid:
-                if item.pendingDelete {
-                    context.delete(item)
-                } else {
+                if sentDelete {
+                    // Edited elsewhere after it was deleted here: the later edit wins, as on the
+                    // web, and the pull that follows brings it. It shows again, with what it hid.
+                    Self.unhide(item, in: context)
                     item.isDirty = false
-                    item.syncError = result.message ?? result.status.rawValue
+                    return true
                 }
+                // The server's newer version arrives with the pull that follows.
+                if unchanged { item.isDirty = false }
+                return false
+            case .gone:
+                Self.releaseLinks(to: item, in: context)
+                context.delete(item)
+                return true
+            case .forbidden, .invalid:
+                if sentDelete && result.status == .invalid {
+                    // The server never had it, so nothing it has hangs from it (what was never
+                    // sent goes out as its own deletion): nothing is left to send, and what its
+                    // deletion hid goes too, rather than stay hidden here.
+                    Self.removeHidden(with: item, in: context)
+                    Self.releaseLinks(to: item, in: context)
+                    context.delete(item)
+                    return false
+                }
+                if sentDelete {
+                    // Not this user's to delete (a viewer's task): it stays, here as on the server.
+                    Self.unhide(item, in: context)
+                } else if !unchanged {
+                    return false
+                }
+                item.isDirty = false
+                item.syncError = result.message ?? result.status.rawValue
+                // The server's version comes back with the pull that follows (`pull`).
+                if !sentDelete { self?.refused.insert(id) }
+                return sentDelete
             }
         }
     }
@@ -292,18 +446,59 @@ final class SyncEngine {
     // MARK: Pull
 
     private func pull(_ started: Int) async throws {
+        // After a refused edit, from the start: every record comes again, so the refused ones
+        // take the server's version, and those it does not send are not the user's to have.
+        let restoring = refused
+        refused = []
+        var from = restoring.isEmpty ? cursor : 0
+        var seen = Set<UUID>()
         var hasMore = true
-        while hasMore {
-            let page = try await api.pull(cursor: cursor)
+        do {
+            while hasMore {
+                let page = try await api.pull(cursor: from)
             guard generation == started else { throw Superseded() }
             // If the lookup fails, nothing of the page is applied and the next pull tries it
             // again whole, rather than insert records it could not find and duplicate them.
-            var records = try localRecords(for: page.changes)
-            for change in page.changes { apply(change, to: &records) }
-            try context.save()
-            cursor = page.cursor
-            hasMore = page.hasMore
+                var records = try localRecords(for: page.changes)
+                var changed = false
+                for change in page.changes {
+                    seen.insert(change.id)
+                    if apply(change, to: &records) { changed = true }
+                }
+                try context.save()
+                if changed { savedChanges = true }
+                cursor = page.cursor
+                from = page.cursor
+                hasMore = page.hasMore
+            }
+        } catch {
+            // Tried again by the next pull, unless the account changed meanwhile.
+            if generation == started { refused.formUnion(restoring) }
+            throw error
         }
+        guard !restoring.isEmpty else { return }
+        try removeRefused(restoring.subtracting(seen))
+        refusedNotice = "لم يقبل الخادم بعض التعديلات، فأُعيدت إلى آخر نسخة محفوظة."
+        savedChanges = true
+    }
+
+    /// Refused records the server does not send back: created here where the user may not add (or
+    /// invalid), so the server never had them. They go here too, unless edited again since.
+    private func removeRefused(_ ids: Set<UUID>) throws {
+        guard !ids.isEmpty else { return }
+        let list = Array(ids)
+        func remove<Item: SyncedItem>(_ items: [Item]) {
+            for item in items where !item.isDirty {
+                Self.releaseLinks(to: item, in: context)
+                context.delete(item)
+            }
+        }
+        remove(try context.fetch(FetchDescriptor<ReminderItem>(predicate: #Predicate { list.contains($0.id) })))
+        remove(try context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { list.contains($0.id) })))
+        remove(try context.fetch(FetchDescriptor<SectionItem>(predicate: #Predicate { list.contains($0.id) })))
+        remove(try context.fetch(FetchDescriptor<ProjectItem>(predicate: #Predicate { list.contains($0.id) })))
+        remove(try context.fetch(FetchDescriptor<PlaceItem>(predicate: #Predicate { list.contains($0.id) })))
+        try context.save()
     }
 
     /// The local records a page's changes touch, by id.
@@ -348,66 +543,242 @@ final class SyncEngine {
     }
 
     /// Applies one change. `records` follows along, so a record inserted or deleted earlier in
-    /// the page is found or missed by the changes after it.
-    private func apply(_ change: SyncChange, to records: inout PageRecords) {
+    /// the page is found or missed by the changes after it. True when anything here changed;
+    /// false for an echo of this device's own edit, or a local edit newer than the server's.
+    private func apply(_ change: SyncChange, to records: inout PageRecords) -> Bool {
         switch change.record {
         case .project(let record)?:
             if let local = records.projects[change.id] {
-                if !keepsLocal(local, over: record.updatedAt) { local.apply(record) }
-            } else {
-                let item = ProjectItem(record, dirty: false)
-                context.insert(item)
-                records.projects[change.id] = item
+                guard !keepsLocal(local, over: record.updatedAt) else { return false }
+                return take(local, differs: local.record != record) { $0.apply(record) }
             }
+            let item = ProjectItem(record, dirty: false)
+            context.insert(item)
+            records.projects[change.id] = item
         case .section(let record)?:
             if let local = records.sections[change.id] {
-                if !keepsLocal(local, over: record.updatedAt) { local.apply(record) }
-            } else {
-                let item = SectionItem(record, dirty: false)
-                context.insert(item)
-                records.sections[change.id] = item
+                guard !keepsLocal(local, over: record.updatedAt) else { return false }
+                return take(local, differs: local.record != record) { $0.apply(record) }
             }
+            let item = SectionItem(record, dirty: false)
+            context.insert(item)
+            records.sections[change.id] = item
         case .task(let record)?:
             if let local = records.tasks[change.id] {
-                if !keepsLocal(local, over: record.updatedAt) { local.apply(record) }
-            } else {
-                let item = TaskItem(record, dirty: false)
-                context.insert(item)
-                records.tasks[change.id] = item
+                guard !keepsLocal(local, over: record.updatedAt) else { return false }
+                return take(local, differs: local.record != record) { $0.apply(record) }
             }
+            let item = TaskItem(record, dirty: false)
+            context.insert(item)
+            records.tasks[change.id] = item
         case .reminder(let record)?:
             if let local = records.reminders[change.id] {
-                if !keepsLocal(local, over: record.updatedAt) { local.apply(record) }
-            } else {
-                let item = ReminderItem(record, dirty: false)
-                context.insert(item)
-                records.reminders[change.id] = item
+                guard !keepsLocal(local, over: record.updatedAt) else { return false }
+                return take(local, differs: local.record != record) { $0.apply(record) }
             }
+            let item = ReminderItem(record, dirty: false)
+            context.insert(item)
+            records.reminders[change.id] = item
         case .place(let record)?:
             if let local = records.places[change.id] {
-                if !keepsLocal(local, over: record.updatedAt) { local.apply(record) }
-            } else {
-                let item = PlaceItem(record, dirty: false)
-                context.insert(item)
-                records.places[change.id] = item
+                guard !keepsLocal(local, over: record.updatedAt) else { return false }
+                return take(local, differs: local.record != record) { $0.apply(record) }
             }
+            let item = PlaceItem(record, dirty: false)
+            context.insert(item)
+            records.places[change.id] = item
         case .comment?:
-            break // Comments are shown from the API when a task opens; not stored yet.
+            return false // Comments are shown from the API when a task opens; not stored yet.
         case nil:
             switch change.entity {
-            case .project: if let local = records.projects.removeValue(forKey: change.id) { context.delete(local) }
-            case .section: if let local = records.sections.removeValue(forKey: change.id) { context.delete(local) }
-            case .task: if let local = records.tasks.removeValue(forKey: change.id) { context.delete(local) }
-            case .reminder: if let local = records.reminders.removeValue(forKey: change.id) { context.delete(local) }
-            case .place: if let local = records.places.removeValue(forKey: change.id) { context.delete(local) }
-            case .comment: break
+            case .project: return remove(records.projects.removeValue(forKey: change.id))
+            case .section:
+                guard let local = records.sections.removeValue(forKey: change.id) else { return false }
+                // Its tasks come with the deletion too, but one edited here keeps its own version.
+                Self.releaseLinks(to: local, in: context)
+                context.delete(local)
+                return true
+            case .task: return remove(records.tasks.removeValue(forKey: change.id))
+            case .reminder: return remove(records.reminders.removeValue(forKey: change.id))
+            case .place:
+                guard let local = records.places.removeValue(forKey: change.id) else { return false }
+                // Its reminders come unlinked with the deletion too, but one edited here keeps its own.
+                Self.releaseLinks(to: local, in: context)
+                context.delete(local)
+                return true
+            case .comment: return false
             }
         }
+        return true
     }
 
-    /// A local edit newer than the server's version wins; it goes out on the next push.
+    /// Gives a local record the server's version (`apply`, which `differs` from it or not). True
+    /// if anything here changed. One a deletion hid shows again (`reveal`), unless a deletion not
+    /// sent yet still hides it (`hiddenByUnsentDeletion`): it then stays hidden with the new fields.
+    private func take<Item: SyncedItem>(_ local: Item, differs: Bool, apply: (Item) -> Void) -> Bool {
+        let held = hiddenByUnsentDeletion(local)
+        let changed = (!held && reveal(local)) || differs
+        apply(local)
+        if held { local.pendingDelete = true }
+        return changed
+    }
+
+    /// A record a deletion still hides, about to take the server's version: the server kept it,
+    /// edited after that deletion, so it shows again with what the deletion hid. True if it was hidden.
+    private func reveal(_ local: some SyncedItem) -> Bool {
+        guard local.pendingDelete else { return false }
+        Self.unhide(local, in: context)
+        return true
+    }
+
+    /// Whether a deletion not sent yet hides `local`, which that deletion hid without marking it
+    /// (`Store.delete`): a parent task's at any depth, its task's for a reminder, or its project's.
+    /// The server deletes it with that deletion, in the round that sends it; until then its version
+    /// arriving first (the pull of a round whose push went out before the deletion, or a long pull
+    /// from zero) does not show it, orphaned, meanwhile.
+    private func hiddenByUnsentDeletion(_ local: some SyncedItem) -> Bool {
+        guard local.pendingDelete, !local.isDirty else { return false }
+        if let task = local as? TaskItem {
+            return unsentDeletion(fromTask: task.parentId) || unsentDeletion(ofProject: task.projectId)
+        }
+        if let reminder = local as? ReminderItem { return unsentDeletion(fromTask: reminder.taskId) }
+        if let section = local as? SectionItem { return unsentDeletion(ofProject: section.projectId) }
+        return false
+    }
+
+    /// Whether the task `id`, or a parent above it, is hidden by a deletion not sent yet: its own
+    /// or its project's. A task that is not hidden hides nothing below it.
+    private func unsentDeletion(fromTask id: UUID?) -> Bool {
+        var next = id
+        var seen: Set<UUID> = []
+        while let id = next, seen.insert(id).inserted {
+            var descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.id == id })
+            descriptor.fetchLimit = 1
+            guard let task = try? context.fetch(descriptor).first, task.pendingDelete else { return false }
+            if task.isDirty || unsentDeletion(ofProject: task.projectId) { return true }
+            next = task.parentId
+        }
+        return false
+    }
+
+    /// Whether the project `id` is deleted here and its deletion not sent yet.
+    private func unsentDeletion(ofProject id: UUID?) -> Bool {
+        guard let id else { return false }
+        var descriptor = FetchDescriptor<ProjectItem>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        guard let project = try? context.fetch(descriptor).first else { return false }
+        return project.pendingDelete && project.isDirty
+    }
+
+    private func remove<Item: PersistentModel>(_ local: Item?) -> Bool {
+        guard let local else { return false }
+        context.delete(local)
+        return true
+    }
+
+    /// A local edit newer than the server's version wins; it goes out on the next push. So does a
+    /// deletion not sent yet over the same version: the echo of the record's own edit, sent before
+    /// a parent's deletion hid it, does not bring it back.
     private func keepsLocal(_ item: some SyncedItem, over serverVersion: Int64) -> Bool {
-        item.isDirty && item.updatedAt > serverVersion
+        item.isDirty && (item.updatedAt > serverVersion || (item.pendingDelete && item.updatedAt >= serverVersion))
+    }
+
+    // MARK: Deletions the server turned down
+
+    /// What `Store.delete` hid along with a task or project and left to the server's deletion:
+    /// hidden but not dirty, so never sent on their own.
+    private struct Hidden {
+        var tasks: [TaskItem] = []
+        var sections: [SectionItem] = []
+        var reminders: [ReminderItem] = []
+    }
+
+    /// A task's subtasks (not those deleted on their own, which are dirty) and the reminders of
+    /// the whole tree; a project's tasks, sections and the reminders of those tasks. Only records
+    /// waiting for a deletion are read, not the whole store, once for each deletion turned down.
+    private static func hiddenWith(_ item: some SyncedItem, in context: ModelContext) -> Hidden {
+        var found = Hidden()
+        let tasks = (try? context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { $0.pendingDelete }))) ?? []
+        var treeIds: Set<UUID> = []
+        if let task = item as? TaskItem {
+            found.tasks = hiddenSubtasks(below: [task.id], in: tasks)
+            treeIds.insert(task.id)
+        } else if let project = item as? ProjectItem {
+            let id = project.id
+            let waiting = Set(tasks.map(\.id))
+            // The project's hidden tasks whose parent is not hidden as well: the others are reached
+            // from their parent, unless that parent was deleted on its own.
+            let roots = tasks.filter { task in
+                guard task.projectId == id, !task.isDirty else { return false }
+                return task.parentId.map { !waiting.contains($0) } ?? true
+            }
+            found.tasks = roots + hiddenSubtasks(below: roots.map(\.id), in: tasks)
+            found.sections = ((try? context.fetch(FetchDescriptor<SectionItem>(
+                predicate: #Predicate { $0.pendingDelete && !$0.isDirty }))) ?? [])
+                .filter { $0.projectId == id }
+        } else {
+            return found
+        }
+        treeIds.formUnion(found.tasks.map(\.id))
+        found.reminders = ((try? context.fetch(FetchDescriptor<ReminderItem>(
+            predicate: #Predicate { $0.pendingDelete && !$0.isDirty }))) ?? [])
+            .filter { treeIds.contains($0.taskId) }
+        return found
+    }
+
+    /// Hidden, clean subtasks under `roots`, at any depth. `tasks` holds at least the hidden ones.
+    private static func hiddenSubtasks(below roots: [UUID], in tasks: [TaskItem]) -> [TaskItem] {
+        let children = Dictionary(grouping: tasks, by: \.parentId)
+        var found: [TaskItem] = []
+        var seen = Set(roots)
+        var queue = roots
+        while let id = queue.popLast() {
+            for child in children[id] ?? [] where child.pendingDelete && !child.isDirty {
+                guard seen.insert(child.id).inserted else { continue }
+                found.append(child)
+                queue.append(child.id)
+            }
+        }
+        return found
+    }
+
+    /// Shows a record again, with what its deletion hid.
+    private static func unhide(_ item: some SyncedItem, in context: ModelContext) {
+        let hidden = hiddenWith(item, in: context)
+        for task in hidden.tasks { task.pendingDelete = false }
+        for section in hidden.sections { section.pendingDelete = false }
+        for reminder in hidden.reminders { reminder.pendingDelete = false }
+        item.pendingDelete = false
+    }
+
+    /// Removes what a deletion hid along with a record the server never had: none of it reached
+    /// the server either, which refuses what hangs from a record it does not have.
+    private static func removeHidden(with item: some SyncedItem, in context: ModelContext) {
+        let hidden = hiddenWith(item, in: context)
+        for task in hidden.tasks { context.delete(task) }
+        for section in hidden.sections { context.delete(section) }
+        for reminder in hidden.reminders { context.delete(reminder) }
+    }
+
+    /// A section or place gone from the server: the tasks still in the section here leave it, and
+    /// the reminders still linked to the place lose the link, which its deletion kept until the
+    /// server took it (`Store.delete`, `Store.deletePlace`). An edit to one is then not sent naming
+    /// it. Not marked for sync, as the server did the same. Nothing for other records.
+    private static func releaseLinks(to item: some SyncedItem, in context: ModelContext) {
+        if let section = item as? SectionItem {
+            let id: UUID? = section.id
+            let tasks = (try? context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { $0.sectionId == id }))) ?? []
+            for task in tasks { task.sectionId = nil }
+        } else if let place = item as? PlaceItem {
+            let id = place.id
+            let kind = ReminderRecord.Kind.location.rawValue
+            let reminders = (try? context.fetch(FetchDescriptor<ReminderItem>(predicate: #Predicate { $0.kindRaw == kind }))) ?? []
+            for reminder in reminders {
+                guard var location = reminder.record.location, location.placeId == id else { continue }
+                location.placeId = nil
+                reminder.locationJSON = try? JSONEncoder().encode(location)
+            }
+        }
     }
 }
 

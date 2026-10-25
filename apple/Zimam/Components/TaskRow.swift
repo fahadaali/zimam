@@ -9,6 +9,8 @@ struct TaskRow: View {
     var projectName: String?
     /// The smaller title used on kanban cards (TaskRow `compact` in design/components).
     var compact = false
+    /// The task open in the details column (iPad and Mac): title in brand-ink on brand-soft (design/components/TaskRow).
+    var selected = false
     let onToggle: () -> Void
 
     @Environment(\.dateFormatterZimam) private var formatter
@@ -21,7 +23,7 @@ struct TaskRow: View {
             VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
                 Text(task.title)
                     .font(compact ? ZimamType.callout : ZimamType.body)
-                    .foregroundStyle(task.isDone ? ZimamColor.inkFaint : ZimamColor.ink)
+                    .foregroundStyle(selected ? ZimamColor.brandInk : (task.isDone ? ZimamColor.inkFaint : ZimamColor.ink))
                     .strikethrough(task.isDone)
                 if let notes = task.notes, !notes.isEmpty {
                     Text(notes)
@@ -42,13 +44,14 @@ struct TaskRow: View {
 
     @ViewBuilder private var chips: some View {
         let date = task.dueDate.flatMap(formatter.date(fromDay:))
+        let now = DayClock.shared.now
         let mode = task.timeMode
         // A prayer's time on the task's day (today for one that repeats daily), as if typed in.
         let time = TaskTiming.shownTime(of: mode, dueDay: task.dueDate, schedule: schedule, formatter: formatter)
         if date != nil || !mode.isAllDay || projectName != nil {
             HStack(spacing: ZimamSpacing.space2) {
                 if let date {
-                    DateChip(text: formatter.label(for: date), overdue: !task.isDone && date < Calendar.current.startOfDay(for: Date()))
+                    DateChip(text: formatter.label(for: date, now: now), overdue: !task.isDone && date < Calendar.current.startOfDay(for: now))
                 }
                 switch mode {
                 case .allDay:

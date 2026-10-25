@@ -17,6 +17,12 @@ final class PrayerClockTests {
         #expect(clock.state(at: asr.addingTimeInterval(30 * 60)) == .until(.maghrib, time: maghrib))
     }
 
+    @Test func titleSaysWhichWayTheClockCounts() {
+        let adhan = Date(timeIntervalSince1970: 0)
+        #expect(PrayerClock.State.until(.asr, time: adhan).title == "المتبقي على العصر")
+        #expect(PrayerClock.State.since(.maghrib, adhan: adhan).title == "مضى على أذان المغرب")
+    }
+
     @Test func afterIshaCountsDownToTomorrowsFajr() throws {
         let isha = schedule.time(of: .isha, on: day)!
         let state = try #require(clock.state(at: isha.addingTimeInterval(31 * 60)))

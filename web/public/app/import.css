@@ -1,16 +1,7 @@
 /* The import view (#/import, import-view.js). Tokens only; logical properties only. */
 
-.header-link[aria-current="page"] {
-  color: var(--ink);
-  background: var(--surface-sunken);
-}
-
 .import-section + .import-section {
   margin-block-start: var(--space-8);
-}
-
-.import-section[hidden] {
-  display: none;
 }
 
 .import-section.zm-card {
@@ -44,10 +35,6 @@
 
 .import-methods {
   margin-block-start: var(--space-6);
-}
-
-.import-methods[hidden] {
-  display: none;
 }
 
 .import-methods-list {
@@ -85,10 +72,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-}
-
-.import-form .field[hidden] {
-  display: none;
 }
 
 .import-form input[type="file"] {

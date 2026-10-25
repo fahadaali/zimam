@@ -10,6 +10,11 @@ struct TaskSubtasksSection: View {
     let store: Store
 
     @State private var newTitle = ""
+    @FocusState private var fieldFocused: Bool
+    /// Set by an add from Return: iOS gives up the field's focus after Return, and that loss then
+    /// brings the keyboard back for the next subtask. It holds only for a moment and for one loss,
+    /// so a later tap elsewhere still leaves the field. Typing clears it.
+    @State private var refocusUntil: ContinuousClock.Instant?
 
     private var trimmed: String { newTitle.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -21,8 +26,18 @@ struct TaskSubtasksSection: View {
             HStack(spacing: ZimamSpacing.space2) {
                 TextField(hint: "مهمة فرعية جديدة", text: $newTitle)
                     .labelsHidden()
-                    .onSubmit(add)
-                Button("إضافة", action: add)
+                    .focused($fieldFocused)
+                    .onSubmit(submit)
+                    .onChange(of: fieldFocused) { _, focused in
+                        if !focused, let until = refocusUntil {
+                            refocusUntil = nil
+                            if ContinuousClock.now < until { fieldFocused = true }
+                        }
+                    }
+                    .onChange(of: newTitle) { _, title in
+                        if !title.isEmpty { refocusUntil = nil }
+                    }
+                Button("إضافة") { add() }
                     .buttonStyle(.zimamQuiet)
                     .disabled(trimmed.isEmpty)
             }
@@ -33,10 +48,21 @@ struct TaskSubtasksSection: View {
         }
     }
 
-    private func add() {
-        guard !trimmed.isEmpty else { return }
+    /// Return adds the subtask and keeps the field for the next one; «إضافة» leaves the keyboard as it is.
+    private func submit() {
+        guard add() else { return }
+        #if os(iOS)
+        refocusUntil = ContinuousClock.now.advanced(by: .milliseconds(500))
+        #endif
+        fieldFocused = true
+    }
+
+    @discardableResult
+    private func add() -> Bool {
+        guard !trimmed.isEmpty else { return false }
         store.addSubtask(to: task, title: trimmed)
         newTitle = ""
+        return true
     }
 }
 

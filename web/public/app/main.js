@@ -2,8 +2,8 @@
 // MainView.swift lays out by width (shell.js): a tab bar on phones, the sidebar and an inspector for
 // the open task on wide screens. Plain DOM and ES modules; views are chosen by the URL hash
 // (#/today, #/projects/<id>, …; lib/routes.js), and ?task=<id> is the task open beside them.
-import { api, apiBase, errorText, session, whenSignedOut } from "./lib/api.js";
-import { ButtonLink, IconButton, ProjectCard, ScreenHeader, TaskRow, ViewToolbar, h, setRowDone, setRowSelected } from "./lib/components.js";
+import { TASK_PAGE_LIMIT, TASK_PAGE_SIZE, api, apiBase, errorText, session, whenSignedOut } from "./lib/api.js";
+import { ButtonLink, DateChip, IconButton, ProjectCard, ScreenHeader, TaskRow, ViewToolbar, h, isTyping, setRowDone, setRowSelected } from "./lib/components.js";
 import { addDays, dayDiff, dayHeading, dualDate, dueChip, isIsoDate, localIsoDate, relativeDay, timeLabel, weekdayName } from "./lib/dates.js";
 import {
   GOOGLE_CHANNEL,
@@ -29,14 +29,15 @@ import { hasPendingImport, rememberPendingImport, viewImport } from "./import-vi
 import { rememberPendingJoin, takePendingJoin, viewJoin } from "./invite-view.js";
 import { groupByDay, isOpen, priorityKey, progressText, taskCount, todayList, topLevel } from "./lib/tasks.js";
 // Features in their own modules: the assistant, the board, the calendar and sharing.
-import { resetAddAssistant, setupAddAssistant, todaySummary } from "./assistant-view.js";
+import { AT_TIME_FAILED, forgetSummaries, resetAddAssistant, setupAddAssistant, todaySummary } from "./assistant-view.js";
 import { boardView, layoutOf, layoutToggle } from "./board-view.js";
 import { calendarSelectedDay, viewCalendar } from "./calendar-view.js";
 import { boardApi, remindersApi } from "./lib/feature-api.js";
 import { nextOccurrence } from "./lib/recurrence.js";
+import { TASK_DRAG_TYPE } from "./lib/move.js";
 import { newReminder } from "./lib/reminders.js";
 import { canEdit } from "./lib/sharing.js";
-import { openShare } from "./share-view.js";
+import { forgetMembers, openShare } from "./share-view.js";
 import { confirmDelete as confirmProjectDelete, hasProjectActions, openRename, showProjectMenu, toggleArchive } from "./project-menu.js";
 import { projectPermissions, splitArchived } from "./lib/project-actions.js";
 // Start dates, the timeline (Gantt) and the priority matrix.
@@ -123,6 +124,9 @@ function featureContext() {
     },
     markLocalChange: () => (state.localChangeAt = Date.now()),
     onChanged: (task) => pane.refresh(task),
+    addNextOccurrence,
+    queueTaskRequest,
+    cutNote,
   };
 }
 
@@ -150,8 +154,45 @@ async function prepareNonce() {
   pendingNonce = { raw, hashed: await sha256Hex(raw), state: randomNonce(16) };
 }
 
+/** Where the last account was when it left this tab (forgetAccount): { userId, hash }. */
+let leftAt = null;
+
+/**
+ * Forgets what the signed-in account showed, on every way back to sign-in (signing out, deleting
+ * the account, a session that ended): the next account to sign in in this tab sees none of it.
+ */
+function forgetAccount() {
+  // Null on a first load without a session: nothing was shown, and a link opened then stays whole.
+  const shown = state.me;
+  state.renderId++; // a render still in flight draws nothing
+  state.me = null;
+  state.projects = [];
+  state.taskIndex.clear();
+  state.shownKey = null;
+  clearTimeout(liveTimer);
+  clearTimeout(viewRefreshTimer);
+  Object.assign(selection, { pushed: false, scrollY: 0, focusBack: null });
+  pane.hide();
+  els.view.replaceChildren();
+  frame.forget();
+  forgetSummaries();
+  forgetMembers();
+  prayers.forget();
+  openFolds.clear();
+  for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
+  // The place in the URL (its project, section, search or task) was the account's: the next one
+  // starts on «اليوم», and the same account signing in again here finds it (leftAt). An invite or
+  // an import link stays for whoever signs in.
+  const route = parseRoute();
+  if (shown && route.name !== "join" && route.name !== "import") {
+    leftAt = { userId: shown.id, hash: location.hash };
+    history.replaceState(null, "", "#/today");
+  }
+}
+
 function showSignIn(message = "") {
   live.stop();
+  forgetAccount();
   els.loading.hidden = true;
   els.shell.hidden = true;
   els.signin.hidden = false;
@@ -331,9 +372,6 @@ els.signout.addEventListener("click", async () => {
   }
   els.signout.disabled = false;
   session.clear();
-  state.me = null;
-  state.projects = [];
-  pane.hide();
   showSignIn();
 });
 
@@ -356,6 +394,10 @@ async function start() {
   els.loading.hidden = true;
   els.signin.hidden = true;
   els.shell.hidden = false;
+  // The same account back in this tab (its session had ended, say): where it was, unless another
+  // place was opened meanwhile.
+  if (leftAt?.userId === state.me.id && location.hash === "#/today") history.replaceState(null, "", leftAt.hash);
+  leftAt = null;
   // Back from a sign-in that lost the hash (Google's whole-tab flow): return to the invite.
   const pendingJoin = takePendingJoin();
   if (pendingJoin && parseRoute().name !== "join") history.replaceState(null, "", pendingJoin);
@@ -365,6 +407,33 @@ async function start() {
   prayers.load();
   render({ focus: false });
   live.start();
+  keepTimeZone();
+}
+
+/**
+ * The server builds summaries, agendas and reminder times on `settings.timeZone`, so the device's
+ * zone goes there on every start, as SessionStore.sharePlace does in the app. Only the zone: the
+ * location stays the person's own choice (prayer-view.js).
+ */
+function keepTimeZone() {
+  let zone = null;
+  try {
+    zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return;
+  }
+  const me = state.me;
+  if (!zone || !me || me.settings?.timeZone === zone) return;
+  api
+    .updateMe({ settings: { timeZone: zone } })
+    .then((saved) => {
+      if (state.me?.id !== saved.id) return; // signed out meanwhile
+      state.me = saved;
+      prayers.load();
+    })
+    .catch(() => {
+      /* the next start tries again */
+    });
 }
 
 /** «إعادة المحاولة» when the account could not be read (other than a signed-out session). */
@@ -429,17 +498,21 @@ async function liveRefresh() {
   render({ focus: false });
 }
 
-/** The open task, read again after a change elsewhere: redrawn only if it changed, kept if gone. */
+/**
+ * The open task, read again after a change elsewhere: redrawn only if it changed, kept if gone; its
+ * subtasks, comments and attachments are read again too, as another member may have added some.
+ */
 async function refreshOpenTask() {
   const id = pane.currentId();
-  if (!id) return;
+  if (!id || savingTasks.has(id)) return; // edits on their way bring the task back themselves
   try {
     const task = await api.task(id);
-    if (pane.currentId() !== id) return;
+    if (pane.currentId() !== id || savingTasks.has(id)) return;
     if (task.updatedAt !== state.taskIndex.get(id)?.updatedAt) {
       state.taskIndex.set(id, task);
       pane.refresh(task);
     }
+    pane.reloadLists();
   } catch (error) {
     if (error.status === 404 && pane.currentId() === id) pane.showMissing();
   }
@@ -449,10 +522,13 @@ async function refreshOpenTask() {
 
 async function syncNow() {
   live.stop();
-  await refreshProjects();
-  await Promise.all([frame.refreshSidebar(), render({ focus: false }), refreshOpenTask()]);
+  const projectsRead = await refreshProjects();
+  const [sidebarRead] = await Promise.all([frame.refreshSidebar(), render({ focus: false }), refreshOpenTask()]);
+  if (els.shell.hidden) return; // the session ended meanwhile
   live.start();
-  announce("تمت المزامنة.");
+  // render() leaves its own failure in #app-error (an alert); the rest say whether they read the server.
+  if (projectsRead && sidebarRead && !els.appError.textContent) announce("تمت المزامنة.");
+  else if (!els.appError.textContent) showError("تعذّرت المزامنة. تحقق من اتصالك ثم حاول مرة أخرى.");
 }
 
 // ——— Routing ———
@@ -460,6 +536,8 @@ async function syncNow() {
 window.addEventListener("hashchange", () => {
   if (els.shell.hidden) return;
   const route = parseRoute();
+  // Off the task's page by the browser's back or a tab, not «رجوع»: nothing pushed is left to pop.
+  if (!route.task) selection.pushed = false;
   // Only the open task changed (a phone's task page, or back from it): keep the list as it is.
   if (routeKey(route) === state.shownKey) {
     syncTask(route.task ?? null, { focus: true });
@@ -560,11 +638,7 @@ $("settings-button").addEventListener("click", () =>
     signOut: () => els.signout.click(),
     deleteAccount: async () => {
       await api.deleteMe();
-      live.stop();
       session.clear();
-      state.me = null;
-      state.projects = [];
-      pane.hide();
       showSignIn("حُذف حسابك.");
     },
     announce,
@@ -693,12 +767,77 @@ function refreshViewSoon() {
   }, 400);
 }
 
-/** A field changed in the open task's editor: saved, then the pane and the list follow. */
+/** Each task's edits not answered yet: { last: the request sent last, waiting: how many }. */
+const savingTasks = new Map();
+
+/**
+ * Sends a request about a task after those still on their way for it, in order: the editor's
+ * fields, «إنجاز», «تغيير المدة» and the assignee all go through here, as the server reads, merges
+ * and writes the whole task for each, so two at once could undo each other.
+ */
+async function queueTaskRequest(id, send) {
+  const queue = savingTasks.get(id) ?? { last: Promise.resolve(), waiting: 0 };
+  savingTasks.set(id, queue);
+  queue.waiting += 1;
+  const sent = queue.last.catch(() => {}).then(send);
+  queue.last = sent;
+  try {
+    return await sent;
+  } finally {
+    queue.waiting -= 1;
+    if (queue.waiting === 0) savingTasks.delete(id);
+  }
+}
+
+let paneRedrawTimer;
+/**
+ * Redraws the open task's editor once the focus has settled. A text field saves on `change`, which
+ * fires while the focus is on its way to the next control; a redraw then would take that control
+ * away mid-move and leave the focus on <body>. After it, fill() gives the focus back by data-key.
+ */
+function redrawPaneSoon(id) {
+  clearTimeout(paneRedrawTimer);
+  paneRedrawTimer = setTimeout(() => {
+    const shown = pane.currentTask(id);
+    if (shown) pane.refresh(shown);
+  }, 0);
+}
+
+/**
+ * A field changed in the open task's editor. The change is kept at once, so the next one builds on
+ * it (the prayer stepper, the weekdays), and shows as soon as the focus has settled. The PATCHes of a
+ * task go one after another, in order: the server reads, merges and writes each, so two at once
+ * could undo each other. Only the last answer redraws the pane, so an older one never shows over a
+ * newer edit; a failure reads the task again.
+ */
 async function saveTask(task, fields) {
   state.localChangeAt = Date.now();
-  const saved = await api.patchTask(task.id, fields);
-  for (const copy of new Set([task, state.taskIndex.get(task.id), pane.currentTask(task.id)].filter(Boolean))) Object.assign(copy, saved);
-  pane.refresh(saved);
+  const merge = (fresh) => {
+    for (const copy of new Set([task, state.taskIndex.get(task.id), pane.currentTask(task.id)].filter(Boolean))) Object.assign(copy, fresh);
+  };
+  const apply = (fresh) => {
+    merge(fresh);
+    pane.refresh(fresh);
+  };
+  merge({ ...fields, id: task.id });
+  redrawPaneSoon(task.id);
+  let saved;
+  let failure;
+  try {
+    saved = await queueTaskRequest(task.id, () => api.patchTask(task.id, fields));
+  } catch (error) {
+    failure = error;
+  }
+  const last = !savingTasks.has(task.id);
+  if (failure) {
+    // The change did not hold: the task as the server has it, unless newer edits are on their way.
+    if (last && failure.status !== 401) {
+      const fresh = await api.task(task.id).catch(() => null);
+      if (fresh && !savingTasks.has(task.id)) apply(fresh);
+    }
+    throw failure;
+  }
+  if (last) apply(saved);
   if ("projectId" in fields) refreshProjects();
   refreshViewSoon();
   return saved;
@@ -744,6 +883,19 @@ function emptyState(text) {
   return h("p", { className: "callout empty" }, text);
 }
 
+/** Under a list cut at the page limit (lib/api.js): it shows only the first of the tasks. */
+function cutNote() {
+  return h("p", { className: "caption muted", role: "note" }, `يُعرض أول ${arabicNumber(TASK_PAGE_SIZE * TASK_PAGE_LIMIT)} مهمة فقط.`);
+}
+
+/** The fold-outs opened («المنجزة», «المشاريع المؤرشفة»), so a redraw keeps them open, as @State does. */
+const openFolds = new Set();
+
+function fold(key, className, ...children) {
+  const toggle = (event) => (event.currentTarget.open ? openFolds.add(key) : openFolds.delete(key));
+  return h("details", { className, open: openFolds.has(key), ontoggle: toggle }, ...children);
+}
+
 /** «المشاريع» above a project, the timeline or the matrix on phones (the app pushes them from there). */
 function backToProjects() {
   return h(
@@ -752,8 +904,6 @@ function backToProjects() {
     ButtonLink({ variant: "quiet", href: "#/projects", className: "back-link" }, icon("chevron-back", { size: "sm" }), "المشاريع"),
   );
 }
-
-const TASK_TYPE = "application/x-zimam-task";
 
 /**
  * A list of TaskRows. `showDate` adds the due-date chip; `leaveWhenDone` removes a task a second
@@ -765,6 +915,8 @@ function taskList(tasks, { showDate = true, showProject = true, leaveWhenDone = 
   return list;
 }
 
+const rowDueChip = (task, done) => dueChip(task.dueDate, { today: state.today, primary: primary(), done });
+
 function taskItem(task, options) {
   const li = h("li", { className: "task-item", dataset: { taskId: task.id } });
   state.taskIndex.set(task.id, task);
@@ -773,7 +925,7 @@ function taskItem(task, options) {
     note: task.notes ? task.notes.split("\n")[0] : null,
     done: task.status === "done",
     priority: priorityKey(task.priority),
-    date: options.showDate && task.dueDate ? dueChip(task.dueDate, { today: state.today, primary: primary() }) : null,
+    date: options.showDate && task.dueDate ? rowDueChip(task, task.status === "done") : null,
     time: task.dueDate && !task.duePrayer ? timeLabel(task.dueTime) : null,
     prayer: prayers.chipFor(task),
     project: options.showProject && task.projectId ? projectName(task.projectId) : null,
@@ -791,7 +943,7 @@ function taskItem(task, options) {
     li.draggable = true;
     li.addEventListener("dragstart", (event) => {
       event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData(TASK_TYPE, task.id);
+      event.dataTransfer.setData(TASK_DRAG_TYPE, task.id);
       if (!event.dataTransfer.getData("text/plain")) event.dataTransfer.setData("text/plain", task.title);
       document.body.classList.add("is-dragging");
     });
@@ -834,7 +986,12 @@ async function toggleTask(task, li = findItem(task.id)) {
   const copies = new Set([task, li?.task, state.taskIndex.get(task.id), pane.currentTask(task.id)].filter(Boolean));
   const show = (status) => {
     for (const copy of copies) copy.status = status;
-    if (li?.row) setRowDone(li.row, status === "done", task.title);
+    if (li?.row) {
+      setRowDone(li.row, status === "done", task.title);
+      // A done task is not overdue: its date chip follows in place.
+      const chip = li.row.querySelector(".zm-chip-date:not(.zm-chip-time)");
+      if (chip && task.dueDate) chip.replaceWith(DateChip(rowDueChip(task, status === "done")));
+    }
     pane.setToggle(task);
   };
   show(done ? "done" : "todo");
@@ -845,12 +1002,13 @@ async function toggleTask(task, li = findItem(task.id)) {
   clearError();
   state.localChangeAt = Date.now();
 
-  const call = done ? api.completeTask(task.id) : api.reopenTask(task.id);
+  const call = queueTaskRequest(task.id, () => (done ? api.completeTask(task.id) : api.reopenTask(task.id)));
   if (done && li?.leaveWhenDone) li.leaveTimer = setTimeout(() => leave(li, li.task), LEAVE_AFTER);
   try {
     const saved = await call;
     for (const copy of copies) Object.assign(copy, saved);
-    pane.refresh(saved);
+    // With edits still on their way, the last of their answers redraws the pane (saveTask).
+    if (!savingTasks.has(task.id)) pane.refresh(saved);
     announce(done ? "أُنجزت المهمة." : "أُعيدت المهمة إلى المفتوحة.");
     if (done && saved.recurrence) addNextOccurrence(saved);
     refreshProjects().then(() => frame.refreshSidebar());
@@ -860,7 +1018,10 @@ async function toggleTask(task, li = findItem(task.id)) {
       li.classList.remove("is-leaving");
     }
     show(previous);
-    if (error.status !== 401) showError(error);
+    if (error.status === 401) return;
+    // The request failed after the row had left its list: a redraw brings the open task back.
+    if (li && !li.isConnected) await render({ focus: false });
+    showError(error);
   }
 }
 
@@ -895,9 +1056,12 @@ async function addNextOccurrence(task) {
     });
     const { reminders } = await remindersApi.list(task.id);
     const shift = task.dueDate ? dayDiff(task.dueDate, next.day) : 0;
+    // A time moves with the task: a time reminder's, and the time a place reminder races against
+    // (Store.copyReminders); one whose time cannot be read is left out.
+    const moves = (r) => r.kind === "time" || (r.kind === "location" && r.at != null);
     const copies = reminders
-      .filter((r) => r.kind !== "time" || shiftIso(r.at, shift))
-      .map((r) => ({ op: "upsert", entity: "reminder", data: newReminder(copy.id, { kind: r.kind, at: r.kind === "time" ? shiftIso(r.at, shift) : r.at, prayer: r.prayer, offsetMinutes: r.offsetMinutes, location: r.location }) }));
+      .filter((r) => !moves(r) || shiftIso(r.at, shift))
+      .map((r) => ({ op: "upsert", entity: "reminder", data: newReminder(copy.id, { kind: r.kind, at: moves(r) ? shiftIso(r.at, shift) : r.at, prayer: r.prayer, offsetMinutes: r.offsetMinutes, location: r.location }) }));
     if (copies.length) await remindersApi.save(copies);
     announce(`أُضيف موعدها القادم: ${dateLabelFor(next.day)}.`);
     refreshViewSoon();
@@ -917,14 +1081,22 @@ const dateLabelFor = (iso) => relativeDay(iso, state.today) ?? dualDate(iso, { p
 function leave(li, task) {
   if (isOpen(task) || !li.isConnected) return;
   li.classList.add("is-leaving");
-  // A fade, not a movement, so it stays with Reduce Motion as in the app.
-  setTimeout(() => removeItem(li), FADE);
+  // A fade, not a movement, so it stays with Reduce Motion as in the app. Kept as the row's timer,
+  // so an undo or a failed request during the fade keeps the row.
+  li.leaveTimer = setTimeout(() => !isOpen(li.task) && removeItem(li), FADE);
 }
 
-/** Removes a task from its list, keeping keyboard focus nearby, and tidies an emptied list. */
+/**
+ * Removes a task from its list, keeping keyboard focus nearby, and tidies an emptied list. The board
+ * and the matrix take the leaving task themselves (zimam:task-left), so their counts follow.
+ */
 function removeItem(li) {
   if (!li.isConnected) return;
   const hadFocus = li.contains(document.activeElement);
+  if (!li.dispatchEvent(new CustomEvent("zimam:task-left", { bubbles: true, cancelable: true }))) {
+    if (hadFocus && !els.view.contains(document.activeElement)) els.view.querySelector("h1")?.focus();
+    return;
+  }
   const next = li.nextElementSibling ?? li.previousElementSibling;
   const list = li.parentElement;
   li.remove();
@@ -932,11 +1104,13 @@ function removeItem(li) {
   if (list && list.children.length === 0) render({ focus: hadFocus });
 }
 
+/** → whether the projects were read */
 async function refreshProjects() {
   try {
     ({ projects: state.projects } = await api.projects());
+    return true;
   } catch {
-    /* counts refresh on the next visit */
+    return false; // counts refresh on the next visit
   }
 }
 
@@ -944,7 +1118,7 @@ async function refreshProjects() {
 
 async function viewToday() {
   const today = state.today;
-  const { tasks } = await api.tasks({ status: "open", dueTo: today });
+  const { tasks, truncated } = await api.tasks({ status: "open", dueTo: today });
   const list = todayList(tasks, today);
   const out = [
     ViewToolbar(frame.accountButton()),
@@ -952,14 +1126,16 @@ async function viewToday() {
     prayers.nextLine(),
     todaySummary(featureContext()),
   ];
+  if (truncated) out.push(cutNote());
   out.push(list.length ? taskList(list, { label: "مهام اليوم" }) : emptyState("لا مهام اليوم. يومك لك."));
   return out;
 }
 
 async function viewUpcoming() {
   const tomorrow = addDays(state.today, 1);
-  const { tasks } = await api.tasks({ status: "open", dueFrom: tomorrow });
+  const { tasks, truncated } = await api.tasks({ status: "open", dueFrom: tomorrow });
   const out = [ScreenHeader("القادم")];
+  if (truncated) out.push(cutNote());
   const groups = groupByDay(topLevel(tasks));
   if (groups.length === 0) {
     out.push(emptyState("لا مهام قادمة."));
@@ -1032,6 +1208,8 @@ function archivedProjects(archived) {
     restore?.addEventListener("click", async () => {
       restore.disabled = true;
       await toggleArchive(p, projectMenuContext());
+      // Restored, the list is drawn again without it; otherwise the error is shown and it can be tried again.
+      if (restore.isConnected) restore.disabled = false;
     });
     list.append(
       h("li", { className: "archived-row" },
@@ -1040,7 +1218,7 @@ function archivedProjects(archived) {
         hasProjectActions(p) ? projectOptionsButton(p, { compact: true }) : null),
     );
   }
-  return h("details", { className: "done-section archived-projects" },
+  return fold("archived-projects", "done-section archived-projects",
     h("summary", { className: "headline muted" }, "المشاريع المؤرشفة ", h("span", { className: "caption muted" }, arabicNumber(archived.length))),
     list);
 }
@@ -1058,17 +1236,18 @@ function sectionGroups(open, sections) {
 }
 
 async function projectTasksView({ title, subtitle, projectId, project = null, sectionId = null, empty }) {
-  const [{ tasks }, detail] = await Promise.all([api.tasks({ projectId }), project ? boardApi.project(project.id) : null]);
+  const [{ tasks, truncated }, detail] = await Promise.all([api.tasks({ projectId }), project ? boardApi.project(project.id) : null]);
   const sections = detail?.sections ?? [];
   const top = topLevel(tasks);
   const out = [backToProjects()];
+  const cut = truncated ? cutNote() : null;
   if (project && !sectionId && layoutOf(project) === "kanban") {
-    out.push(ScreenHeader(title, subtitle, projectTools(project)));
+    out.push(ScreenHeader(title, subtitle, projectTools(project)), ...(cut ? [cut] : []));
     out.push(boardView({ project: { ...project, role: detail.role ?? project.role }, sections, tasks: top }, featureContext()));
     return out;
   }
   if (project && !sectionId && layoutOf(project) === "timeline") {
-    out.push(ScreenHeader(title, subtitle, projectTools(project)));
+    out.push(ScreenHeader(title, subtitle, projectTools(project)), ...(cut ? [cut] : []));
     out.push(projectTimeline({ project, sections, tasks: top }, featureContext()));
     return out;
   }
@@ -1076,6 +1255,7 @@ async function projectTasksView({ title, subtitle, projectId, project = null, se
   const open = scoped.filter(isOpen).sort(byManualOrder);
   const done = scoped.filter((t) => !isOpen(t));
   out.push(ScreenHeader(title, subtitle, project && !sectionId ? projectTools(project) : null));
+  if (cut) out.push(cut);
   if (open.length === 0) out.push(emptyState(empty));
   for (const { section, tasks: groupTasks } of sectionId ? [{ section: null, tasks: open }] : sectionGroups(open, sections)) {
     if (!section) {
@@ -1091,7 +1271,7 @@ async function projectTasksView({ title, subtitle, projectId, project = null, se
   }
   if (done.length) {
     out.push(
-      h("details", { className: "done-section" },
+      fold(`done:${projectId}:${sectionId ?? ""}`, "done-section",
         h("summary", { className: "headline muted" }, "المنجزة ", h("span", { className: "caption muted" }, taskCount(done.length))),
         taskList(done, { showProject: false, leaveWhenDone: false, label: "المهام المنجزة" })),
     );
@@ -1189,10 +1369,11 @@ async function viewSearch({ q }) {
     out.push(emptyState("ابحث في عناوين المهام وملاحظاتها ووسومها."));
     return out;
   }
-  const { tasks } = await api.tasks({ q: q.trim() });
+  const { tasks, truncated } = await api.tasks({ q: q.trim() });
   const found = topLevel(tasks);
   const count = found.length === 0 ? "لا نتائج." : found.length === 1 ? "نتيجة واحدة" : `${arabicNumber(found.length)} نتائج`;
   out.push(h("p", { className: "caption muted result-count", role: "status" }, count));
+  if (truncated) out.push(cutNote());
   if (found.length) out.push(taskList(found, { leaveWhenDone: false, label: "نتائج البحث" }));
   return out;
 }
@@ -1366,9 +1547,10 @@ addDialog.form.addEventListener("zimam:fill", ({ detail: task }) => {
 });
 
 // ⌘N is the browser's new window; Alt+N (Option+N) adds a task, as «مهمة جديدة» does on the Mac.
+// Not in a field, where Option+N types a letter on the Mac.
 document.addEventListener("keydown", (event) => {
   if (event.code !== "KeyN" || !event.altKey || event.metaKey || event.ctrlKey) return;
-  if (els.shell.hidden || document.querySelector("dialog[open]")) return;
+  if (els.shell.hidden || document.querySelector("dialog[open]") || isTyping(event.target)) return;
   event.preventDefault();
   openAdd();
 });
@@ -1410,13 +1592,18 @@ addDialog.form.addEventListener("submit", async (event) => {
   try {
     state.localChangeAt = Date.now();
     const task = await api.createTask(body);
-    // A task with a time reminds at it, as the app adds «عند الموعد» (ensureAtTimeReminder).
-    if (dueTime || prayer) await remindersApi.add(newReminder(task.id, { kind: "relative", offsetMinutes: 0 })).catch(() => {});
+    // A task with a time reminds at it, as the app adds «عند الموعد» (ensureAtTimeReminder). The task
+    // is added either way (a retry would add it twice); a reminder that could not be is said.
+    let reminderFailed = false;
+    if (dueTime || prayer) {
+      await remindersApi.add(newReminder(task.id, { kind: "relative", offsetMinutes: 0 })).catch((e) => (reminderFailed = e.status !== 401));
+    }
     addDialog.el.close();
-    announce("أُضيفت المهمة.");
+    if (!reminderFailed) announce("أُضيفت المهمة.");
     await refreshProjects();
     frame.refreshSidebar();
-    render({ focus: false });
+    await render({ focus: false });
+    if (reminderFailed) showError(AT_TIME_FAILED);
   } catch (error) {
     if (error.status !== 401) addDialog.error.textContent = errorText(error);
   } finally {

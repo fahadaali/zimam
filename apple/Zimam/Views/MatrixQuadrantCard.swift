@@ -87,7 +87,7 @@ struct MatrixTaskRow: View {
     @Environment(\.dateFormatterZimam) private var formatter
 
     var body: some View {
-        NavigationLink(value: TaskRoute(id: task.id)) {
+        TaskOpenLink(taskId: task.id) {
             HStack(alignment: .top, spacing: ZimamSpacing.space1) {
                 CompletionCircle(isDone: task.isDone, font: ZimamType.headline, action: onToggle)
 
@@ -137,14 +137,9 @@ struct MatrixTaskRow: View {
     /// «اليوم، ٣:٠٠ م» for a time today, the day's label otherwise.
     private var due: String? {
         guard let day = task.dueDate, let date = formatter.date(fromDay: day) else { return nil }
-        let label = formatter.label(for: date)
-        guard day == today, task.duePrayer == nil, let time = task.dueTime else { return label }
-        let parts = time.split(separator: ":").compactMap { Int($0) }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = formatter.timeZone
-        guard parts.count >= 2, let at = calendar.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: date) else {
-            return label
-        }
+        let label = formatter.label(for: date, now: DayClock.shared.now)
+        guard day == today, task.duePrayer == nil, let time = task.dueTime,
+              let at = TaskTiming.time(of: .clock(time), on: day, schedule: nil, formatter: formatter) else { return label }
         return "\(label)، \(formatter.time(at))"
     }
 }

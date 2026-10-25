@@ -33,7 +33,7 @@ test("a spent quota names the limit and the renewal day in both calendars", () =
   assert.ok(gregorianFirst.endsWith("تتجدد في ١ نوفمبر، ٢١ جمادى الأولى."), gregorianFirst);
   // In December the renewal falls in the next year, so years are shown.
   const december = new ApiError(429, "ai_quota_exceeded", "", { limit: 300, resetsOn: "2027-01-01" });
-  assert.match(assistantErrorText(december, { today: "2026-12-20" }), /١٤٤٨ هـ، ١ يناير ٢٠٢٧/);
+  assert.match(assistantErrorText(december, { today: "2026-12-20" }), /١٤٤٨هـ، ١ يناير ٢٠٢٧/);
   // Without the details, the sentence alone.
   assert.equal(assistantErrorText(new ApiError(429, "ai_quota_exceeded", "")), "استعملت كل طلبات المساعد لهذا الشهر، ولم يبقَ منها شيء.");
 });

@@ -15,8 +15,8 @@ import type { AppEnv } from "../types";
 
 const AppleSignIn = z.object({
   identityToken: z.string().min(1),
-  /** The raw nonce the client hashed into the Apple request, if any. */
-  nonce: z.string().min(1).optional(),
+  /** The raw nonce the client hashed into the Apple request. Every client sends one. */
+  nonce: z.string().min(1).max(200),
   /** Apple sends the name only on the first sign-in, to the client. */
   name: z.string().trim().max(200).optional(),
   device: z.string().trim().max(100).optional(),
@@ -28,8 +28,8 @@ const AppleSignIn = z.object({
 
 const GoogleSignIn = z.object({
   idToken: z.string().min(1),
-  /** The raw nonce whose SHA-256 (hex) the client gave Google, if any. */
-  nonce: z.string().min(1).optional(),
+  /** The raw nonce whose SHA-256 (hex) the client gave Google. Every client sends one. */
+  nonce: z.string().min(1).max(200),
   /** A name from the client; the token's own name is the fallback. */
   name: z.string().trim().max(200).optional(),
   device: z.string().trim().max(100).optional(),
@@ -39,7 +39,7 @@ export const auth = new Hono<AppEnv>();
 
 auth.post("/apple", async (c) => {
   const body = AppleSignIn.safeParse(await readJson(c));
-  if (!body.success) return fail(c, 400, "invalid", "identityToken is required");
+  if (!body.success) return fail(c, 400, "invalid", "identityToken and nonce are required");
   const audiences = appleAudiences(c.env.APPLE_AUDIENCES);
 
   let identity;
@@ -69,7 +69,7 @@ auth.post("/google", async (c) => {
   const audiences = googleAudiences(c.env.GOOGLE_CLIENT_IDS);
   if (audiences.length === 0) return fail(c, 503, "google_unavailable", "Sign in with Google is not configured");
   const body = GoogleSignIn.safeParse(await readJson(c));
-  if (!body.success) return fail(c, 400, "invalid", "idToken is required");
+  if (!body.success) return fail(c, 400, "invalid", "idToken and nonce are required");
 
   let identity;
   try {

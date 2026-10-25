@@ -247,6 +247,34 @@ describe("Uploading, listing and downloading", () => {
     const free = await upload(user, taskId, file("ج.pdf", 10), { SUBSCRIPTIONS_ENFORCED: "true", ATTACHMENT_QUOTA_MB_FREE: "0" });
     expect(free.body.error).toMatchObject({ code: "storage_quota_exceeded", limit: 0, plan: "free" });
   });
+
+  it("counts a removed member's files against the project owner, who can delete them", async () => {
+    const owner = await signIn();
+    const editor = await signIn();
+    const projectId = await createProject(owner);
+    await addMember(projectId, editor.userId, "editor");
+    const taskId = await createTask(owner, { projectId });
+    const oneMb = { ATTACHMENT_QUOTA_MB_PRO: "1" };
+    expect((await upload(editor, taskId, file("عقد.pdf", 600 * 1024), oneMb)).status).toBe(201);
+    // Still a member: the file is the editor's, not the owner's.
+    expect((await upload(owner, taskId, file("صورة.pdf", 600 * 1024), oneMb)).status).toBe(201);
+    const [, mine] = (await list(owner, taskId)).body.attachments as Attachment[];
+    expect((await remove(owner, mine!.id)).status).toBe(204);
+
+    const removed = await call("DELETE", `/v1/projects/${projectId}/members/${editor.userId}`, { token: owner.token });
+    expect(removed.status).toBe(204);
+
+    // The editor's space is free again; the owner now pays for the file left behind.
+    expect((await upload(editor, await createTask(editor), file("جديد.pdf", 600 * 1024), oneMb)).status).toBe(201);
+    const full = await upload(owner, taskId, file("صورة.pdf", 600 * 1024), oneMb);
+    expect(full.body.error).toMatchObject({ code: "storage_quota_exceeded", used: 600 * 1024 });
+
+    // And can delete it, which frees the space.
+    const [left] = (await list(owner, taskId)).body.attachments as Attachment[];
+    expect(left!.uploaderId).toBe(editor.userId);
+    expect((await remove(owner, left!.id)).status).toBe(204);
+    expect((await upload(owner, taskId, file("صورة.pdf", 600 * 1024), oneMb)).status).toBe(201);
+  });
 });
 
 describe("Deleting an attachment", () => {

@@ -49,6 +49,7 @@ private struct TaskDetailForm: View {
     @Environment(\.modelContext) private var context
     @Environment(SyncEngine.self) private var sync
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.taskCompleteInToolbar) private var completeInToolbar
 
     let task: TaskItem
     let subtasks: [TaskItem]
@@ -58,6 +59,11 @@ private struct TaskDetailForm: View {
     @State private var title = ""
     @State private var notes = ""
     @State private var tags = ""
+    /// What each field last matched in the task. A field still equal to it was not edited here:
+    /// a change synced from another device replaces it, and saving leaves that field alone.
+    @State private var savedTitle = ""
+    @State private var savedNotes = ""
+    @State private var savedTags = ""
     @State private var loaded = false
     @FocusState private var focused: Field?
 
@@ -106,9 +112,19 @@ private struct TaskDetailForm: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            // The inspector on the iPad and the Mac has its own, wired to the menu (MainView.swift).
+            if completeInToolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    CompleteToolbarButton(taskId: task.id)
+                }
+            }
+        }
         .onAppear(perform: load)
         .onDisappear(perform: saveText)
         .onChange(of: focused) { _, _ in saveText() }
+        // A sync or an edit elsewhere on the screen: every change bumps `updatedAt`.
+        .onChange(of: task.updatedAt) { _, _ in refresh() }
     }
 
     private func deleteTask() {
@@ -117,22 +133,38 @@ private struct TaskDetailForm: View {
     }
 
     private func load() {
-        guard !loaded else { return }
+        refresh(force: !loaded)
         loaded = true
-        title = task.title
-        notes = task.notes ?? ""
-        tags = task.tags.joined(separator: "، ")
     }
 
-    /// Saves the title, notes and tags when a field loses focus, on return, and on leaving.
+    /// Shows the task's title, notes and tags in the fields not edited here, so a change from
+    /// another device appears while the details are open; a field being edited keeps its text.
+    private func refresh(force: Bool = false) {
+        let current = (title: task.title, notes: task.notes ?? "", tags: task.tags.joined(separator: "، "))
+        if force || title == savedTitle { title = current.title; savedTitle = current.title }
+        if force || notes == savedNotes { notes = current.notes; savedNotes = current.notes }
+        if force || tags == savedTags { tags = current.tags; savedTags = current.tags }
+    }
+
+    /// Saves the title, notes and tags when a field loses focus, on return, and on leaving: only
+    /// those edited here, so a field changed meanwhile on another device is not written back.
     private func saveText() {
         guard loaded, !task.pendingDelete else { return }
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        let newTitle = trimmedTitle.isEmpty ? task.title : trimmedTitle
-        let newNotes: String? = trimmedNotes.isEmpty ? nil : trimmedNotes
-        let newTags = Self.parseTags(tags)
-        if trimmedTitle.isEmpty { title = task.title }
+        let titleEdited = title != savedTitle
+        let notesEdited = notes != savedNotes
+        let tagsEdited = tags != savedTags
+        guard titleEdited || notesEdited || tagsEdited else { return }
+        // Cut to the server's limits (`ServerText`), so the edit syncs; the field shows what is kept.
+        let trimmedTitle = Store.taskTitle(title)
+        let trimmedNotes = ServerText.clip(notes.trimmingCharacters(in: .whitespacesAndNewlines), to: ServerText.maxNotes)
+        let newTitle = titleEdited && !trimmedTitle.isEmpty ? trimmedTitle : task.title
+        let newNotes: String? = notesEdited ? (trimmedNotes.isEmpty ? nil : trimmedNotes) : task.notes
+        let newTags = tagsEdited ? Self.parseTags(tags) : task.tags
+        if titleEdited && (trimmedTitle.isEmpty || ServerText.exceeds(title, ServerText.maxTitle)) { title = newTitle }
+        if notesEdited && ServerText.exceeds(notes, ServerText.maxNotes) { notes = trimmedNotes }
+        savedTitle = title
+        savedNotes = notes
+        savedTags = tags
         guard newTitle != task.title || newNotes != task.notes || newTags != task.tags else { return }
         store.update(task) { item in
             item.title = newTitle

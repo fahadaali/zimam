@@ -214,8 +214,11 @@ final class CalendarEvents {
 
     /// Every occurrence in the chosen calendars from `start` to `end`, and for each counted series
     /// (a rule with a number of times) the start of its first occurrence, for `AppleCalendarImport.plan`.
-    func occurrences(in calendarIds: Set<String>, from start: Date, to end: Date)
+    /// Read off the main actor, up to a year of events, with a store of its own: the permission is
+    /// the app's, and no `EKEventStore` crosses between actors.
+    @concurrent nonisolated static func occurrences(in calendarIds: Set<String>, from start: Date, to end: Date) async
         -> (events: [AppleCalendarEvent], seriesStarts: [String: Date]) {
+        let store = EKEventStore()
         let chosen = store.calendars(for: .event).filter { calendarIds.contains($0.calendarIdentifier) }
         guard !chosen.isEmpty else { return ([], [:]) }
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: chosen)
@@ -246,8 +249,9 @@ final class CalendarEvents {
     }
 }
 
-/// EventKit's events as `AppleCalendarEvent` values.
-enum EventKitEvents {
+/// EventKit's events as `AppleCalendarEvent` values. Not tied to the main actor: the import reads
+/// them off it (`CalendarEvents.occurrences`).
+nonisolated enum EventKitEvents {
     static func event(from item: EKEvent) -> AppleCalendarEvent? {
         let startDate: Date? = item.startDate
         guard let start = startDate else { return nil }

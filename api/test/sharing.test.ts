@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "../src/auth/crypto";
+import { addMemberStatements } from "../src/data/membership";
 import { addMember, call, pullAll, push, signIn, uuid } from "./helpers";
 
 type User = Awaited<ReturnType<typeof signIn>>;
@@ -173,6 +174,45 @@ describe("Invites", () => {
     expect((await accept(viewer, editorInvite)).body).toEqual({ projectId, role: "editor" });
     expect((await addTask(viewer, projectId)).status).toBe(201);
   });
+
+  it("joins once, with the higher role, when one user accepts two invites at the same time", async () => {
+    const owner = await signIn();
+    const member = await signIn();
+    const projectId = await createProject(owner);
+    const codes = [(await invite(owner, projectId, "viewer")).body.code, (await invite(owner, projectId, "editor")).body.code];
+
+    const responses = await Promise.all(codes.map((code) => accept(member, code)));
+    expect(responses.map((r) => r.status)).toEqual([200, 200]);
+    const { results } = await env.DB.prepare(`SELECT role FROM project_members WHERE project_id = ? AND user_id = ?`)
+      .bind(projectId, member.userId)
+      .all<{ role: string }>();
+    expect(results).toEqual([{ role: "editor" }]);
+    // Whichever answered last saw the role that was stored.
+    expect(responses.map((r) => r.body.role)).toContain("editor");
+  });
+
+  it("never lowers a role when the join statement meets a member already there", async () => {
+    const owner = await signIn();
+    const editor = await signIn();
+    const viewer = await signIn();
+    const projectId = await createProject(owner);
+    await addMember(projectId, editor.userId, "editor");
+    await addMember(projectId, viewer.userId, "viewer");
+    const now = Date.now();
+    await env.DB.batch([
+      ...addMemberStatements(env.DB, projectId, owner.userId, "viewer", now),
+      ...addMemberStatements(env.DB, projectId, editor.userId, "viewer", now),
+      ...addMemberStatements(env.DB, projectId, viewer.userId, "editor", now),
+    ]);
+    const { results } = await env.DB.prepare(`SELECT user_id, role FROM project_members WHERE project_id = ?`)
+      .bind(projectId)
+      .all<{ user_id: string; role: string }>();
+    expect(Object.fromEntries(results.map((r) => [r.user_id, r.role]))).toEqual({
+      [owner.userId]: "owner",
+      [editor.userId]: "editor",
+      [viewer.userId]: "editor",
+    });
+  });
 });
 
 describe("Members", () => {
@@ -301,6 +341,68 @@ describe("Project options", () => {
     // Gone for every member, with its tasks.
     expect((await call("GET", "/v1/projects", { token: editor.token })).body.projects).toEqual([]);
     expect((await call("GET", `/v1/projects/${projectId}`, { token: owner.token })).status).toBe(404);
+  });
+
+  it("leaves a project's kind and folder to its owner, and lets editors edit it inside the owner's folder", async () => {
+    const owner = await signIn();
+    const editor = await signIn();
+    const folder = (user: User, extra = {}) =>
+      call("POST", "/v1/projects", { token: user.token, body: { name: "مجلد", kind: "folder", ...extra } });
+    const ownerFolder = (await folder(owner)).body.id as string;
+    const created = await call("POST", "/v1/projects", { token: owner.token, body: { name: "البيت", parentId: ownerFolder } });
+    const projectId = created.body.id as string;
+    await join(owner, editor, projectId, "editor");
+    const patch = (user: User, body: unknown) => call("PATCH", `/v1/projects/${projectId}`, { token: user.token, body });
+
+    // The editor's renames keep working though the folder is not theirs.
+    expect((await patch(editor, { name: "المنزل" })).body).toMatchObject({ name: "المنزل", parentId: ownerFolder });
+    // Their own folder, or turning the project into a folder, is kept as the owner left it.
+    const editorFolder = (await folder(editor)).body.id as string;
+    expect((await patch(editor, { parentId: editorFolder })).body).toMatchObject({ parentId: ownerFolder, kind: "project" });
+    expect((await patch(editor, { kind: "folder" })).body).toMatchObject({ kind: "project" });
+    expect((await call("GET", "/v1/projects", { token: owner.token })).body.projects.map((p: { id: string }) => p.id)).toContain(projectId);
+
+    // The owner moves it, but cannot make a shared project a folder.
+    expect((await patch(owner, { parentId: null })).body.parentId).toBeNull();
+    const refused = await patch(owner, { kind: "folder" });
+    expect(refused.status).toBe(400);
+    expect(refused.body.error.code).toBe("invalid");
+  });
+
+  it("does not let an open invite share a project that becomes a folder", async () => {
+    const owner = await signIn();
+    const guest = await signIn();
+    const projectId = await createProject(owner);
+    const patch = (body: unknown) => call("PATCH", `/v1/projects/${projectId}`, { token: owner.token, body });
+
+    // An open invite counts as sharing: no folder until it is revoked.
+    const open = (await invite(owner, projectId, "viewer")).body;
+    expect((await patch({ kind: "folder" })).status).toBe(400);
+    await call("DELETE", `/v1/projects/${projectId}/invites/${open.id}`, { token: owner.token });
+    expect((await patch({ kind: "folder" })).body.kind).toBe("folder");
+    expect((await invite(owner, projectId)).status).toBe(400);
+
+    // An invite to a project that became a folder anyway (a race, or before this check) lapses.
+    await patch({ kind: "project" });
+    const { code } = (await invite(owner, projectId)).body;
+    await env.DB.prepare(`UPDATE projects SET kind = 'folder' WHERE id = ?`).bind(projectId).run();
+    for (const res of [await call("GET", `/v1/invites/${code}`, { token: guest.token }), await accept(guest, code)]) {
+      expect(res.status).toBe(410);
+      expect(res.body.error.code).toBe("invite_revoked");
+    }
+    const { results } = await env.DB.prepare(`SELECT user_id FROM project_members WHERE project_id = ?`).bind(projectId).all();
+    expect(results).toEqual([{ user_id: owner.userId }]);
+  });
+
+  it("keeps folders out of each other", async () => {
+    const owner = await signIn();
+    const folder = (extra = {}) => call("POST", "/v1/projects", { token: owner.token, body: { name: "مجلد", kind: "folder", ...extra } });
+    const a = (await folder()).body.id as string;
+    const b = (await folder({ parentId: a })).body.id as string;
+    const c = (await folder({ parentId: b })).body.id as string;
+    expect((await call("PATCH", `/v1/projects/${a}`, { token: owner.token, body: { parentId: c } })).status).toBe(400);
+    expect((await call("PATCH", `/v1/projects/${a}`, { token: owner.token, body: { parentId: a } })).status).toBe(400);
+    expect((await call("PATCH", `/v1/projects/${c}`, { token: owner.token, body: { parentId: a } })).status).toBe(200);
   });
 });
 

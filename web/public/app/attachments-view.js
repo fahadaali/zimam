@@ -29,7 +29,10 @@ const attachmentsApi = {
 /** Each opened task starts a new generation; answers for an older one are dropped. */
 let generation = 0;
 
-/** Fills `container` with the task's attachments. `announce(text)` speaks what happened. */
+/**
+ * Fills `container` with the task's attachments. `announce(text)` speaks what happened. → { reload }:
+ * reads the list again (another member may have added or removed a file).
+ */
 export function showAttachments(container, task, { announce = () => {} } = {}) {
   const gen = ++generation;
   const current = () => gen === generation;
@@ -163,19 +166,31 @@ export function showAttachments(container, task, { announce = () => {} } = {}) {
     }
   });
 
-  attachmentsApi
-    .list(task.id)
-    .then((answer) => {
-      if (!current()) return;
-      items = answer.attachments ?? [];
-      maxBytes = answer.maxFileBytes ?? maxBytes;
-      setHint();
-      actions.hidden = !answer.canAdd;
-      render();
-    })
-    .catch((e) => {
-      if (!current()) return;
-      status.textContent = "";
-      showError(e);
-    });
+  /**
+   * `quiet`: a reload after a change elsewhere, which keeps what is shown when it fails, and leaves
+   * the list as it is while it holds the focus (drawn anew, the keyboard would lose its place).
+   */
+  const load = ({ quiet = false } = {}) =>
+    attachmentsApi
+      .list(task.id)
+      .then((answer) => {
+        if (!current() || (quiet && list.contains(document.activeElement))) return;
+        items = answer.attachments ?? [];
+        maxBytes = answer.maxFileBytes ?? maxBytes;
+        setHint();
+        actions.hidden = !answer.canAdd;
+        render();
+      })
+      .catch((e) => {
+        if (!current() || quiet) return;
+        status.textContent = "";
+        showError(e);
+      });
+
+  load();
+  return {
+    // Not while a file is uploading or a deletion is being confirmed (the redraw would cut it
+    // short), nor with the focus in the list.
+    reload: () => current() && !add.disabled && !list.querySelector(".attachment-row-actions .danger") && !list.contains(document.activeElement) && load({ quiet: true }),
+  };
 }

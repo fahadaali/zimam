@@ -16,7 +16,6 @@ import {
   storedPending,
   countRows,
   dayOf,
-  firstAvailable,
   isAvailable,
   oauthErrorText,
   oauthReturn,
@@ -151,8 +150,6 @@ test("OAuth sources: availability, the start request, and the way back", () => {
   const trello = { id: "trello", label: "Trello", input: "oauth", available: true };
   assert.equal(isAvailable(notion), false);
   assert.equal(isAvailable(csv), true); // older servers send no `available`
-  assert.equal(firstAvailable([notion, trello, csv]), trello);
-  assert.equal(firstAvailable([notion]), null);
   assert.equal(connectLabel(trello), "الربط بـ Trello");
   assert.equal(sourceTitle({ id: "ticktick-api", label: "TickTick" }), "TickTick: الربط بالحساب");
   assert.equal(sourceTitle({ id: "todoist-oauth", label: "Todoist" }), "Todoist: الربط بالحساب");

@@ -4,24 +4,13 @@
 // picker and the comments. Everything here needs the server; nothing is kept offline.
 // Plain DOM through h() and textContent; nothing here parses HTML.
 import { errorText } from "./lib/api.js";
-import { Button, h } from "./lib/components.js";
+import { Button, h, lightDismiss } from "./lib/components.js";
 import { boardApi, sharingApi } from "./lib/feature-api.js";
 import { jobDate } from "./lib/imports.js";
 import { roleDescription, roleName } from "./lib/invites.js";
 import { GRANTABLE_ROLES, assigneeOptions, canEdit, inviteMessage, inviteShareLink, inviteTitle, memberName, sharingErrorText, showAssignee } from "./lib/sharing.js";
 
 const problemText = (error) => sharingErrorText(error?.code) ?? errorText(error);
-
-/** Light dismiss where `closedby` is not supported yet (Safari), as main.js does for its dialogs. */
-export function lightDismiss(dialog) {
-  if ("closedBy" in HTMLDialogElement.prototype) return;
-  dialog.addEventListener("click", (event) => {
-    if (event.target !== dialog) return;
-    const r = dialog.getBoundingClientRect();
-    const inside = r.top <= event.clientY && event.clientY <= r.bottom && r.left <= event.clientX && event.clientX <= r.right;
-    if (!inside) dialog.close();
-  });
-}
 
 /** Copies text; falls back to selecting it in its field so the person can copy it themselves. */
 async function copy(text, field) {
@@ -85,14 +74,18 @@ async function drawShare(project, ctx) {
   }
   const myRole = members.find((m) => m.userId === me)?.role ?? project.role;
   const owner = myRole === "owner";
+  // Invites that could not be read are not «no invites»: the owner is told, as ShareProjectView does.
+  let invitesProblem = "";
   if (owner) {
     try {
       ({ invites } = await sharingApi.invites(project.id));
-    } catch {
+    } catch (failure) {
+      if (failure.status === 401) return;
       invites = [];
+      invitesProblem = failure.code === "network" ? "المشاركة تحتاج اتصالاً بالإنترنت." : problemText(failure);
     }
   }
-  const error = h("p", { className: "callout field-error", role: "alert" });
+  const error = h("p", { className: "callout field-error", role: "alert" }, invitesProblem);
   const redraw = async (focusSelector) => {
     await drawShare(project, ctx);
     if (focusSelector) dialog.body.querySelector(focusSelector)?.focus();
@@ -322,9 +315,14 @@ export function forgetMembers(projectId) {
 /**
  * «المسند إليه» for a project task, once the project has more than one member (or the task is
  * assigned). Viewers see it but cannot change it. `ctx`: { me, role, announce, isCurrent(), onChanged(task) }.
+ * `update()` on the section follows an assignee changed elsewhere.
  */
 export function assigneeSection(task, ctx) {
   const box = h("div", { className: "extra-section assignee" });
+  box.update = () => {
+    const select = box.querySelector("select");
+    if (select && document.activeElement !== select) select.value = task.assigneeId ?? "";
+  };
   if (!task.projectId) return box;
   projectMembers(task.projectId)
     .then((members) => {
@@ -343,7 +341,8 @@ export function assigneeSection(task, ctx) {
         select.disabled = true;
         try {
           ctx.markLocalChange?.();
-          Object.assign(task, await boardApi.patchTask(task.id, { assigneeId: select.value || null }));
+          const send = () => boardApi.patchTask(task.id, { assigneeId: select.value || null });
+          Object.assign(task, await (ctx.queueTaskRequest ? ctx.queueTaskRequest(task.id, send) : send()));
           ctx.announce(select.value ? `أُسندت المهمة إلى ${select.selectedOptions[0].textContent}.` : "أُلغي الإسناد.");
           ctx.onChanged?.(task);
         } catch (failure) {
@@ -363,12 +362,19 @@ export function assigneeSection(task, ctx) {
 
 /**
  * The task's comments, oldest first, with «أضف تعليقاً». The author deletes their own.
- * `ctx`: { me, primary, today, announce, isCurrent() }.
+ * `ctx`: { me, primary, today, announce, isCurrent() }. `reload()` on the section reads them again
+ * (another member may have commented), keeping the draft.
  */
 export function commentsSection(task, ctx) {
   const list = h("ul", { className: "comment-list", role: "list" });
   const input = h("textarea", { className: "input body comment-input", id: "comment-input", rows: "2", maxlength: "5000" });
   const send = Button({ variant: "secondary", type: "submit" }, "إرسال");
+  // ⌘↩ / Ctrl+↩ in the box sends the comment, as in other comment boxes.
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.isComposing) return;
+    event.preventDefault();
+    if (!send.disabled) form.requestSubmit();
+  });
   const error = h("p", { className: "caption field-error", role: "alert" });
   const form = h(
     "form",
@@ -436,12 +442,16 @@ export function commentsSection(task, ctx) {
     return li;
   };
 
-  const load = async () => {
+  /**
+   * `quiet`: a reload after a change elsewhere, which keeps the comments shown when it fails, and
+   * leaves the list as it is while it holds the focus (drawn anew, the keyboard would lose its place).
+   */
+  const load = async ({ quiet = false } = {}) => {
     try {
       const { comments } = await sharingApi.comments(task.id);
-      if (ctx.isCurrent()) draw(comments);
+      if (ctx.isCurrent() && !(quiet && list.contains(document.activeElement))) draw(comments);
     } catch (failure) {
-      if (failure.status === 401 || !ctx.isCurrent()) return;
+      if (failure.status === 401 || !ctx.isCurrent() || quiet) return;
       list.replaceChildren(h("li", { className: "callout muted" }, failure.code === "network" ? "التعليقات تحتاج اتصالاً بالإنترنت." : errorText(failure)));
     }
   };
@@ -470,5 +480,7 @@ export function commentsSection(task, ctx) {
 
   list.append(h("li", { className: "callout muted" }, "تُحمَّل التعليقات…"));
   load();
+  // Not while a deletion is being confirmed (the redraw would close it), nor with the focus in the list.
+  section.reload = () => !list.querySelector(".comment .sheet-actions:not([hidden])") && !list.contains(document.activeElement) && load({ quiet: true });
   return section;
 }

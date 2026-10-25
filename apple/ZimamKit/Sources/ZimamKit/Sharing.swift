@@ -69,7 +69,6 @@ public enum ProjectActionText {
     }
 
     public static let deleteNote = "تُحذف معه مهامه وأقسامه وتذكيراتها عند كل أعضائه، ولا يمكن استرجاعه."
-    public static let archiveNote = "يختفي من القوائم، وتبقى مهامه في مواعيدها. تجده في «المشاريع المؤرشفة»."
     public static let archivedTitle = "المشاريع المؤرشفة"
 }
 

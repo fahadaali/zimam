@@ -25,8 +25,8 @@ https://mcp.zimam.work/mcp
 | `list_projects` | المشاريع ودور المستخدم وعدد المنجز | `tasks:read` |
 | `list_places` | أماكن المستخدم المحفوظة («أماكني») بأسمائها، دون إحداثيات | `tasks:read` |
 | `create_task` | إضافة مهمة بتاريخها، أو مرتبطة بصلاة | `tasks:write` |
-| `update_task` | التعديل والنقل والتأجيل وإعادة الفتح | `tasks:write` |
-| `complete_task` | إنجاز مهمة | `tasks:write` |
+| `update_task` | التعديل والنقل والتأجيل وإعادة الفتح. وبـ `status: "done"` يُنجزها، فيُضاف موعد المتكررة التالي كما في `complete_task` | `tasks:write` |
+| `complete_task` | إنجاز مهمة، والمتكررة يُضاف موعدها التالي بتذكيراتها كما في التطبيق | `tasks:write` |
 | `add_place_reminder` | تذكير عند الوصول إلى مكان محفوظ أو مغادرته، ومعه وقت اختياري فيصل مرة عند أيهما أسبق. الأماكن تُضاف في التطبيق فقط | `tasks:write` |
 
 أدوات الكتابة لا تظهر أصلاً لمنحة بلا `tasks:write`. كل عملية تمر عبر الواجهة البرمجية (`api/`) بنفس صلاحيات التطبيق، فتظهر تعديلات كلود في التطبيق مع المزامنة التالية.
@@ -44,7 +44,7 @@ npm run typecheck
 | --- | --- |
 | `src/index.ts` | `OAuthProvider`، وصفحة الموافقة، ونقطة `/mcp` بلا حالة (Streamable HTTP) |
 | `src/consent.ts` | صفحات HTML بالعربية بمتغيرات `tokens.css` |
-| `src/tools.ts` | تعريف الأدوات السبع وتعليمات الخادم للنموذج |
+| `src/tools.ts` | تعريف الأدوات وتعليمات الخادم للنموذج |
 | `src/backend.ts` | شكل `ZimamService` في `api/src/service.ts`؛ يُحدَّث معه |
 
 صفحات الموافقة تأخذ الشعار وخط ثمانية و`tokens.css` من مجلد `design/` مباشرة (`assets` في `wrangler.jsonc`)، والملف `design/.assetsignore` يستثني ما لا يحتاجه المتصفح.

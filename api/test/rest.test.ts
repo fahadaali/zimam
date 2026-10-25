@@ -63,6 +63,30 @@ describe("Tasks API", () => {
     expect((await call("GET", "/v1/tasks", { token: b.token })).body.tasks).toEqual([]);
   });
 
+  it("lets a moved monthly task follow the move, as the app does", async () => {
+    const { token } = await signIn();
+    const task = await call("POST", "/v1/tasks", { token, body: { title: "الإيجار", dueDate: "2026-02-28", recurrence: "FREQ=MONTHLY;BYMONTHDAY=31" } });
+    const moved = await call("PATCH", `/v1/tasks/${task.body.id}`, { token, body: { dueDate: "2026-02-20" } });
+    expect(moved.body).toMatchObject({ dueDate: "2026-02-20", recurrence: "FREQ=MONTHLY" });
+    // A rule set in the same patch is kept as given.
+    const set = await call("PATCH", `/v1/tasks/${task.body.id}`, { token, body: { dueDate: "2026-03-31", recurrence: "FREQ=MONTHLY;BYMONTHDAY=31" } });
+    expect(set.body.recurrence).toBe("FREQ=MONTHLY;BYMONTHDAY=31");
+  });
+
+  it("lists one task's subtasks with parentId, for those who see the task only", async () => {
+    const a = await signIn();
+    const parent = await call("POST", "/v1/tasks", { token: a.token, body: { title: "سفر" } });
+    const other = await call("POST", "/v1/tasks", { token: a.token, body: { title: "أخرى" } });
+    await call("POST", "/v1/tasks", { token: a.token, body: { title: "حجز", parentId: parent.body.id } });
+    await call("POST", "/v1/tasks", { token: a.token, body: { title: "حقيبة", parentId: other.body.id } });
+    const mine = await call("GET", `/v1/tasks?parentId=${parent.body.id}`, { token: a.token });
+    expect(mine.body.tasks.map((t: { title: string }) => t.title)).toEqual(["حجز"]);
+
+    const b = await signIn();
+    expect((await call("GET", `/v1/tasks?parentId=${parent.body.id}`, { token: b.token })).body.tasks).toEqual([]);
+    expect((await call("GET", "/v1/tasks?parentId=not-an-id", { token: a.token })).status).toBe(400);
+  });
+
   it("searches Arabic text regardless of diacritics, letter forms and digits", async () => {
     const { token } = await signIn();
     await call("POST", "/v1/tasks", { token, body: { title: "مُراجَعة العقد ١٢", notes: "مع الإدارة" } });

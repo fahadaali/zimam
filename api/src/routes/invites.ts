@@ -15,6 +15,7 @@ interface Invite {
   accepted_at: number | null;
   revoked_at: number | null;
   project_name: string;
+  project_kind: string;
   project_deleted_at: number | null;
   inviter_name: string | null;
 }
@@ -22,7 +23,7 @@ interface Invite {
 /** Loads the invite named by the `:code` param, or answers why it cannot be used. */
 async function usableInvite(c: Context<AppEnv>, now: number): Promise<Invite | Response> {
   const invite = await c.env.DB.prepare(
-    `SELECT i.*, p.name AS project_name, p.deleted_at AS project_deleted_at, u.name AS inviter_name
+    `SELECT i.*, p.name AS project_name, p.kind AS project_kind, p.deleted_at AS project_deleted_at, u.name AS inviter_name
      FROM invites i JOIN projects p ON p.id = i.project_id JOIN users u ON u.id = i.created_by
      WHERE i.code_hash = ?`,
   )
@@ -33,6 +34,8 @@ async function usableInvite(c: Context<AppEnv>, now: number): Promise<Invite | R
   if (invite.revoked_at != null) return fail(c, 410, "invite_revoked", "The invite was revoked");
   if (invite.accepted_at != null) return fail(c, 410, "invite_used", "The invite was already used");
   if (invite.expires_at <= now) return fail(c, 410, "invite_expired", "The invite has expired");
+  // Folders are not shared, so an invite to a project that has since become one lapses.
+  if (invite.project_kind !== "project") return fail(c, 410, "invite_revoked", "The project is now a folder, which cannot be shared");
   return invite;
 }
 
@@ -72,14 +75,9 @@ invites.post("/:code/accept", async (c) => {
     .run();
   if (claim.meta.changes !== 1) return fail(c, 410, "invite_used", "The invite was already used");
 
-  if (current) {
-    await db
-      .prepare(`UPDATE project_members SET role = ? WHERE project_id = ? AND user_id = ?`)
-      .bind(invite.role, projectId, c.var.userId)
-      .run();
-  } else {
-    await db.batch(addMemberStatements(db, projectId, c.var.userId, invite.role, now));
-  }
+  // One statement for a new member and a raised one, since the role read above may be out of
+  // date: another invite accepted at the same moment, or a removal. The answer is the stored role.
+  await db.batch(addMemberStatements(db, projectId, c.var.userId, invite.role, now));
   c.var.access.invalidate();
-  return c.json({ projectId, role: invite.role });
+  return c.json({ projectId, role: (await c.var.access.role(projectId)) ?? invite.role });
 });

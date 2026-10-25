@@ -24,8 +24,9 @@ struct PrayerPlacePicker: View {
     /// Mecca, before the first location.
     private static let fallback = CLLocationCoordinate2D(latitude: 21.4225, longitude: 39.8262)
 
-    init(start: CLLocationCoordinate2D? = nil) {
-        let center = start ?? Self.fallback
+    /// Starts at the fallback; `onAppear` moves the map to the device's location when known.
+    init() {
+        let center = Self.fallback
         _center = State(initialValue: center)
         _position = State(initialValue: .region(MKCoordinateRegion(center: center, latitudinalMeters: Self.span,
                                                                    longitudinalMeters: Self.span)))

@@ -7,7 +7,7 @@ import ZimamKit
 /// The Hijri year (Umm al-Qura) or the Gregorian one, chosen when editing the widget; by default
 /// the user's primary calendar from settings.
 struct YearProgressWidget: Widget {
-    static let kind = "app.zimam.year"
+    static let kind = ZimamShared.WidgetKind.year
 
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: Self.kind, intent: YearProgressConfiguration.self, provider: YearProgressProvider()) { entry in

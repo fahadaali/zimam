@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" data-hero>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -9,16 +9,24 @@
 <meta property="og:title" content="زمام: خذ زمام يومك">
 <meta property="og:description" content="مدير مهام عربي أولاً، بالهجري والميلادي وأوقات الصلاة، ويتحدث معه كلود وChatGPT.">
 <meta property="og:locale" content="ar_SA">
-<meta property="og:image" content="/images/screens/desktop-today-light.webp">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://zimam.work/">
+<meta property="og:image" content="https://zimam.work/images/screens/desktop-today-light.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="2160">
+<meta property="og:image:height" content="1350">
+<meta property="og:image:alt" content="زمام على الماك بثلاثة أعمدة: الشريط الجانبي، ومهام اليوم، وتفاصيل المهمة المفتوحة">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/design/app-icons/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/design/app-icons/apple-touch-icon-180.png">
 <link rel="preload" href="/design/fonts/web/thmanyahserifdisplay-Bold.woff2" as="font" type="font/woff2" crossorigin>
+<!-- Applies the theme chosen with the toggle before the page paints, and asks for the hero's shots
+     of that theme at once (theme.js); first, as it needs none of the stylesheets. -->
+<script src="/theme.js"></script>
 <link rel="stylesheet" href="/design/generated/tokens.css">
 <link rel="stylesheet" href="/design/components/bundle.css">
 <link rel="stylesheet" href="/styles/base.css">
 <link rel="stylesheet" href="/styles/site.css">
-<!-- Applies the theme chosen with the toggle before the page paints (theme.js). -->
-<script src="/theme.js"></script>
 <script type="module" src="/site.js"></script>
 </head>
 <body class="zm-root">
@@ -26,7 +34,8 @@
 
 <!-- The screenshots are the web app itself with demo data (npm run screenshots, scripts/screenshots.mjs).
      Each comes light and dark; the page shows the one for its theme (theme-light / theme-dark in
-     site.css), and the hidden one is never fetched, as both load lazily. -->
+     site.css), and the hidden one is never fetched, as both load lazily. The hero's shown ones and
+     the logo are preloaded by theme.js, so the largest paint does not wait for layout. -->
 <header class="site-header">
   <div class="site-bar">
     <a class="site-logo" href="/">
@@ -66,12 +75,12 @@
     <div class="hero-stage">
       <figure class="device device-window">
         <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-        <img class="shot theme-light" src="/images/screens/desktop-today-light.webp" alt="زمام على الماك بثلاثة أعمدة: الشريط الجانبي، ومهام اليوم، وتفاصيل المهمة المفتوحة" width="2160" height="1350" decoding="async" loading="lazy" fetchpriority="high">
-        <img class="shot theme-dark" src="/images/screens/desktop-today-dark.webp" alt="زمام على الماك بثلاثة أعمدة: الشريط الجانبي، ومهام اليوم، وتفاصيل المهمة المفتوحة" width="2160" height="1350" decoding="async" loading="lazy" fetchpriority="high">
+        <img class="shot theme-light" src="/images/screens/desktop-today-light.webp" alt="زمام على الماك بثلاثة أعمدة: الشريط الجانبي، ومهام اليوم، وتفاصيل المهمة المفتوحة" width="2160" height="1350" decoding="async" loading="lazy">
+        <img class="shot theme-dark" src="/images/screens/desktop-today-dark.webp" alt="زمام على الماك بثلاثة أعمدة: الشريط الجانبي، ومهام اليوم، وتفاصيل المهمة المفتوحة" width="2160" height="1350" decoding="async" loading="lazy">
       </figure>
       <figure class="device device-phone">
-        <img class="shot theme-light" src="/images/screens/phone-today-light.webp" alt="شاشة «اليوم» في زمام على الجوال: سطر الصلاة القادمة، ومهام اليوم بشرائح التاريخ والصلاة" width="956" height="1864" decoding="async" loading="lazy" fetchpriority="high">
-        <img class="shot theme-dark" src="/images/screens/phone-today-dark.webp" alt="شاشة «اليوم» في زمام على الجوال: سطر الصلاة القادمة، ومهام اليوم بشرائح التاريخ والصلاة" width="956" height="1864" decoding="async" loading="lazy" fetchpriority="high">
+        <img class="shot theme-light" src="/images/screens/phone-today-light.webp" alt="شاشة «اليوم» في زمام على الجوال: سطر الصلاة القادمة، ومهام اليوم بشرائح التاريخ والصلاة" width="956" height="1864" decoding="async" loading="lazy">
+        <img class="shot theme-dark" src="/images/screens/phone-today-dark.webp" alt="شاشة «اليوم» في زمام على الجوال: سطر الصلاة القادمة، ومهام اليوم بشرائح التاريخ والصلاة" width="956" height="1864" decoding="async" loading="lazy">
       </figure>
     </div>
   </section>
@@ -193,7 +202,7 @@
       <li class="perk reveal">
         <span class="perk-icon" data-icon="refresh" aria-hidden="true"></span>
         <h3 class="headline">يعمل دون اتصال</h3>
-        <p class="callout muted">تبقى مهامك على جهازك، وتتزامن بين أجهزتك حين يعود الاتصال.</p>
+        <p class="callout muted">على آيفون وآيباد وماك تبقى مهامك على جهازك، وتتزامن مع أجهزتك والويب حين يعود الاتصال.</p>
       </li>
     </ul>
     <div class="gallery">

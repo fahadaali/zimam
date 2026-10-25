@@ -7,7 +7,7 @@ import ZimamKit
 /// with today's times, sunrise and the dual date. On the iPhone Lock Screen too, with the watch
 /// complications' views (Glance/PrayerGlanceViews.swift).
 struct PrayerWidget: Widget {
-    static let kind = "app.zimam.prayer"
+    static let kind = ZimamShared.WidgetKind.prayer
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: Self.kind, provider: PrayerProvider()) { entry in
@@ -114,7 +114,7 @@ private struct PrayerCountdown: View {
     var body: some View {
         let formatter = DualDateFormatter(locale: ZimamLocale.current)
         VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
-            Label(prayerTitle, systemImage: "moon.stars")
+            Label(state.title, systemImage: "moon.stars")
                 .font(ZimamType.caption)
                 .lineLimit(1)
             Text(state.time, style: .timer)
@@ -136,13 +136,6 @@ private struct PrayerCountdown: View {
         .widgetAccentable()
         .frame(maxWidth: .infinity, maxHeight: large ? nil : .infinity, alignment: .topLeading)
         .accessibilityElement(children: .combine)
-    }
-
-    private var prayerTitle: String {
-        switch state {
-        case .since(let prayer, _): "مضى على أذان \(prayer.arabicName)"
-        case .until(let prayer, _): "المتبقي على \(prayer.arabicName)"
-        }
     }
 }
 

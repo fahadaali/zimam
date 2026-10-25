@@ -5,7 +5,8 @@ import ZimamKit
 
 // Siri and Shortcuts. These run in the app's process (in the background when the app is
 // closed) and write through `Store`, like every other edit, so the tasks are marked for
-// sync and the widgets reload.
+// sync and the widgets reload. Those that add a task also replan the reminders and sync before
+// they return (`LiveSync.flush`), since the system may suspend the app right after.
 
 /// The five prayers, for the «add task» intent.
 enum PrayerOption: String, AppEnum, CaseIterable {
@@ -103,7 +104,7 @@ struct AddPrayerTaskIntent: AppIntent {
 }
 
 /// «أضف مهمة في زمام»: a title, and optionally a day and a prayer with minutes before or after it.
-/// A prayer without a day means today.
+/// A prayer without a day means today, or tomorrow once it has passed today.
 struct AddTaskIntent: AppIntent {
     static let title: LocalizedStringResource = "إضافة مهمة"
     static let description = IntentDescription("يضيف مهمة إلى زمام، بتاريخ أو بوقت صلاة إن شئت.")
@@ -144,7 +145,6 @@ struct AddTaskIntent: AppIntent {
             return .result(dialog: "لم تُضف المهمة لأن عنوانها فارغ.")
         }
         let formatter = DualDateFormatter(primary: SharedSettings.user()?.settings.calendar ?? .hijri, locale: ZimamLocale.current)
-        let day: Date? = date ?? (prayer == nil ? nil : Date())
         let duePrayer = prayer?.prayer
         let offset: Int? = duePrayer == nil ? nil : {
             switch relation {
@@ -153,6 +153,15 @@ struct AddTaskIntent: AppIntent {
             case nil: return offsetMinutes ?? 0
             }
         }()
+        var day: Date? = date
+        if day == nil, let duePrayer {
+            // As AddPrayerTaskIntent and SpokenTime: today, or tomorrow once the prayer has passed.
+            let now = Date()
+            let passed = SharedSettings.prayerSchedule()?
+                .time(of: duePrayer, on: now, offsetMinutes: offset ?? 0)
+                .map { $0 <= now } ?? false
+            day = passed ? now.addingTimeInterval(86_400) : now
+        }
         let store = Store(context: ZimamStore.shared.mainContext, sync: LiveSync.engine)
         let task = store.addTask(
             title: trimmed,
@@ -166,7 +175,9 @@ struct AddTaskIntent: AppIntent {
         if let day { when.append(formatter.label(for: day)) }
         if let duePrayer { when.append(PrayerPhrase.text(duePrayer, offsetMinutes: offset, locale: formatter.locale)) }
         let suffix = when.isEmpty ? "" : "، " + when.joined(separator: "، ")
-        return .result(dialog: "أُضيفت «\(task.title)»\(suffix).")
+        let message = "أُضيفت «\(task.title)»\(suffix)."
+        await LiveSync.flush?(LiveSync.intentWait)
+        return .result(dialog: "\(message)")
     }
 }
 

@@ -108,6 +108,11 @@ struct AppleCalendarTests {
         #expect(AppleCalendarImport.recurrence(counted, anchorDay: "2026-10-13", seriesStartDay: nil, timeZone: riyadh) == nil)
         let short = AppleRemindersImport.Repeat(frequency: .daily, count: 3)
         #expect(AppleCalendarImport.recurrence(short, anchorDay: "2026-10-13", seriesStartDay: "2026-10-01", timeZone: riyadh) == nil)
+        // A monthly series on the 31st counts 28 February, 31 March and 30 April before the task,
+        // and the task on the 30th keeps the series' day for the occurrences after it.
+        let monthly = AppleRemindersImport.Repeat(frequency: .monthly, count: 5)
+        #expect(AppleCalendarImport.recurrence(monthly, anchorDay: "2026-04-30", seriesStartDay: "2026-01-31",
+                                                      timeZone: riyadh) == "FREQ=MONTHLY;BYMONTHDAY=31;COUNT=2")
     }
 
     @Test func calendarsBecomeProjectsAndEventsBecomeTasks() {

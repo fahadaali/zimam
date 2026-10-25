@@ -133,7 +133,7 @@ struct LocationReminderSheet: View {
                     longitude: option.longitude,
                     radius: min(max(radius, LocationReminderPlanner.serverRadiusRange.lowerBound),
                                 LocationReminderPlanner.serverRadiusRange.upperBound),
-                    name: trimmedName.isEmpty ? nil : String(trimmedName.prefix(200)),
+                    name: trimmedName.isEmpty ? nil : ServerText.clip(trimmedName, to: ServerText.maxName),
                     trigger: trigger
                 )
             }

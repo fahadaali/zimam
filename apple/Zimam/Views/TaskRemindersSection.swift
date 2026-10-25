@@ -153,7 +153,12 @@ private struct TimeReminderSheet: View {
                     Text("يبقى في وقته ولو تغيّر موعد المهمة.")
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(ZimamColor.surface)
             .navigationTitle("تذكير في وقت آخر")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("إلغاء") { dismiss() }
@@ -166,6 +171,9 @@ private struct TimeReminderSheet: View {
                 }
             }
         }
+        #if os(macOS)
+        .frame(minWidth: ZimamSpacing.space8 * 12, minHeight: ZimamSpacing.space8 * 12)
+        #endif
     }
 }
 
@@ -192,7 +200,12 @@ private struct PrayerReminderSheet: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(ZimamColor.surface)
             .navigationTitle("تذكير عند صلاة")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("إلغاء") { dismiss() }
@@ -205,6 +218,9 @@ private struct PrayerReminderSheet: View {
                 }
             }
         }
+        #if os(macOS)
+        .frame(minWidth: ZimamSpacing.space8 * 12, minHeight: ZimamSpacing.space8 * 12)
+        #endif
     }
 }
 

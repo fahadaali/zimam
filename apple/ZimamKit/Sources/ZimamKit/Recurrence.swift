@@ -37,11 +37,21 @@ public enum Weekday: Int, CaseIterable, Codable, Sendable {
 
 /// The subset of an RFC 5545 RRULE that Zimam understands:
 /// `FREQ=DAILY|WEEKLY|MONTHLY|YEARLY`, `INTERVAL`, `BYDAY` (weekly only, `MO`..`SU`),
-/// `COUNT` and `UNTIL`. Days are the API's local day strings ("2026-10-15").
+/// `BYMONTHDAY` (one day, monthly or yearly), `BYMONTH` (one month, yearly), `COUNT` and
+/// `UNTIL`; `WKST` is read and dropped. A rule with anything else (`BYSETPOS`, «the first
+/// Monday» as `1MO`, several month days…) is not read at all, rather than read as a plainer rule
+/// that would put the next occurrence on another day. Days are the API's local day strings
+/// ("2026-10-15").
 ///
 /// Each new occurrence is a new task, so `COUNT` here means the occurrences left
 /// including the current one: the next task carries `COUNT - 1`, and a task
 /// with `COUNT=1` is the last.
+///
+/// A monthly or yearly series keeps its day: from the 31st, February's occurrence is the 28th
+/// and March's the 31st again; from 29 February, the next leap year's is the 29th again. While an
+/// occurrence is moved earlier by a short month, the rule it carries says the series' day
+/// (`BYMONTHDAY`, with `BYMONTH` for a yearly one); back on that day, it reads as before. Moved
+/// by the user to another day, the occurrence takes the series with it (`moved(from:)`).
 public struct Recurrence: Equatable, Sendable {
     public enum Frequency: String, CaseIterable, Sendable {
         case daily = "DAILY", weekly = "WEEKLY", monthly = "MONTHLY", yearly = "YEARLY"
@@ -55,25 +65,38 @@ public struct Recurrence: Equatable, Sendable {
     public var count: Int?
     /// The last day an occurrence may fall on, "yyyy-MM-dd".
     public var until: String?
+    /// Monthly and yearly: the day of the month (1...31) the series falls on, or a short month's
+    /// last day. Nil means the current occurrence's day.
+    public var monthDay: Int?
+    /// Yearly: the month (1...12). Nil means the current occurrence's month.
+    public var month: Int?
 
-    public init(frequency: Frequency, interval: Int = 1, weekdays: [Weekday] = [], count: Int? = nil, until: String? = nil) {
+    public init(frequency: Frequency, interval: Int = 1, weekdays: [Weekday] = [], count: Int? = nil, until: String? = nil,
+                monthDay: Int? = nil, month: Int? = nil) {
         self.frequency = frequency
         self.interval = max(1, interval)
         self.weekdays = Recurrence.normalized(weekdays)
         self.count = count
         self.until = until
+        let validMonth = frequency == .yearly ? month.flatMap { (1...12).contains($0) ? $0 : nil } : nil
+        self.month = validMonth
+        // A yearly day needs its month: alone, `BYMONTHDAY` would be that day of every month.
+        let takesDay = frequency == .monthly || (frequency == .yearly && validMonth != nil)
+        self.monthDay = takesDay ? monthDay.flatMap { (1...31).contains($0) ? $0 : nil } : nil
     }
 
     /// Parses "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TH", with or without a leading "RRULE:".
-    /// Returns nil for a frequency or value Zimam does not support.
+    /// Returns nil for a frequency, part or value Zimam does not support.
     public init?(rrule: String) {
         var text = rrule.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.uppercased().hasPrefix("RRULE:") { text = String(text.dropFirst(6)) }
         var frequency: Frequency?
         var interval = 1
-        var weekdays: [Weekday] = []
+        var weekdays: [Weekday]?
         var count: Int?
         var until: String?
+        var monthDay: Int?
+        var month: Int?
         for part in text.split(separator: ";") {
             let pair = part.split(separator: "=", maxSplits: 1).map { String($0) }
             guard pair.count == 2 else { return nil }
@@ -93,19 +116,35 @@ public struct Recurrence: Equatable, Sendable {
                     days.append(day)
                 }
                 weekdays = days
+            case "BYMONTHDAY":
+                guard let parsed = Int(value), (1...31).contains(parsed) else { return nil }
+                monthDay = parsed
+            case "BYMONTH":
+                guard let parsed = Int(value), (1...12).contains(parsed) else { return nil }
+                month = parsed
             case "COUNT":
                 guard let parsed = Int(value), parsed >= 1 else { return nil }
                 count = parsed
             case "UNTIL":
                 guard let parsed = Recurrence.dayString(fromUntil: value) else { return nil }
                 until = parsed
+            case "WKST":
+                continue // Only where weeks start; Zimam's weeks start on Monday.
             default:
-                continue // WKST and the like do not change the days Zimam computes.
+                return nil // BYSETPOS, BYYEARDAY, BYWEEKNO, BYHOUR…: days or times Zimam cannot follow.
             }
         }
-        guard let frequency else { return nil }
-        self.init(frequency: frequency, interval: interval,
-                  weekdays: frequency == .weekly ? weekdays : [], count: count, until: until)
+        guard var frequency else { return nil }
+        if let days = weekdays, frequency != .weekly {
+            // Every day, on some weekdays only, is weekly on those days; anything else is not followed.
+            guard frequency == .daily, interval == 1, !days.isEmpty else { return nil }
+            frequency = .weekly
+        }
+        // A yearly month day without its month would be that day of every month.
+        if monthDay != nil, frequency != .monthly, frequency != .yearly || month == nil { return nil }
+        if month != nil, frequency != .yearly { return nil }
+        self.init(frequency: frequency, interval: interval, weekdays: weekdays ?? [], count: count, until: until,
+                  monthDay: monthDay, month: month)
     }
 
     /// The rule as the API stores it: "FREQ=WEEKLY;BYDAY=MO,TH".
@@ -115,6 +154,8 @@ public struct Recurrence: Equatable, Sendable {
         if frequency == .weekly && !weekdays.isEmpty {
             parts.append("BYDAY=" + weekdays.map(\.code).joined(separator: ","))
         }
+        if let month { parts.append("BYMONTH=\(month)") }
+        if let monthDay { parts.append("BYMONTHDAY=\(monthDay)") }
         if let count { parts.append("COUNT=\(count)") }
         if let until { parts.append("UNTIL=" + until.replacingOccurrences(of: "-", with: "")) }
         return parts.joined(separator: ";")
@@ -133,10 +174,8 @@ public struct Recurrence: Equatable, Sendable {
             next = calendar.date(byAdding: .day, value: interval, to: start)
         case .weekly:
             next = nextWeekly(after: start, calendar: calendar)
-        case .monthly:
-            next = calendar.date(byAdding: .month, value: interval, to: start)
-        case .yearly:
-            next = calendar.date(byAdding: .year, value: interval, to: start)
+        case .monthly, .yearly:
+            next = nextInMonth(after: start, calendar: calendar)
         }
         guard let next else { return nil }
         let result = Recurrence.dayString(next, calendar: calendar)
@@ -153,8 +192,15 @@ public struct Recurrence: Equatable, Sendable {
 
     /// The next occurrence after `day`, skipping any that fall before `notBefore`
     /// (completing an overdue task schedules the next one from today, not in the past).
+    /// A monthly or yearly series without `monthDay` keeps `day`'s, so a short month on the way
+    /// does not move the ones after it; the rule returned carries it only while it is needed.
     public func nextOccurrence(after day: String, notBefore: String? = nil, timeZone: TimeZone) -> (day: String, rule: Recurrence)? {
         var rule = self
+        if rule.frequency == .monthly || rule.frequency == .yearly, rule.monthDay == nil,
+           let parts = Recurrence.parts(of: day) {
+            rule.monthDay = parts.day
+            if rule.frequency == .yearly, rule.month == nil { rule.month = parts.month }
+        }
         var current = day
         for _ in 0..<1000 {
             guard let next = rule.nextDay(after: current, timeZone: timeZone) else { return nil }
@@ -163,7 +209,61 @@ public struct Recurrence: Equatable, Sendable {
                 current = next
                 continue
             }
-            return (day: next, rule: rule)
+            return (day: next, rule: rule.settled(on: next))
+        }
+        return nil
+    }
+
+    /// The rule once the occurrence due `day` is moved to another day: without the series' day
+    /// (`monthDay`, `month`) when `day` was on it, or on the last day of a month too short for it.
+    /// The series then follows the move, as a plain rule's does, rather than add a second
+    /// occurrence in the month it was moved within (28 February carrying the 31st, moved to the
+    /// 10th, is followed by 10 March, not by 28 February again). A day the rule picks other than
+    /// the task's own («BYMONTHDAY=20» on the 15th) stays.
+    public func moved(from day: String) -> Recurrence {
+        guard monthDay != nil || month != nil, let parts = Recurrence.parts(of: day) else { return self }
+        if let month, month != parts.month { return self }
+        if let monthDay {
+            let calendar = Recurrence.calendar(TimeZone(secondsFromGMT: 0) ?? .current)
+            guard let date = Recurrence.noon(of: day, calendar: calendar),
+                  let length = calendar.range(of: .day, in: .month, for: date)?.count,
+                  parts.day == min(monthDay, length) else { return self }
+        }
+        var copy = self
+        copy.monthDay = nil
+        copy.month = nil
+        return copy
+    }
+
+    /// Without `monthDay` and `month` once an occurrence falls on them: from there the plain rule
+    /// gives the same days, until a short month, which `nextOccurrence` keeps the day across.
+    private func settled(on day: String) -> Recurrence {
+        guard monthDay != nil || month != nil, let parts = Recurrence.parts(of: day),
+              monthDay == nil || monthDay == parts.day, month == nil || month == parts.month else { return self }
+        var copy = self
+        copy.monthDay = nil
+        copy.month = nil
+        return copy
+    }
+
+    /// Monthly and yearly: the series' day (`monthDay`, else `start`'s) in the month `interval`
+    /// months or years on, or that month's last day when it is shorter. With `monthDay` or `month`
+    /// set the next occurrence may still fall in `start`'s own month or year: «BYMONTHDAY=20»
+    /// after the 15th is the 20th.
+    private func nextInMonth(after start: Date, calendar: Calendar) -> Date? {
+        let unit: Calendar.Component = frequency == .yearly ? .year : .month
+        let day = monthDay ?? calendar.component(.day, from: start)
+        let steps = monthDay == nil && month == nil ? [interval] : [0, interval]
+        for step in steps {
+            guard let shifted = calendar.date(byAdding: unit, value: step, to: start) else { return nil }
+            var parts = calendar.dateComponents([.year, .month], from: shifted)
+            if let month { parts.month = month }
+            parts.day = 1
+            parts.hour = 12
+            guard let first = calendar.date(from: parts),
+                  let length = calendar.range(of: .day, in: .month, for: first)?.count else { return nil }
+            parts.day = min(day, length)
+            if let candidate = calendar.date(from: parts), candidate > start { return candidate }
         }
         return nil
     }
@@ -248,6 +348,13 @@ public struct Recurrence: Equatable, Sendable {
         let weekday = calendar.component(.weekday, from: date) // 1 = Sunday
         let sinceMonday = (weekday + 5) % 7
         return calendar.date(byAdding: .day, value: -sinceMonday, to: date) ?? date
+    }
+
+    /// "2026-10-15" → its month and day.
+    private static func parts(of day: String) -> (month: Int, day: Int)? {
+        let parts = day.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return (month: parts[1], day: parts[2])
     }
 
     /// "20261231" or "20261231T235959Z" → "2026-12-31".

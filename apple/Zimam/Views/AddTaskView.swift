@@ -54,6 +54,8 @@ struct AddTaskView: View {
     /// What was typed before dictation started; the dictated words follow it.
     @State private var dictationPrefix = ""
     @FocusState private var titleFocused: Bool
+    /// The section of the screen this was opened from, with its project.
+    private let section: (id: UUID, project: UUID)?
 
     private var trimmedTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -83,10 +85,23 @@ struct AddTaskView: View {
     }
 
     /// `date` is the day `.pickedDate` starts on (the calendar passes its selected day).
-    init(due: Due = .unscheduled, projectId: UUID? = nil, date: Date = Date()) {
+    /// `sectionId` is a section of `projectId` (a section's own screen) the task goes in.
+    init(due: Due = .unscheduled, projectId: UUID? = nil, sectionId: UUID? = nil, date: Date = Date()) {
         _due = State(initialValue: due)
         _projectId = State(initialValue: projectId)
         _pickedDate = State(initialValue: date)
+        if let projectId, let sectionId {
+            section = (sectionId, projectId)
+        } else {
+            section = nil
+        }
+    }
+
+    /// The section the task goes in: the one it was opened from while its project stays chosen.
+    /// Another project, or none, takes no section (the server keeps a section to its project).
+    private func sectionId(in project: UUID?) -> UUID? {
+        guard let section, section.project == project else { return nil }
+        return section.id
     }
 
     var body: some View {
@@ -149,6 +164,7 @@ struct AddTaskView: View {
             // A new start begins the day before the due day; a due day moved before it pulls it back.
             .onChange(of: hasStart) { _, on in startToggled(on) }
             .onChange(of: latestStart) { _, latest in latestStartChanged(latest) }
+            .onChange(of: due) { _, newDue in dueChanged(newDue) }
             .onDisappear(perform: stopDictation)
             .onChange(of: dictation.transcript) { _, words in transcriptChanged(words) }
         }
@@ -162,6 +178,12 @@ struct AddTaskView: View {
 
     private func latestStartChanged(_ latest: Date?) {
         if let latest, startDate > latest { startDate = latest }
+    }
+
+    /// A clock time needs a day, as in the task's details (`Store.setDueDate`): «بلا موعد» clears it;
+    /// a prayer stays and repeats daily.
+    private func dueChanged(_ newDue: Due) {
+        if newDue == .unscheduled, case .clock = timeMode { timeMode = .allDay }
     }
 
     // MARK: Dictation
@@ -224,9 +246,11 @@ struct AddTaskView: View {
     /// Adds the suggestion as it is. A project not on this device yet is left out.
     private func accept(_ suggestion: TaskSuggestion) {
         let knownProject = suggestion.projectId.flatMap { id in projects.contains(where: { $0.id == id }) ? id : nil }
+        let chosenProject = knownProject ?? projectId
         let task = Store(context: context, sync: sync).addTask(
             title: suggestion.title,
-            projectId: knownProject ?? projectId,
+            projectId: chosenProject,
+            sectionId: sectionId(in: chosenProject),
             dueDate: suggestion.dueDate,
             duePrayer: suggestion.duePrayer,
             duePrayerOffset: suggestion.duePrayerOffset ?? 0,
@@ -312,6 +336,7 @@ struct AddTaskView: View {
         let task = store.addTask(
             title: trimmedTitle,
             projectId: projectId,
+            sectionId: sectionId(in: projectId),
             dueDate: day.map { formatter.dayString(from: $0) },
             duePrayer: prayer?.0,
             duePrayerOffset: prayer?.1,
@@ -334,10 +359,9 @@ struct AddTaskView: View {
 
     /// "17:00" on `day`, in the user's zone.
     private func clockDate(_ hhmm: String, on day: Date) -> Date? {
-        let parts = hhmm.split(separator: ":").compactMap { Int($0) }
-        guard parts.count >= 2 else { return nil }
+        guard let parts = TaskTiming.clockParts(hhmm) else { return nil }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = formatter.timeZone
-        return calendar.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: day).flatMap { $0 > Date() ? $0 : nil }
+        return calendar.date(bySettingHour: parts.hour, minute: parts.minute, second: 0, of: day).flatMap { $0 > Date() ? $0 : nil }
     }
 }

@@ -126,6 +126,26 @@ struct SyncTests {
         #expect(legacy.location == nil)
     }
 
+    /// `PATCH /v1/me` carries only what changed, so a device whose copy is behind does not send
+    /// back what another device changed; a cleared location still goes as null.
+    @Test func settingsChangesCarryOnlyWhatChanged() throws {
+        let base = User.Settings(calendar: .hijri, timeZone: "Asia/Riyadh", location: .init(latitude: 24.7, longitude: 46.7))
+        var new = base
+        new.calendar = .gregorian
+        let calendar = try JSONSerialization.jsonObject(with: JSONEncoder().encode(new.changes(from: base))) as! [String: Any]
+        #expect(Set(calendar.keys) == ["calendar"])
+        #expect((calendar["calendar"] as? String) == "gregorian")
+
+        var cleared = base
+        cleared.location = nil
+        let location = try JSONSerialization.jsonObject(with: JSONEncoder().encode(cleared.changes(from: base))) as! [String: Any]
+        #expect(Set(location.keys) == ["location"])
+        #expect(location["location"] is NSNull)
+
+        #expect(base.changes(from: base).isEmpty)
+        #expect(!new.changes(from: base).isEmpty)
+    }
+
     @Test func arabicSearchFolding() {
         #expect(ArabicSearch.fold("مُراجَعة  العقد ١٢") == "مراجعه العقد 12")
         #expect(ArabicSearch.matches("مُراجَعة العقد مع الإدارة", query: "الاداره عقد"))

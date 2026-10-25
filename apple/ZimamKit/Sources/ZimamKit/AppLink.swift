@@ -1,8 +1,8 @@
 import Foundation
 
 /// Links into the app, from its widgets: `zimam://today`, `zimam://calendar`,
-/// `zimam://day/2026-10-15` (the calendar on that day), `zimam://task/<id>` (the task's details)
-/// and `zimam://prayer` («أوقات الصلاة»).
+/// `zimam://day/2026-10-15` (the calendar on that day), `zimam://task/<id>` (the task's details),
+/// `zimam://prayer` («أوقات الصلاة») and `zimam://matrix` («المصفوفة»).
 /// Invite links (`zimam://join/<code>`) are not these; `InviteCode` reads them.
 public enum AppLink: Equatable, Hashable, Sendable {
     case today
@@ -11,6 +11,7 @@ public enum AppLink: Equatable, Hashable, Sendable {
     case day(String)
     case task(UUID)
     case prayer
+    case matrix
 
     public var url: URL {
         let scheme = ZimamWeb.appScheme
@@ -27,6 +28,7 @@ public enum AppLink: Equatable, Hashable, Sendable {
             return components.url!
         case .task(let id): return URL(string: "\(scheme)://task/\(id.uuidString)")!
         case .prayer: return URL(string: "\(scheme)://prayer")!
+        case .matrix: return URL(string: "\(scheme)://matrix")!
         }
     }
 
@@ -38,6 +40,7 @@ public enum AppLink: Equatable, Hashable, Sendable {
         case ("today", 0): self = .today
         case ("calendar", 0): self = .calendar
         case ("prayer", 0): self = .prayer
+        case ("matrix", 0): self = .matrix
         case ("day", 1):
             guard Self.isDay(parts[0]) else { return nil }
             self = .day(parts[0])

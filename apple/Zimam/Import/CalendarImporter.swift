@@ -66,11 +66,9 @@ final class CalendarImporter {
         errorMessage = nil
         resultMessage = nil
         defer { isWorking = false }
-        // Lets the button show its progress before EventKit reads.
-        await Task.yield()
-
         let window = AppleCalendarImport.window(months: months, now: Date(), timeZone: .current)
-        let found = events.occurrences(in: Set(chosen.map(\.id)), from: window.start, to: window.end)
+        // Off the main actor, so the screen keeps moving (and shows its progress) while EventKit reads.
+        let found = await CalendarEvents.occurrences(in: Set(chosen.map(\.id)), from: window.start, to: window.end)
         let refs = CalendarImportRefs(userId: userId)
         let projects = (try? context.fetch(FetchDescriptor<ProjectItem>(predicate: #Predicate { !$0.pendingDelete }))) ?? []
         let liveProjects = Set(projects.map(\.id))

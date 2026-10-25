@@ -3,13 +3,13 @@
 // the primary «إنجاز» / «إلغاء الإنجاز»; below are the task's details, the extras (task-extras.js),
 // the attachments (attachments-view.js), and «حذف المهمة» with its confirmation.
 import { showAttachments } from "./attachments-view.js";
-import { PrayerChip, h } from "./lib/components.js";
+import { PrayerChip, h, isTyping } from "./lib/components.js";
 import { icon } from "./lib/icons.js";
 import { dualDate, relativeDay, timeLabel, weekdayName } from "./lib/dates.js";
 import { prayerPhrase } from "./lib/prayer.js";
 import { PRIORITY_WORDS, isOpen } from "./lib/tasks.js";
 import { remindersSection, taskEditor } from "./task-editor.js";
-import { showTaskExtras } from "./task-extras.js";
+import { reloadTaskExtras, showTaskExtras, updateTaskExtras } from "./task-extras.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -37,6 +37,16 @@ export function createTaskPane(ctx) {
   let current = null;
   /** The «التذكيرات» section of the task shown, read once and kept across redraws. */
   let reminders = null;
+  /** The attachments of the task shown (attachments-view.js), to read them again. */
+  let attachments = null;
+  /**
+   * The editor's error line, kept across its redraws: an edit redraws the editor at once (main.js
+   * saveTask), so a save that fails afterwards still has somewhere to say why.
+   */
+  const editorError = h("p", { className: "callout field-error", role: "alert" });
+
+  /** What the extras need, for the task as it is now (its role follows a move to another project). */
+  const extrasCtx = (task) => ({ ...ctx.featureContext(), role: ctx.roleFor(task), isTaskShown: (id) => current?.id === id });
 
   function detail(term, ...value) {
     return [h("dt", { className: "caption muted" }, term), h("dd", { className: "body" }, ...value)];
@@ -51,13 +61,13 @@ export function createTaskPane(ctx) {
     els.confirm.hidden = true;
     setToggle(task);
     if (!ctx.canEdit(task)) {
-      els.title.classList.remove("visually-hidden");
+      els.title.classList.remove("sr-only");
       fillDetails(task);
       els.editor.replaceChildren(reminders.node);
       return;
     }
     // The title is the editor's first field; the heading stays for screen readers to land on.
-    els.title.classList.add("visually-hidden");
+    els.title.classList.add("sr-only");
     els.details.replaceChildren();
     // A redraw while a field has focus gives it back, with what was being typed in it.
     const active = document.activeElement;
@@ -73,6 +83,8 @@ export function createTaskPane(ctx) {
       isCurrent: () => current?.id === task.id,
       announce: ctx.announce,
       errorText: ctx.errorText,
+      error: editorError,
+      ensureAtTimeReminder: () => reminders.ensureAtTime(),
     };
     els.editor.replaceChildren(taskEditor(task, editorCtx, reminders.node));
     reminders.redraw();
@@ -86,13 +98,10 @@ export function createTaskPane(ctx) {
     again.focus({ preventScroll: true });
   }
 
+  /** The read-only details; fill() has already set the toolbar and «حذف المهمة» for the role. */
   function fillDetails(task) {
     const today = ctx.today();
     const primary = ctx.primary();
-    els.missing.hidden = true;
-    els.error.textContent = "";
-    els.actions.hidden = false;
-    els.confirm.hidden = true;
     const rows = [];
     if (task.dueDate) {
       const word = relativeDay(task.dueDate, today);
@@ -124,6 +133,7 @@ export function createTaskPane(ctx) {
   /** Shows `task`; `focus` moves the keyboard to its title (a person opened it, not a reload). */
   function show(task, { focus = true } = {}) {
     current = task;
+    editorError.textContent = "";
     reminders = remindersSection(task.id, () => current ?? task, {
       primary: ctx.primary(),
       isCurrent: () => current?.id === task.id,
@@ -134,9 +144,9 @@ export function createTaskPane(ctx) {
     fill(task);
     els.extras.hidden = false;
     els.attachments.hidden = false;
-    showAttachments(els.attachments, task, { announce: ctx.announce });
+    attachments = showAttachments(els.attachments, task, { announce: ctx.announce });
     open();
-    showTaskExtras(task, { ...ctx.featureContext(), role: ctx.roleFor(task), isTaskShown: (id) => current?.id === id });
+    showTaskExtras(task, extrasCtx(task));
     els.pane.scrollTop = 0;
     if (focus) els.title.focus({ preventScroll: true });
   }
@@ -162,13 +172,33 @@ export function createTaskPane(ctx) {
     delete els.shell.dataset.task;
     els.extras.replaceChildren();
     els.editor.replaceChildren();
+    // Nothing of the task stays in the hidden pane (a sign-out leaves it for the next account).
+    els.title.textContent = "";
+    els.details.replaceChildren();
+    els.attachments.replaceChildren();
+    attachments = null;
   }
 
-  /** The same task, newer: redraws the details and the toolbar, keeping extras and attachments. */
+  /**
+   * The same task, newer: redraws the details and the toolbar, and the extras that follow its
+   * fields («المدة», the assignee); the attachments and the lists in the extras stay as they are.
+   */
   function refresh(task) {
     if (current?.id !== task.id) return;
     Object.assign(current, task);
     fill(current);
+    updateTaskExtras(current, extrasCtx(current));
+  }
+
+  /**
+   * Reads the open task's subtasks, comments and attachments again, after a change elsewhere. Each
+   * list is drawn anew, so one that holds the focus (a subtask's circle, «حذف التعليق», a file) is
+   * left as it is and read on the next change: the keyboard keeps its place.
+   */
+  function reloadLists() {
+    if (!current) return;
+    reloadTaskExtras(current.id);
+    attachments?.reload();
   }
 
   els.toggle.addEventListener("click", () => current && ctx.toggle(current).then(() => current && setToggle(current)));
@@ -183,10 +213,11 @@ export function createTaskPane(ctx) {
     ctx.close({ restoreFocus: true });
   });
 
-  // ⌘↩ / Ctrl+↩: «إنجاز المهمة المحددة», as in the Mac menu.
+  // ⌘↩ / Ctrl+↩: «إنجاز المهمة المحددة», as in the Mac menu. Not while typing in a field: there
+  // the keys belong to the field (in the comment box they send the comment, share-view.js).
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || !current) return;
-    if (document.querySelector("dialog[open]")) return;
+    if (document.querySelector("dialog[open]") || event.isComposing || isTyping(event.target)) return;
     event.preventDefault();
     ctx.toggle(current).then(() => current && setToggle(current));
   });
@@ -222,6 +253,7 @@ export function createTaskPane(ctx) {
     showMissing,
     hide,
     refresh,
+    reloadLists,
     setToggle: (task) => current?.id === task.id && setToggle(current),
     currentId: () => current?.id ?? null,
     /** The task object the pane shows, if it is `id`. */

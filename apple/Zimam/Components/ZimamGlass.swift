@@ -6,22 +6,6 @@ import SwiftUI
 // rows, cards or chips: «الهدوء قبل الزينة» (design/README.md). Tints come from the tokens only.
 
 extension View {
-    /// A glass surface in `shape` on iOS and macOS 26; a flat `fallback` fill before.
-    /// Apply it after the layout and appearance modifiers.
-    @ViewBuilder
-    func zimamGlass<S: Shape>(
-        in shape: S,
-        tint: Color? = nil,
-        interactive: Bool = false,
-        fallback: Color = ZimamColor.surfaceRaised
-    ) -> some View {
-        if #available(iOS 26, macOS 26, *) {
-            glassEffect(interactive ? Glass.regular.tint(tint).interactive() : Glass.regular.tint(tint), in: shape)
-        } else {
-            background(fallback, in: shape)
-        }
-    }
-
     /// The floating «إضافة مهمة» button: prominent brand glass on 26, the brand circle before.
     @ViewBuilder
     func zimamFloatingActionStyle() -> some View {

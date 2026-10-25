@@ -16,7 +16,7 @@ public extension APIClient {
             let text: String
             let now: String
         }
-        return try await send("POST", "v1/assistant/parse", body: Body(text: text, now: Self.isoString(now, timeZone: timeZone)))
+        return try await send("POST", "v1/assistant/parse", body: Body(text: text, now: ReminderPlanner.isoString(from: now, timeZone: timeZone)))
     }
 
     /// `POST /v1/assistant/breakdown`: three to eight subtask titles for a task the server knows.
@@ -37,12 +37,4 @@ public extension APIClient {
 extension APIClient {
     /// Ids in paths are lowercase, as the server stores them.
     static func path(_ id: UUID) -> String { id.uuidString.lowercased() }
-
-    /// "2026-10-15T09:30:00+03:00": the device's time with its offset.
-    static func isoString(_ date: Date, timeZone: TimeZone) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.timeZone = timeZone
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.string(from: date)
-    }
 }

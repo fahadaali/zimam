@@ -2,6 +2,7 @@
 // Hijri (Umm al-Qura) and Gregorian together, the user's primary calendar first, separated by the
 // Arabic comma «،» (never a middle dot: the Arabic zero is a dot). Near days read as one word.
 // Pure functions: no DOM, no clock unless one is passed in.
+import { arabicNumber } from "./numbers.js";
 
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DAY = 86_400_000;
@@ -9,7 +10,9 @@ const DAY = 86_400_000;
 // Formatting happens at UTC noon of the day, in UTC, so the viewer's time zone never shifts it.
 const opts = (extra) => ({ timeZone: "UTC", day: "numeric", month: "long", ...extra });
 const hijriFmt = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-arab", opts());
-const hijriYearFmt = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-arab", opts({ year: "numeric" }));
+// The Hijri year as a number, written «١٤٤٨هـ» as the calendar's titles write it (lib/calendar.js).
+const hijriYearNumber = new Intl.DateTimeFormat("en-u-ca-islamic-umalqura-nu-latn", { timeZone: "UTC", year: "numeric" });
+const hijriYear = (date) => Number(hijriYearNumber.formatToParts(date).find((p) => p.type === "year")?.value);
 const gregorianFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-arab", opts());
 const gregorianYearFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-arab", opts({ year: "numeric" }));
 const clockFmt = new Intl.DateTimeFormat("ar-SA-u-nu-arab", { timeZone: "UTC", hour: "numeric", minute: "2-digit" });
@@ -48,9 +51,10 @@ export function dayDiff(fromIso, toIso) {
   return Math.round((parseIsoDate(toIso).getTime() - parseIsoDate(fromIso).getTime()) / DAY);
 }
 
-/** "٢ جمادى الأولى" (with the year, "٢ جمادى الأولى ١٤٤٨ هـ", when asked). */
+/** "٢ جمادى الأولى" (with the year, "٢ جمادى الأولى ١٤٤٨هـ", when asked). */
 export function formatHijri(iso, { year = false } = {}) {
-  return (year ? hijriYearFmt : hijriFmt).format(parseIsoDate(iso));
+  const date = parseIsoDate(iso);
+  return year ? `${hijriFmt.format(date)} ${arabicNumber(hijriYear(date))}هـ` : hijriFmt.format(date);
 }
 
 /** "١٣ أكتوبر" (or "١٣ أكتوبر ٢٠٢٦"). */
@@ -62,18 +66,20 @@ export function weekdayName(iso) {
   return weekdayFmt.format(parseIsoDate(iso));
 }
 
+const inOtherYear = (a, b) => a.getUTCFullYear() !== b.getUTCFullYear() || hijriYear(a) !== hijriYear(b);
+
 /**
  * Both calendars, primary first: "٢ جمادى الأولى، ١٣ أكتوبر".
- * Years are added only when the date falls in another Gregorian year than `today`.
+ * Years are added, to both, only when the date falls in another Hijri or Gregorian year than `today`.
  */
 export function dualDate(iso, { primary = "hijri", today } = {}) {
-  const year = today ? parseIsoDate(iso).getUTCFullYear() !== parseIsoDate(today).getUTCFullYear() : false;
+  const year = today ? inOtherYear(parseIsoDate(iso), parseIsoDate(today)) : false;
   const hijri = formatHijri(iso, { year });
   const gregorian = formatGregorian(iso, { year });
   return primary === "gregorian" ? `${gregorian}، ${hijri}` : `${hijri}، ${gregorian}`;
 }
 
-/** Both calendars with their years, primary first: «٩ جمادى الأولى ١٤٤٨ هـ، ٢٠ أكتوبر ٢٠٢٦». */
+/** Both calendars with their years, primary first: «٩ جمادى الأولى ١٤٤٨هـ، ٢٠ أكتوبر ٢٠٢٦». */
 export function dualDateWithYear(iso, { primary = "hijri" } = {}) {
   const hijri = formatHijri(iso, { year: true });
   const gregorian = formatGregorian(iso, { year: true });
@@ -96,10 +102,10 @@ export function dateLabel(iso, { today, primary = "hijri" }) {
 
 /**
  * Everything a DateChip needs for a due date. Past days are overdue and always show the full
- * dual date; near days show their word.
+ * dual date; near days show their word. A done task is never overdue (TaskRow.swift).
  */
-export function dueChip(iso, { today, primary = "hijri" }) {
-  const overdue = dayDiff(today, iso) < 0;
+export function dueChip(iso, { today, primary = "hijri", done = false }) {
+  const overdue = !done && dayDiff(today, iso) < 0;
   return {
     text: overdue ? dualDate(iso, { primary, today }) : dateLabel(iso, { today, primary }),
     full: dualDate(iso, { primary, today }),

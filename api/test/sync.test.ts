@@ -1,4 +1,6 @@
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { MAX_CLOCK_SKEW_MS } from "../src/data/mutations";
 import { addMember, call, pullAll, push, signIn, uuid } from "./helpers";
 
 const project = (id: string, updatedAt: number, extra = {}) => ({
@@ -53,6 +55,36 @@ describe("Sync", () => {
     expect(retry!.status).toBe("applied");
     const { changes } = await pullAll(token);
     expect(changes.find((c) => c.id === id)!.data!.title).toBe("الأحدث");
+  });
+
+  it("caps versions from a clock that runs ahead, and keeps rows already ahead editable", async () => {
+    const { token } = await signIn();
+    const stored = async (id: string) =>
+      (await env.DB.prepare(`SELECT updated_at FROM tasks WHERE id = ?`).bind(id).first<{ updated_at: number }>())!.updated_at;
+    const year = 365 * 24 * 60 * 60 * 1000;
+
+    // A device a year ahead: stored a few minutes ahead at most, so it does not win for a year.
+    const ahead = uuid();
+    const before = Date.now();
+    expect((await push(token, [task(ahead, before + year, { title: "من جهاز متقدم" })]))[0]!.status).toBe("applied");
+    expect(await stored(ahead)).toBeLessThanOrEqual(Date.now() + MAX_CLOCK_SKEW_MS);
+    expect((await push(token, [task(ahead, before + MAX_CLOCK_SKEW_MS + 60_000, { title: "بعد دقائق" })]))[0]!.status).toBe("applied");
+
+    // The largest safe version leaves room for the next one.
+    const frozen = uuid();
+    await push(token, [task(frozen, Number.MAX_SAFE_INTEGER)]);
+    const version = await stored(frozen);
+    expect((await push(token, [task(frozen, version + 1, { title: "تعديل" })]))[0]!.status).toBe("applied");
+
+    // A row stored ahead before the cap: one past it still goes through, and so does a delete.
+    const old = uuid();
+    await push(token, [task(old, 1000)]);
+    await env.DB.prepare(`UPDATE tasks SET updated_at = ? WHERE id = ?`).bind(before + year, old).run();
+    expect((await push(token, [task(old, before + year + 1, { title: "تعديل" })]))[0]!.status).toBe("applied");
+    expect(await stored(old)).toBe(before + year + 1);
+    const [deleted] = await push(token, [{ op: "delete", entity: "task", id: old, updatedAt: Number.MAX_SAFE_INTEGER }]);
+    expect(deleted!.status).toBe("applied");
+    expect(await stored(old)).toBe(before + year + 2);
   });
 
   it("returns only the latest state of each record, paged", async () => {
@@ -191,6 +223,77 @@ describe("Sync", () => {
     const sub = ownerView.changes.find((c) => c.id === subtaskId)!;
     expect(sub.op).toBe("upsert");
     expect(sub.data!.projectId).toBeNull();
+  });
+
+  it("removes the reminders of whoever cannot see a task where it moves", async () => {
+    const owner = await signIn();
+    const stays = await signIn(); // a member of both projects
+    const leaves = await signIn(); // a member of the first only
+    const from = uuid();
+    const to = uuid();
+    const taskId = uuid();
+    const subtaskId = uuid();
+    await push(owner.token, [
+      project(from, 1000),
+      project(to, 1000),
+      task(taskId, 1000, { projectId: from }),
+      task(subtaskId, 1000, { projectId: from, parentId: taskId }),
+    ]);
+    await addMember(from, stays.userId, "editor");
+    await addMember(to, stays.userId, "viewer");
+    await addMember(from, leaves.userId, "viewer");
+    const reminder = (id: string, on: string) => ({
+      op: "upsert",
+      entity: "reminder",
+      data: { id, taskId: on, kind: "time", at: "2027-01-10T09:00:00+03:00", updatedAt: 1000 },
+    });
+    const [mine, kept, gone, goneOnSubtask] = [uuid(), uuid(), uuid(), uuid()];
+    await push(owner.token, [reminder(mine, taskId)]);
+    await push(stays.token, [reminder(kept, taskId)]);
+    await push(leaves.token, [reminder(gone, taskId), reminder(goneOnSubtask, subtaskId)]);
+    const { cursor } = await pullAll(leaves.token);
+
+    expect((await push(owner.token, [task(taskId, 2000, { projectId: to })]))[0]!.status).toBe("applied");
+
+    const { results } = await env.DB.prepare(`SELECT id FROM reminders WHERE task_id IN (?, ?) AND deleted_at IS NULL`)
+      .bind(taskId, subtaskId)
+      .all<{ id: string }>();
+    expect(results.map((r) => r.id).sort()).toEqual([mine, kept].sort());
+    const leaverView = await pullAll(leaves.token, cursor);
+    expect(leaverView.changes.filter((c) => c.entity === "reminder").map((c) => [c.id, c.op]).sort()).toEqual(
+      [
+        [gone, "delete"],
+        [goneOnSubtask, "delete"],
+      ].sort(),
+    );
+  });
+
+  it("applies a full batch of plain edits, and answers a heavier one in part for the client to resend", async () => {
+    const { token, userId } = await signIn();
+    const plain = Array.from({ length: 200 }, () => task(uuid(), 1000));
+    expect((await push(token, plain)).map((r) => r.status)).toEqual(plain.map(() => "applied"));
+
+    // Subtasks nine levels down: each checks every ancestor, so 200 cost more than one push may spend.
+    const chain = Array.from({ length: 9 }, () => uuid());
+    await push(token, chain.map((id, i) => task(id, 1000, { parentId: i > 0 ? chain[i - 1] : null })));
+    const deep = Array.from({ length: 200 }, () => task(uuid(), 1000, { parentId: chain[8] }));
+    const first = await push(token, deep);
+    expect(first.length).toBeGreaterThan(0);
+    expect(first.length).toBeLessThan(deep.length);
+    expect(first.every((r) => r.status === "applied")).toBe(true);
+
+    // What had no result was not touched, and goes through when sent again.
+    let left = deep.slice(first.length);
+    for (let round = 0; left.length > 0; round++) {
+      if (round > 10) throw new Error("the push never finished");
+      const results = await push(token, left);
+      expect(results.every((r) => r.status === "applied")).toBe(true);
+      left = left.slice(results.length);
+    }
+    const { count } = (await env.DB.prepare(`SELECT COUNT(*) AS count FROM tasks WHERE owner_id = ? AND parent_id = ?`)
+      .bind(userId, chain[8])
+      .first<{ count: number }>())!;
+    expect(count).toBe(200);
   });
 
   it("rejects subtask cycles and cross-project parents", async () => {

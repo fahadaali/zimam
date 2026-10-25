@@ -19,31 +19,8 @@ const LAYOUTS = ["list", "kanban", "timeline"];
 /** A viewer's own choice for this page's life: viewers cannot change the project's `view`. */
 const localLayout = new Map();
 
-// «مخطط» is saved as the project's view "timeline". A server that does not accept that value yet
-// answers 400 (`invalid`); the choice is then kept for this browser tab (sessionStorage) instead.
-const SESSION_KEY = "zimam.projectLayouts";
-
-function sessionLayouts() {
-  try {
-    return JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "{}") ?? {};
-  } catch {
-    return {};
-  }
-}
-
-function rememberLayout(projectId, value) {
-  try {
-    const all = sessionLayouts();
-    if (value) all[projectId] = value;
-    else delete all[projectId];
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(all));
-  } catch {
-    /* kept for this page only */
-  }
-}
-
 export function layoutOf(project) {
-  const chosen = localLayout.get(project.id) ?? sessionLayouts()[project.id];
+  const chosen = localLayout.get(project.id);
   if (LAYOUTS.includes(chosen)) return chosen;
   return LAYOUTS.includes(project.view) ? project.view : "list";
 }
@@ -56,7 +33,6 @@ export function layoutToggle(project, ctx) {
     button.addEventListener("click", async () => {
       if (layoutOf(project) === value) return;
       localLayout.set(project.id, value);
-      rememberLayout(project.id, null);
       ctx.render();
       if (!canEdit(project.role)) return;
       try {
@@ -64,9 +40,7 @@ export function layoutToggle(project, ctx) {
         project.view = saved.view;
         localLayout.delete(project.id);
       } catch (error) {
-        // An older server knows no "timeline" view: keep the choice in this tab, say nothing.
-        if (value === "timeline" && error.status === 400) rememberLayout(project.id, value);
-        else if (error.status !== 401 && error.status !== 403) ctx.showError(error);
+        if (error.status !== 401 && error.status !== 403) ctx.showError(error);
       }
     });
     return button;
@@ -158,8 +132,7 @@ export function boardView({ project, sections, tasks }, ctx) {
     li.addEventListener("dragstart", (event) => {
       dragged = { id: task.id, height: li.getBoundingClientRect().height };
       event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", task.title);
-      event.dataTransfer.setData("application/x-zimam-task", task.id);
+      // The card's own drag (ctx.taskItem) carries the task for the sidebar's drop.
       li.classList.add("is-dragged");
       li.firstElementChild?.classList.add("zm-task-lifted");
       document.body.classList.add("is-dragging");
@@ -282,7 +255,8 @@ export function boardView({ project, sections, tasks }, ctx) {
     const open = h("button", { type: "button", className: "zm-column-add" }, "إضافة مهمة");
     const input = h("input", { className: "input callout", type: "text", maxlength: "500", "aria-label": `عنوان المهمة في «${column.name}»`, enterkeyhint: "done" });
     const error = h("p", { className: "caption field-error", role: "alert" });
-    const form = h("form", { className: "column-form", hidden: true, novalidate: true }, input, h("div", { className: "sheet-actions" }, Button({ variant: "secondary", type: "submit" }, "إضافة"), cancelButton()), error);
+    const submit = Button({ variant: "secondary", type: "submit" }, "إضافة");
+    const form = h("form", { className: "column-form", hidden: true, novalidate: true }, input, h("div", { className: "sheet-actions" }, submit, cancelButton()), error);
     function cancelButton() {
       const b = Button({ variant: "quiet" }, "إلغاء");
       b.addEventListener("click", () => {
@@ -306,6 +280,7 @@ export function boardView({ project, sections, tasks }, ctx) {
     });
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (submit.disabled) return; // one task per «إضافة», even when it is pressed twice
       const title = input.value.trim();
       if (!title) {
         error.textContent = "اكتب عنوان المهمة.";
@@ -314,6 +289,7 @@ export function boardView({ project, sections, tasks }, ctx) {
       }
       error.textContent = "";
       input.disabled = true;
+      submit.disabled = true;
       try {
         ctx.markLocalChange();
         const created = await boardApi.createTask({
@@ -331,6 +307,7 @@ export function boardView({ project, sections, tasks }, ctx) {
         again?.click();
       } catch (failure) {
         input.disabled = false;
+        submit.disabled = false;
         if (failure.status !== 401) error.textContent = errorText(failure);
       }
     });
@@ -343,7 +320,8 @@ export function boardView({ project, sections, tasks }, ctx) {
     const open = h("button", { type: "button", className: "board-add-section callout" }, icons.plus(), h("span", null, "إضافة قسم"));
     const input = h("input", { className: "input callout", type: "text", maxlength: "100", "aria-label": "اسم القسم" });
     const cancel = Button({ variant: "quiet" }, "إلغاء");
-    const form = h("form", { className: "column-form", hidden: true, novalidate: true }, input, h("div", { className: "sheet-actions" }, Button({ variant: "secondary", type: "submit" }, "إضافة"), cancel));
+    const submit = Button({ variant: "secondary", type: "submit" }, "إضافة");
+    const form = h("form", { className: "column-form", hidden: true, novalidate: true }, input, h("div", { className: "sheet-actions" }, submit, cancel));
     cancel.addEventListener("click", () => {
       form.hidden = true;
       open.hidden = false;
@@ -362,13 +340,18 @@ export function boardView({ project, sections, tasks }, ctx) {
     });
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (submit.disabled) return; // one section per «إضافة»
       const name = input.value.trim();
       if (!name) return input.focus();
       const section = { id: crypto.randomUUID(), projectId: project.id, name, sortOrder: after(sections.map((s) => s.sortOrder ?? 0)), updatedAt: Date.now(), createdAt: Date.now() };
       input.disabled = true;
+      submit.disabled = true;
       if (await saveSections([{ op: "upsert", entity: "section", data: section }], `أُضيف القسم «${name}».`)) {
         sections.push(section);
         draw(".board-add-section");
+      } else {
+        input.disabled = false;
+        submit.disabled = false;
       }
     });
     return h("div", { className: "board-column-add" }, open, form);
@@ -477,6 +460,18 @@ export function boardView({ project, sections, tasks }, ctx) {
 
     return wrap;
   }
+
+  // A card that leaves (completed, or deleted from it) leaves its column: drawn again, its count
+  // follows, and the keyboard goes on to the next card.
+  board.addEventListener("zimam:task-left", (event) => {
+    const li = event.target.closest?.(".board-card");
+    if (!li) return;
+    event.preventDefault();
+    const next = li.contains(document.activeElement) ? (li.nextElementSibling ?? li.previousElementSibling)?.dataset.taskId : null;
+    const at = tasks.findIndex((t) => t.id === li.dataset.taskId);
+    if (at >= 0) tasks.splice(at, 1);
+    draw(next ? `[data-task-id="${CSS.escape(next)}"] .zm-check` : null);
+  });
 
   draw();
   return board;

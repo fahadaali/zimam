@@ -56,12 +56,13 @@ struct MatrixView: View {
         return calendar
     }
 
-    private var today: String { formatter.dayString(from: Date()) }
+    private var today: String { formatter.dayString(from: DayClock.shared.now) }
 
     init() {}
 
     var body: some View {
-        let grouped = PriorityMatrix.group(tasks.filter { $0.parentId == nil }, calendar: calendar,
+        let grouped = PriorityMatrix.group(tasks.filter { $0.parentId == nil }, today: DayClock.shared.now,
+                                           calendar: calendar,
                                            isOpen: { !$0.isDone || lingering.contains($0.id) },
                                            priority: \.priority, dueDate: \.dueDate)
         let names = projectNames(projects)
@@ -148,28 +149,7 @@ struct MatrixView: View {
     }
 }
 
-extension PriorityQuadrant {
-    /// The quadrant's color, never alone: its name and icon go with it.
-    var color: Color {
-        switch self {
-        case .urgentImportant: ZimamColor.quadrantUrgentImportant
-        case .important: ZimamColor.quadrantImportant
-        case .urgent: ZimamColor.quadrantUrgent
-        case .someday: ZimamColor.quadrantSomeday
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .urgentImportant: "flame"
-        case .important: "calendar"
-        case .urgent: "bolt"
-        case .someday: "line.3.horizontal"
-        }
-    }
-}
-
-/// The timeline or the matrix pushed on the iPhone's projects tab.
+/// The inbox, the timeline or the matrix pushed on the iPhone's projects tab.
 struct OverviewScreen: View {
     let route: OverviewRoute
 
@@ -178,6 +158,7 @@ struct OverviewScreen: View {
     var body: some View {
         Group {
             switch route {
+            case .inbox: InboxView()
             case .timeline: GanttView(projectId: nil)
             case .matrix: MatrixView()
             }

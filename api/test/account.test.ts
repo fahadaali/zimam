@@ -4,7 +4,7 @@ import { decodeProtectedHeader, exportPKCS8, generateKeyPair, jwtVerify, Unsecur
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppleTokenClient, AppleTokenError, appleRedirectUris, appleTokensFromEnv } from "../src/auth/apple-tokens";
 import { ZimamService } from "../src/service";
-import { appleToken, call, fakeApple, pullAll, push, signIn, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
+import { appleToken, call, fakeApple, pullAll, push, signIn, TEST_NONCE, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
 
 const WEB_REDIRECT = "https://zimam.work/app";
 const MCP_REDIRECT = "https://mcp.zimam.work/authorize";
@@ -45,7 +45,7 @@ const userRow = (id: string) => env.DB.prepare(`SELECT * FROM users WHERE id = ?
 /** Signs in through the app with an authorization code, as SessionStore does (the web adds its redirect URI). */
 async function signInWithCode(sub: string, code: string, audience = "app.zimam.ios", redirectUri?: string) {
   const res = await call("POST", "/v1/auth/apple", {
-    body: { identityToken: await appleToken(sub, { audience }), authorizationCode: code, redirectUri },
+    body: { identityToken: await appleToken(sub, { audience }), nonce: TEST_NONCE, authorizationCode: code, redirectUri },
   });
   expect(res.status).toBe(200);
   return { token: res.body.token as string, userId: res.body.user.id as string };
@@ -263,7 +263,12 @@ describe("Sign in with Apple tokens", () => {
     expect(await userRow(user.userId)).toMatchObject({ apple_refresh_token: "site-refresh" });
 
     const bad = await call("POST", "/v1/auth/apple", {
-      body: { identityToken: await appleToken(sub, { audience: "app.zimam.ios.web" }), authorizationCode: "x", redirectUri: "not a url" },
+      body: {
+        identityToken: await appleToken(sub, { audience: "app.zimam.ios.web" }),
+        nonce: TEST_NONCE,
+        authorizationCode: "x",
+        redirectUri: "not a url",
+      },
     });
     expect(bad.status).toBe(400);
   });

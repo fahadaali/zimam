@@ -15,6 +15,25 @@
 
   const isDark = () => (root.dataset.theme ? root.dataset.theme === "dark" : system.matches);
 
+  // The landing page (data-hero on <html>): its screenshots are lazy, so the other theme's are never
+  // fetched, but lazy ones wait for layout. The hero's shots and the logo of this theme are asked
+  // for now, high, as the largest paint; the window shot only from 48rem, where site.css shows it.
+  if (root.hasAttribute("data-hero")) {
+    const theme = isDark() ? "dark" : "light";
+    const preload = (href, media) => {
+      const link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "image";
+      link.href = href;
+      link.fetchPriority = "high";
+      if (media) link.media = media;
+      document.head.append(link);
+    };
+    preload(`/images/screens/phone-today-${theme}.webp`);
+    preload(`/images/screens/desktop-today-${theme}.webp`, "(min-width: 48rem)");
+    preload(theme === "dark" ? "/design/logos/zimam-lockup-ar-on-dark.svg" : "/design/logos/zimam-lockup-ar.svg");
+  }
+
   function choose(theme) {
     const apply = () => {
       root.dataset.theme = theme;

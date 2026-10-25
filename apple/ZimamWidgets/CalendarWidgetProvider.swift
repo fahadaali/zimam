@@ -42,6 +42,6 @@ struct CalendarWidgetProvider: AppIntentTimelineProvider {
         let entries = snapshot.entryDates(now: now, atTaskTimes: true).map {
             CalendarWidgetEntry(date: $0, snapshot: snapshot, kind: kind)
         }
-        return Timeline(entries: entries, policy: .after(snapshot.nextMidnight))
+        return Timeline(entries: entries, policy: .after(snapshot.reloadDate(now: now)))
     }
 }
