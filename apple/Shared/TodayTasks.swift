@@ -17,18 +17,27 @@ enum TodayTasks {
             timesByDay[day] = solved
             return solved
         }
-        return tasks
-            .map { task in
-                let mode = task.timeMode
-                let minute = TaskTiming.minuteOfDay(mode, prayerTimes: mode.prayer == nil ? nil : times(on: task.dueDate),
-                                                    timeZone: formatter.timeZone)
-                return (task: task, minute: minute ?? -1)
-            }
-            .sorted { a, b in
-                (a.task.dueDate ?? "", a.minute, a.task.sortOrder, a.task.createdAt)
-                    < (b.task.dueDate ?? "", b.minute, b.task.sortOrder, b.task.createdAt)
-            }
-            .map { $0.task }
+        // In steps with their types spelled out: as one chain, the compiler gives up type-checking it.
+        var keyed: [(task: TaskItem, minute: Int)] = []
+        keyed.reserveCapacity(tasks.count)
+        for task in tasks {
+            let mode: TaskTimeMode = task.timeMode
+            let prayerTimes: [Prayer: Date]? = mode.prayer == nil ? nil : times(on: task.dueDate)
+            let minute: Int? = TaskTiming.minuteOfDay(mode, prayerTimes: prayerTimes, timeZone: formatter.timeZone)
+            keyed.append((task: task, minute: minute ?? -1))
+        }
+        keyed.sort(by: inDayOrder)
+        return keyed.map { $0.task }
+    }
+
+    /// By day, then minute of the day (all-day first, as -1), then manual order, then creation.
+    private static func inDayOrder(_ a: (task: TaskItem, minute: Int), _ b: (task: TaskItem, minute: Int)) -> Bool {
+        let dayA: String = a.task.dueDate ?? ""
+        let dayB: String = b.task.dueDate ?? ""
+        if dayA != dayB { return dayA < dayB }
+        if a.minute != b.minute { return a.minute < b.minute }
+        if a.task.sortOrder != b.task.sortOrder { return a.task.sortOrder < b.task.sortOrder }
+        return a.task.createdAt < b.task.createdAt
     }
 
     /// The API's day string for today, in the device's time zone.
