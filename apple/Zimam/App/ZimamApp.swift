@@ -73,6 +73,8 @@ struct ZimamApp: App {
         #if os(iOS)
         // Hands the session to the Apple Watch app.
         WatchLink.shared.start()
+        // Do Not Disturb ends with the focus, when the user linked them (App/FocusDoNotDisturb.swift).
+        FocusActivity.onEnd = { FocusDoNotDisturb.shared.focusEnded() }
         #endif
         _session = State(initialValue: session)
         _sync = State(initialValue: sync)
@@ -113,9 +115,13 @@ struct ZimamApp: App {
                     // widgets through zimam://task/<id>, zimam://day/<day>, zimam://today and
                     // zimam://calendar (App/AppLinks.swift), and «فتح في التطبيق» on the web join page
                     // through zimam://join/<code>. An import's OAuth flow returns through
-                    // zimam://import-callback?pending=<id> (Import/ImportLinks.swift).
+                    // zimam://import-callback?pending=<id> (Import/ImportLinks.swift). Shortcuts comes
+                    // back through zimam://focus after turning Do Not Disturb on or off.
                     .onOpenURL { url in
                         if SessionStore.handleOpenURL(url) { return }
+                        #if os(iOS)
+                        if FocusDoNotDisturb.handleOpenURL(url) { return }
+                        #endif
                         if AppLinks.open(url) { return }
                         if ImportLinks.shared.open(url) { return }
                         InviteLinks.shared.open(url)

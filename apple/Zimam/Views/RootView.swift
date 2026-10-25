@@ -34,6 +34,10 @@ struct RootView: View {
                             // A day that turned over while away moves the screens to it (DayClock).
                             DayClock.shared.refresh()
                             notifications.reschedule()
+                            #if os(iOS)
+                            // A focus ended from the Live Activity while away: Do Not Disturb ends now.
+                            FocusDoNotDisturb.shared.catchUp()
+                            #endif
                             TaskSpotlight.shared.scheduleUpdate()
                             Task {
                                 await sync.sync()

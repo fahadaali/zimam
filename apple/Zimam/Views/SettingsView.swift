@@ -1,8 +1,11 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 import ZimamKit
 
 /// Settings: the account's photo and name on top (`AccountCard`), then one page per subject:
-/// general (the calendar), prayer times, places, Siri, notifications, the subscription, import, and
+/// general (the calendar), prayer times, places, Siri, notifications, focus (iPhone), the subscription, import, and
 /// the account (sync, sign-out, deletion). Settings are saved to the API (`PATCH /v1/me`) and
 /// applied at once, so dates switch calendars as soon as the choice changes.
 /// The sections of the pages are in SettingsSections.swift.
@@ -69,6 +72,14 @@ struct SettingsView: View {
                     SettingsPageRow("الإشعارات", systemImage: "bell", value: notifications.isEnabled ? "مفعّلة" : "متوقفة") {
                         Form { SettingsNotificationsSection() }.settingsPage("الإشعارات")
                     }
+                    #if os(iOS)
+                    // «المهمة الجارية» is on the iPhone only (Views/FocusSection.swift).
+                    if UIDevice.current.userInterfaceIdiom == .phone {
+                        SettingsPageRow("التركيز", systemImage: "moon", value: FocusDoNotDisturb.shared.isOn ? "مع عدم الإزعاج" : nil) {
+                            FocusSettingsView()
+                        }
+                    }
+                    #endif
                 }
                 Section {
                     SettingsPageRow("الاشتراك", systemImage: "star", value: subscriptions.isPro ? "الاحترافية" : "المجانية") {

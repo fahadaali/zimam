@@ -37,6 +37,14 @@ enum FocusActivity {
         running.contains { $0.attributes.taskId == taskId }
     }
 
+    static var isAnyRunning: Bool {
+        !running.isEmpty
+    }
+
+    /// Called after a task's focus ended, wherever from: the app turns Do Not Disturb off with it
+    /// (`FocusDoNotDisturb`). Set at launch; nil in the widget extension.
+    static var onEnd: (@MainActor () -> Void)?
+
     @discardableResult
     static func start(taskId: UUID, title: String, projectName: String?) async -> Bool {
         await endAll()
@@ -55,6 +63,7 @@ enum FocusActivity {
     /// Ends the focus on this task, and removes it from the Lock Screen right away.
     static func end(taskId: UUID) async {
         await endActivities(for: taskId)
+        onEnd?()
     }
 
     /// Ends the focus when its task was completed or deleted elsewhere: in the Today list, from a

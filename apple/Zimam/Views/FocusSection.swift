@@ -32,6 +32,7 @@ struct FocusSection: View {
                             let started = await FocusActivity.start(taskId: task.id, title: task.title, projectName: projectName)
                             failed = !started
                             refresh()
+                            if started { FocusDoNotDisturb.shared.focusStarted() }
                         }
                     }
                     .frame(minHeight: ZimamSpacing.space11)
@@ -43,7 +44,9 @@ struct FocusSection: View {
                     note("تعذّر بدء التركيز. حاول مرة أخرى.")
                 }
             } footer: {
-                Text("يظهر مؤقت المهمة على شاشة القفل وفي الجزيرة التفاعلية، وتُنجزها منه.")
+                Text(FocusDoNotDisturb.shared.isOn
+                     ? "يظهر مؤقت المهمة على شاشة القفل وفي الجزيرة التفاعلية، وتُنجزها منه. ويعمل «عدم الإزعاج» معه."
+                     : "يظهر مؤقت المهمة على شاشة القفل وفي الجزيرة التفاعلية، وتُنجزها منه.")
                     .font(ZimamType.caption)
                     .foregroundStyle(ZimamColor.inkMuted)
             }
