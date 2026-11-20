@@ -4,7 +4,22 @@ import { decodeProtectedHeader, exportPKCS8, generateKeyPair, jwtVerify, Unsecur
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppleTokenClient, AppleTokenError, appleRedirectUris, appleTokensFromEnv } from "../src/auth/apple-tokens";
 import { ZimamService } from "../src/service";
-import { appleToken, call, fakeApple, pullAll, push, signIn, TEST_NONCE, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
+import {
+  appleToken,
+  call,
+  deleteAccount,
+  fakeApple,
+  GOOGLE_WEB_CLIENT,
+  googleToken,
+  pullAll,
+  push,
+  reauthBody,
+  signIn,
+  TEST_NONCE,
+  testAppleKeys,
+  testGoogleKeys,
+  uuid,
+} from "./helpers";
 
 const WEB_REDIRECT = "https://zimam.work/app";
 const MCP_REDIRECT = "https://mcp.zimam.work/authorize";
@@ -38,7 +53,7 @@ async function addMemberAt(projectId: string, userId: string, role: "editor" | "
     .run();
 }
 
-const deleteMe = (user: User) => call("DELETE", "/v1/me", { token: user.token });
+const deleteMe = (user: User) => deleteAccount(user.token);
 
 const userRow = (id: string) => env.DB.prepare(`SELECT * FROM users WHERE id = ?`).bind(id).first<Record<string, unknown>>();
 
@@ -240,7 +255,7 @@ describe("Sign in with Apple tokens", () => {
     const me = await call("GET", "/v1/me", { token: user.token });
     expect(JSON.stringify(me.body)).not.toContain("refresh-1");
 
-    expect((await call("DELETE", "/v1/me", { token: user.token })).status).toBe(204);
+    expect((await deleteAccount(user.token)).status).toBe(204);
     expect(fakeApple.revoked).toEqual([{ refreshToken: "refresh-1", clientId: "app.zimam.ios" }]);
     expect(await userRow(user.userId)).toMatchObject({ apple_refresh_token: null, apple_client_id: null });
   });
@@ -250,7 +265,7 @@ describe("Sign in with Apple tokens", () => {
     fakeApple.codes.set("web-code", { refreshToken: "web-refresh", sub });
     const user = await signInWithCode(sub, "web-code", "app.zimam.ios.web");
     expect(fakeApple.exchanged).toEqual([{ code: "web-code", clientId: "app.zimam.ios.web" }]);
-    await call("DELETE", "/v1/me", { token: user.token });
+    await deleteAccount(user.token);
     expect(fakeApple.revoked).toEqual([{ refreshToken: "web-refresh", clientId: "app.zimam.ios.web" }]);
   });
 
@@ -326,7 +341,7 @@ describe("Sign in with Apple tokens", () => {
     expect(fakeApple.exchanged.map((e) => e.code)).toEqual(["code-2"]);
     expect(await userRow(other.userId)).toMatchObject({ apple_refresh_token: null });
 
-    expect((await call("DELETE", "/v1/me", { token: kept.token })).status).toBe(204);
+    expect((await deleteAccount(kept.token)).status).toBe(204);
     expect(fakeApple.revoked).toEqual([]);
     expect(await userRow(kept.userId)).toMatchObject({ apple_sub: `deleted:${kept.userId}`, apple_refresh_token: null });
   });
@@ -336,9 +351,118 @@ describe("Sign in with Apple tokens", () => {
     fakeApple.codes.set("code-4", { refreshToken: "refresh-4", sub });
     const user = await signInWithCode(sub, "code-4");
     fakeApple.failRevoke = true;
-    expect((await call("DELETE", "/v1/me", { token: user.token })).status).toBe(204);
+    expect((await deleteAccount(user.token)).status).toBe(204);
     expect((await call("GET", "/v1/me", { token: user.token })).status).toBe(401);
     expect(await userRow(user.userId)).toMatchObject({ apple_sub: `deleted:${user.userId}` });
+  });
+});
+
+describe("Re-authentication before deletion", () => {
+  /** Still signed in, nothing deleted. */
+  async function intact(user: User) {
+    expect((await call("GET", "/v1/me", { token: user.token })).status).toBe(200);
+    expect(await userRow(user.userId)).toMatchObject({ apple_sub: expect.not.stringMatching(/^deleted:/) });
+  }
+  const minutesAgo = (n: number) => Math.floor(Date.now() / 1000) - n * 60;
+
+  it("asks to sign in again, never with 401, without a body or with a rejected token", async () => {
+    const sub = `apple-${uuid()}`;
+    const user = await signIn(sub);
+    const apple = (o: Parameters<typeof appleToken>[1] = {}) => appleToken(sub, o);
+    const bodies: unknown[] = [
+      undefined,
+      {},
+      { provider: "apple" },
+      { provider: "apple", identityToken: await apple() },
+      { provider: "github", identityToken: await apple(), nonce: TEST_NONCE },
+      { provider: "apple", identityToken: "not-a-jwt", nonce: TEST_NONCE },
+      // Another nonce than the token carries, or none in the token.
+      { provider: "apple", identityToken: await apple(), nonce: "other-nonce" },
+      { provider: "apple", identityToken: await apple({ nonce: null }), nonce: TEST_NONCE },
+      // Not ours: another audience or issuer.
+      { provider: "apple", identityToken: await apple({ audience: "com.example.app" }), nonce: TEST_NONCE },
+      { provider: "apple", identityToken: await apple({ issuer: "https://example.com" }), nonce: TEST_NONCE },
+      // Issued more than ten minutes ago, though not expired.
+      { provider: "apple", identityToken: await apple({ issuedAt: minutesAgo(11), expiresIn: "1h" }), nonce: TEST_NONCE },
+      // Expired.
+      { provider: "apple", identityToken: await apple({ issuedAt: minutesAgo(9), expiresIn: minutesAgo(1) }), nonce: TEST_NONCE },
+      // A Google token sent as Apple's.
+      { provider: "apple", identityToken: await googleToken(sub), nonce: TEST_NONCE },
+    ];
+    for (const body of bodies) {
+      const res = await call("DELETE", "/v1/me", { token: user.token, body });
+      expect(res.status, JSON.stringify(body)).toBe(403);
+      expect(res.body.error.code).toBe("reauth_required");
+    }
+    await intact(user);
+
+    // Nine minutes is recent enough.
+    const res = await call("DELETE", "/v1/me", {
+      token: user.token,
+      body: { provider: "apple", identityToken: await apple({ issuedAt: minutesAgo(9) }), nonce: TEST_NONCE },
+    });
+    expect(res.status).toBe(204);
+  });
+
+  it("refuses a valid sign-in that is not one of the account's", async () => {
+    const user = await signIn();
+    const other = await signIn();
+    const otherBody = await reauthBody(other.token);
+    // Another account's Apple sign-in, and an Apple account no one has signed in with.
+    for (const body of [otherBody, { provider: "apple", identityToken: await appleToken(`apple-${uuid()}`), nonce: TEST_NONCE }]) {
+      const res = await call("DELETE", "/v1/me", { token: user.token, body });
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe("reauth_mismatch");
+    }
+    await intact(user);
+    await intact(other);
+  });
+
+  it("takes the account's Google sign-in, with Google's checks", async () => {
+    const sub = `google-${uuid()}`;
+    const signedIn = await call("POST", "/v1/auth/google", { body: { idToken: await googleToken(sub), nonce: TEST_NONCE } });
+    expect(signedIn.status).toBe(200);
+    const user = { token: signedIn.body.token as string, userId: signedIn.body.user.id as string };
+
+    const refused: [unknown, string][] = [
+      [{ provider: "google", idToken: await googleToken(sub), nonce: "other-nonce" }, "reauth_required"],
+      [{ provider: "google", idToken: await googleToken(sub, { audience: "someone-else.apps.googleusercontent.com" }), nonce: TEST_NONCE }, "reauth_required"],
+      [{ provider: "google", idToken: await googleToken(sub, { issuedAt: minutesAgo(11), expiresIn: "1h" }), nonce: TEST_NONCE }, "reauth_required"],
+      // The right subject, as the other provider's.
+      [{ provider: "apple", identityToken: await appleToken(sub), nonce: TEST_NONCE }, "reauth_mismatch"],
+      [{ provider: "google", idToken: await googleToken(`google-${uuid()}`), nonce: TEST_NONCE }, "reauth_mismatch"],
+    ];
+    for (const [body, code] of refused) {
+      const res = await call("DELETE", "/v1/me", { token: user.token, body });
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe(code);
+    }
+    await intact(user);
+
+    const web = await googleToken(sub, { audience: GOOGLE_WEB_CLIENT });
+    expect((await call("DELETE", "/v1/me", { token: user.token, body: { provider: "google", idToken: web, nonce: TEST_NONCE } })).status).toBe(204);
+    expect((await call("GET", "/v1/me", { token: user.token })).status).toBe(401);
+  });
+
+  it("keeps a fresh Apple refresh token from the re-authentication's code, and revokes it", async () => {
+    const sub = `apple-${uuid()}`;
+    const user = await signIn(sub);
+    expect(await userRow(user.userId)).toMatchObject({ apple_refresh_token: null });
+    fakeApple.codes.set("reauth-code", { refreshToken: "reauth-refresh", sub });
+    const res = await call("DELETE", "/v1/me", { token: user.token, body: await reauthBody(user.token, { authorizationCode: "reauth-code" }) });
+    expect(res.status).toBe(204);
+    expect(fakeApple.exchanged).toEqual([{ code: "reauth-code", clientId: "app.zimam.ios" }]);
+    expect(fakeApple.revoked).toEqual([{ refreshToken: "reauth-refresh", clientId: "app.zimam.ios" }]);
+    expect(await userRow(user.userId)).toMatchObject({ apple_refresh_token: null });
+  });
+
+  it("exchanges no code for a sign-in that is not the account's", async () => {
+    const user = await signIn();
+    const sub = `apple-${uuid()}`;
+    fakeApple.codes.set("stranger-code", { refreshToken: "stranger-refresh", sub });
+    const body = { provider: "apple", identityToken: await appleToken(sub), nonce: TEST_NONCE, authorizationCode: "stranger-code" };
+    expect((await call("DELETE", "/v1/me", { token: user.token, body })).body.error.code).toBe("reauth_mismatch");
+    expect(fakeApple.exchanged).toEqual([]);
   });
 });
 

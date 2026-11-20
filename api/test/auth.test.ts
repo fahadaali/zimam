@@ -1,6 +1,6 @@
 import { generateKeyPair } from "jose";
 import { describe, expect, it } from "vitest";
-import { appleToken, call, signIn, TEST_NONCE } from "./helpers";
+import { appleToken, call, deleteAccount, signIn, TEST_NONCE } from "./helpers";
 
 describe("Sign in with Apple", () => {
   it("creates a user and session from a valid identity token", async () => {
@@ -94,7 +94,7 @@ describe("Account", () => {
   it("deletes the account and its data", async () => {
     const { token } = await signIn("apple-delete");
     await call("POST", "/v1/tasks", { token, body: { title: "مهمة" } });
-    expect((await call("DELETE", "/v1/me", { token })).status).toBe(204);
+    expect((await deleteAccount(token)).status).toBe(204);
     expect((await call("GET", "/v1/me", { token })).status).toBe(401);
 
     const again = await signIn("apple-delete");

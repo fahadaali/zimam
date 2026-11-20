@@ -12,11 +12,16 @@ import { isDeadToken, type PushEnvironment, type PushSender } from "./apns";
  *
  *   a reminder firing at F for user U is pushed when no device of U has
  *   last_seen_at >= max(F - LOCAL_WINDOW_MS, changedAt)
+ *   and (scheduled_through IS NULL or F <= scheduled_through)
  *
- * last_seen_at is the device's last pull. A device seen at T planned every reminder in
+ * last_seen_at is the device's last pull. A device seen at T planned the reminders in
  * (T, T + 14 days] that it knew about, which is every change made before T. changedAt
  * is when the reminder (and, for prayer times, its task) last changed, so a reminder
  * added from the web or an assistant after the device's last pull is pushed too.
+ * scheduled_through is what the device reported after scheduling (PATCH /v1/devices/:token):
+ * iOS keeps 64 pending notifications, so with more reminders than that in its window the app
+ * drops the latest, and says the last fire time it kept. Past it, the server pushes. NULL is
+ * the whole window (an app that does not report, or one whose window fit).
  *
  * A task's own time does not notify by itself: «عند الموعد» is a relative reminder at 0
  * (migrations/0018), so each person who has the task can keep or remove theirs.
@@ -76,6 +81,7 @@ interface DeviceRow {
   environment: PushEnvironment;
   bundle_id: string;
   last_seen_at: number;
+  scheduled_through: number | null;
 }
 
 interface Candidate extends DueReminder {
@@ -92,16 +98,28 @@ export interface PushRunResult {
   skipped?: "no_sender";
 }
 
-/** A device covers a reminder when it pulled after the reminder last changed, within the window before it fires. */
-export function isCovered(devices: { last_seen_at: number }[], fireAt: number, changedAt: number): boolean {
+/**
+ * A device covers a reminder when it pulled after the reminder last changed, within the window
+ * before it fires, and the reminder is not past what the device said it scheduled.
+ */
+export function isCovered(
+  devices: { last_seen_at: number; scheduled_through?: number | null }[],
+  fireAt: number,
+  changedAt: number,
+): boolean {
   const since = Math.max(fireAt - LOCAL_WINDOW_MS, changedAt);
-  return devices.some((d) => d.last_seen_at >= since);
+  return devices.some((d) => d.last_seen_at >= since && (d.scheduled_through == null || fireAt <= d.scheduled_through));
 }
 
-/** Users who could need a push: at least one device, and none that surely covers the reminder. */
-const NEEDS_PUSH = (user: string, changed: string) => `
+/**
+ * Users who could need a push: at least one device, and none that surely covers the reminder.
+ * ?3 is `to - LOCAL_WINDOW_MS` and `to` the window's end (Unix ms): a device seen since both
+ * and the change, that scheduled through `to` or all its window, covers every F <= to.
+ */
+const NEEDS_PUSH = (user: string, changed: string, to: string) => `
   EXISTS (SELECT 1 FROM devices d WHERE d.user_id = ${user})
-  AND NOT EXISTS (SELECT 1 FROM devices d WHERE d.user_id = ${user} AND d.last_seen_at >= MAX(?3, ${changed}))`;
+  AND NOT EXISTS (SELECT 1 FROM devices d WHERE d.user_id = ${user} AND d.last_seen_at >= MAX(?3, ${changed})
+    AND (d.scheduled_through IS NULL OR d.scheduled_through >= ${to}))`;
 
 const HAS_LOCATION = `(CASE WHEN json_valid(u.settings) THEN json_extract(u.settings, '$.location') END) IS NOT NULL`;
 
@@ -149,7 +167,8 @@ interface PrayerRow {
  * they are skipped (the app has the device's own location; the server has none).
  */
 export async function dueReminders(db: D1Database, from: number, to: number): Promise<DueReminder[]> {
-  // Any device seen at or after this, and after the change, covers every F <= to.
+  // Any device seen at or after this, and after the change, covers every F <= to, unless it
+  // scheduled less than its whole window (NEEDS_PUSH).
   const surelyCoveredSince = to - LOCAL_WINDOW_MS;
   const candidates: Candidate[] = [];
 
@@ -167,9 +186,9 @@ export async function dueReminders(db: D1Database, from: number, to: number): Pr
          AND unixepoch(r.at) > ?1 AND unixepoch(r.at) <= ?2
          AND t.deleted_at IS NULL AND t.status <> 'done'
          AND ${SEES_TASK}
-         AND ${NEEDS_PUSH("r.user_id", "r.updated_at")}`,
+         AND ${NEEDS_PUSH("r.user_id", "r.updated_at", "?4")}`,
     )
-    .bind(Math.floor(from / 1000), Math.floor(to / 1000), surelyCoveredSince)
+    .bind(Math.floor(from / 1000), Math.floor(to / 1000), surelyCoveredSince, to)
     .all<{
       reminder_id: string;
       user_id: string;
@@ -213,9 +232,9 @@ export async function dueReminders(db: D1Database, from: number, to: number): Pr
          AND (t.due_date IS NULL OR t.due_date BETWEEN ?1 AND ?2)
          AND ${HAS_LOCATION}
          AND ${SEES_TASK}
-         AND ${NEEDS_PUSH("r.user_id", "MAX(r.updated_at, t.updated_at)")}`,
+         AND ${NEEDS_PUSH("r.user_id", "MAX(r.updated_at, t.updated_at)", "?4")}`,
     )
-    .bind(dayMin, dayMax, surelyCoveredSince)
+    .bind(dayMin, dayMax, surelyCoveredSince, to)
     .all<PrayerRow>();
 
   // Relative to the task's time: its clock time or its prayer on its day (09:00 for an all-day
@@ -234,9 +253,9 @@ export async function dueReminders(db: D1Database, from: number, to: number): Pr
          AND t.deleted_at IS NULL AND t.status <> 'done'
          AND (t.due_date BETWEEN ?1 AND ?4 OR (t.due_date IS NULL AND t.due_prayer IS NOT NULL))
          AND ${SEES_TASK}
-         AND ${NEEDS_PUSH("r.user_id", "MAX(r.updated_at, t.updated_at)")}`,
+         AND ${NEEDS_PUSH("r.user_id", "MAX(r.updated_at, t.updated_at)", "?5")}`,
     )
-    .bind(dayMin, dayMax, surelyCoveredSince, addDays(dayMax, Math.ceil(-RELATIVE_REMINDER_MIN / (24 * 60))))
+    .bind(dayMin, dayMax, surelyCoveredSince, addDays(dayMax, Math.ceil(-RELATIVE_REMINDER_MIN / (24 * 60))), to)
     .all<RelativeRow>();
 
   const times = new Map<string, ReturnType<typeof prayerInstants>>();
@@ -327,7 +346,7 @@ async function devicesOf(db: D1Database, userIds: string[]): Promise<Map<string,
     const chunk = userIds.slice(i, i + 90);
     const { results } = await db
       .prepare(
-        `SELECT token, user_id, environment, bundle_id, last_seen_at FROM devices
+        `SELECT token, user_id, environment, bundle_id, last_seen_at, scheduled_through FROM devices
          WHERE user_id IN (${chunk.map(() => "?").join(", ")})`,
       )
       .bind(...chunk)

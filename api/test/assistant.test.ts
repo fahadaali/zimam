@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
 import { Assistant } from "../src/assistant";
 import { dayIn } from "../src/data/dates";
-import { appleToken, call, push, signIn, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
+import { appleToken, call, deleteAccount, push, signIn, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
 
 const assistant = new Assistant(env, { apple: testAppleKeys, google: testGoogleKeys });
 
@@ -217,7 +217,7 @@ describe("Assistant (MCP backend)", () => {
 
   it("refuses accounts that were deleted", async () => {
     const { token, userId } = await signIn();
-    await call("DELETE", "/v1/me", { token });
+    expect((await deleteAccount(token)).status).toBe(204);
     expect(await assistant.listTasks(userId, {})).toMatchObject({ ok: false, error: { code: "unauthorized" } });
   });
 });

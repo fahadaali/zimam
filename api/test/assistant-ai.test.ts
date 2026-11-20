@@ -1,11 +1,14 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AiError, ANTHROPIC_MODEL, AnthropicProvider, DeepSeekProvider, providerFromEnv } from "../src/ai/provider";
+import { createExecutionContext, createScheduledController, waitOnExecutionContext } from "cloudflare:test";
+import { DEFAULT_RATE_LIMITS, deleteEndedRateWindows, planRateLimits, releaseRequest, takeRequest } from "../src/ai/limits";
+import { AiError, ANTHROPIC_MODEL, AnthropicProvider, DeepSeekProvider, MAX_OUTPUT_TOKENS, providerFromEnv } from "../src/ai/provider";
 import { DEFAULT_MONTHLY_LIMIT, monthOf, planMonthlyLimit, resetDate } from "../src/ai/quota";
 import { MAX_PROMPT_PROJECTS } from "../src/routes/assistant";
 import { addDays, dayIn, dayOfHijri, hijriParts } from "../src/data/dates";
 import type { Env } from "../src/env";
-import { call, fakeAi, push, signIn, uuid } from "./helpers";
+import worker from "../src/index";
+import { call, deleteAccount, fakeAi, push, signIn, uuid } from "./helpers";
 
 const GATEWAY = "https://gateway.ai.cloudflare.com/v1/302d00b357e2c90ed474d13642708b30/zimam";
 
@@ -315,6 +318,203 @@ describe("monthly quota", () => {
   });
 });
 
+const MIN = 60_000;
+const DAY_MS = 24 * 60 * MIN;
+
+async function windows(userId: string) {
+  const { results } = await env.DB.prepare(`SELECT scope, window_start, requests FROM ai_rate WHERE user_id = ? ORDER BY scope`)
+    .bind(userId)
+    .all<{ scope: string; window_start: number; requests: number }>();
+  return Object.fromEntries(results.map((r) => [r.scope, r.requests]));
+}
+
+async function globalToday() {
+  const start = Math.floor(Date.now() / DAY_MS) * DAY_MS;
+  const row = await env.DB.prepare(`SELECT requests FROM ai_rate WHERE user_id = '' AND scope = 'global' AND window_start = ?`)
+    .bind(start)
+    .first<{ requests: number }>();
+  return row?.requests ?? 0;
+}
+
+const secondsToUtcMidnight = () => Math.ceil((Math.floor(Date.now() / DAY_MS) * DAY_MS + DAY_MS - Date.now()) / 1000);
+
+describe("short-window limits", () => {
+  it("answers 429 ai_rate_limited for the day, without calling the model or using the month", async () => {
+    const { token, userId } = await signIn();
+    const vars = { AI_DAILY_LIMIT_PRO: "2" };
+    for (let i = 0; i < 2; i++) {
+      fakeAi.answer(suggestion());
+      expect((await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" }, env: vars })).status).toBe(200);
+    }
+    const res = await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" }, env: vars });
+    expect(res.status).toBe(429);
+    expect(res.body.error).toMatchObject({ code: "ai_rate_limited", scope: "day", limit: 2 });
+    expect(Number.isInteger(res.body.error.retryAfter)).toBe(true);
+    expect(Math.abs(res.body.error.retryAfter - secondsToUtcMidnight())).toBeLessThanOrEqual(2);
+    expect(res.headers.get("Retry-After")).toBe(String(res.body.error.retryAfter));
+    expect(fakeAi.requests).toHaveLength(2);
+    // The refused request counts nowhere.
+    expect((await usage(userId))!.requests).toBe(2);
+    expect((await windows(userId)).day).toBe(2);
+  });
+
+  it("answers the minute's refusal with the seconds left in it", async () => {
+    // "0" refuses every request, so this does not depend on where in the minute the test runs.
+    const { token } = await signIn();
+    const refused = await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" }, env: { AI_MINUTE_LIMIT_PRO: "0" } });
+    expect(refused.status).toBe(429);
+    expect(refused.body.error).toMatchObject({ code: "ai_rate_limited", scope: "minute", limit: 0 });
+    expect(refused.body.error.retryAfter).toBeGreaterThanOrEqual(1);
+    expect(refused.body.error.retryAfter).toBeLessThanOrEqual(60);
+    expect(refused.headers.get("Retry-After")).toBe(String(refused.body.error.retryAfter));
+    expect(fakeAi.requests).toEqual([]);
+  });
+
+  it("answers 503 ai_busy once everyone's daily cap is reached", async () => {
+    const a = await signIn();
+    const b = await signIn();
+    const vars = { AI_GLOBAL_DAILY_LIMIT: String((await globalToday()) + 1) };
+    fakeAi.answer(suggestion());
+    expect((await call("POST", "/v1/assistant/parse", { token: a.token, body: { text: "مهمة" }, env: vars })).status).toBe(200);
+    for (const user of [a, b]) {
+      const res = await call("POST", "/v1/assistant/parse", { token: user.token, body: { text: "مهمة" }, env: vars });
+      expect(res.status).toBe(503);
+      expect(res.body.error).toMatchObject({ code: "ai_busy" });
+      expect(Math.abs(res.body.error.retryAfter - secondsToUtcMidnight())).toBeLessThanOrEqual(2);
+      expect(res.headers.get("Retry-After")).toBe(String(res.body.error.retryAfter));
+    }
+    expect(fakeAi.requests).toHaveLength(1);
+    expect(await windows(b.userId)).toEqual({});
+    // "0" turns the assistant off for everyone.
+    const off = await call("POST", "/v1/assistant/parse", { token: b.token, body: { text: "مهمة" }, env: { AI_GLOBAL_DAILY_LIMIT: "0" } });
+    expect(off.body.error.code).toBe("ai_busy");
+  });
+
+  it("gives the windows back when the month refuses, and the day's when no model was paid", async () => {
+    const { token, userId } = await signIn();
+    fakeAi.fail(new AiError("Provider returned 503: overloaded", false));
+    expect((await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" } })).status).toBe(503);
+    // Unpaid: the minute keeps it (it limits the pace), the day and the global day do not.
+    expect(await windows(userId)).toEqual({ minute: 1, day: 0 });
+
+    fakeAi.answer({ title: 5 }); // paid for, unusable
+    expect((await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" } })).status).toBe(503);
+    expect((await windows(userId)).day).toBe(1);
+
+    await env.DB.prepare(`INSERT INTO ai_usage (user_id, month, requests) VALUES (?, ?, 300)
+      ON CONFLICT (user_id, month) DO UPDATE SET requests = 300`)
+      .bind(userId, monthOf(new Date()))
+      .run();
+    const res = await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" } });
+    expect(res.status).toBe(429);
+    expect(res.body.error.code).toBe("ai_quota_exceeded");
+    expect((await windows(userId)).day).toBe(1);
+    expect(fakeAi.requests).toHaveLength(2);
+  });
+
+  it("gives a free user the free limits, and keeps the assistant pro-only when one is 0", async () => {
+    const { token } = await signIn();
+    const free = { SUBSCRIPTIONS_ENFORCED: "true", AI_MONTHLY_LIMIT_FREE: "20" };
+    fakeAi.answer(suggestion());
+    expect((await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" }, env: { ...free, AI_DAILY_LIMIT_FREE: "1" } })).status).toBe(200);
+    const res = await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" }, env: { ...free, AI_DAILY_LIMIT_FREE: "1" } });
+    expect(res.status).toBe(429);
+    expect(res.body.error).toMatchObject({ code: "ai_rate_limited", scope: "day", limit: 1 });
+
+    for (const zero of [{ AI_DAILY_LIMIT_FREE: "0" }, { AI_MINUTE_LIMIT_FREE: "0" }]) {
+      const closed = await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" }, env: { ...free, ...zero } });
+      expect(closed.status).toBe(403);
+      expect(closed.body.error.code).toBe("pro_required");
+    }
+    expect(fakeAi.requests).toHaveLength(1);
+  });
+
+  it("takes a request from all three windows or from none, and lets only what fits through together", async () => {
+    const user = uuid();
+    const now = Date.UTC(2031, 0, 5, 10, 30, 15, 500);
+    const minuteStart = Date.UTC(2031, 0, 5, 10, 30);
+    const limits = { minute: 2, day: 3, global: 1_000_000 };
+
+    const together = await Promise.all(Array.from({ length: 5 }, () => takeRequest(env.DB, user, limits, now)));
+    expect(together.filter((r) => r.allowed)).toHaveLength(2);
+    const refused = together.find((r) => !r.allowed)!;
+    expect(refused).toEqual({ allowed: false, refusal: { scope: "minute", limit: 2, retryAfter: 45 } });
+    // Both requests counted in every window; the refused ones in none.
+    expect(await windows(user)).toEqual({ minute: 2, day: 2 });
+
+    // The next minute: one more fits the day, then the day is full until 00:00 UTC.
+    expect((await takeRequest(env.DB, user, limits, now + MIN)).allowed).toBe(true);
+    const full = await takeRequest(env.DB, user, limits, now + MIN);
+    expect(full).toEqual({ allowed: false, refusal: { scope: "day", limit: 3, retryAfter: Math.ceil((Date.UTC(2031, 0, 6) - (now + MIN)) / 1000) } });
+
+    // Given back: all windows, or only the day's.
+    const taken = await takeRequest(env.DB, user, { ...limits, day: 10 }, now + 2 * MIN);
+    expect(taken.allowed).toBe(true);
+    if (!taken.allowed) return;
+    expect(taken.hold).toEqual({ userId: user, minuteStart: minuteStart + 2 * MIN, dayStart: Date.UTC(2031, 0, 5) });
+    await releaseRequest(env.DB, taken.hold, "spend");
+    const rows = await env.DB.prepare(`SELECT scope, window_start, requests FROM ai_rate WHERE user_id = ? AND scope = 'minute' ORDER BY window_start`)
+      .bind(user)
+      .all<{ requests: number }>();
+    expect(rows.results.map((r) => r.requests)).toEqual([2, 1, 1]);
+    expect((await windows(user)).day).toBe(3);
+    await releaseRequest(env.DB, taken.hold, "all");
+    expect((await windows(user)).day).toBe(2);
+  });
+
+  it("deletes ended windows from the cron, and a user's with their account", async () => {
+    const user = uuid();
+    const now = Date.UTC(2032, 2, 1, 8, 0, 30);
+    const limits = { minute: 5, day: 5, global: 1_000_000 };
+    await takeRequest(env.DB, user, limits, now - DAY_MS); // yesterday
+    await takeRequest(env.DB, user, limits, now - MIN); // the minute before
+    await takeRequest(env.DB, user, limits, now);
+    const controller = createScheduledController({ scheduledTime: now, cron: "*/5 * * * *" });
+    const ctx = createExecutionContext();
+    await worker.scheduled(controller, env, ctx);
+    await waitOnExecutionContext(ctx);
+    const left = await env.DB.prepare(`SELECT scope, window_start FROM ai_rate WHERE user_id = ? OR (user_id = '' AND window_start >= ?) ORDER BY scope`)
+      .bind(user, Date.UTC(2032, 2, 1) - DAY_MS)
+      .all<{ scope: string; window_start: number }>();
+    expect(left.results).toEqual([
+      { scope: "day", window_start: Date.UTC(2032, 2, 1) },
+      { scope: "global", window_start: Date.UTC(2032, 2, 1) },
+      { scope: "minute", window_start: Date.UTC(2032, 2, 1, 8, 0) },
+    ]);
+    await deleteEndedRateWindows(env.DB, now + DAY_MS);
+    expect(await windows(user)).toEqual({});
+
+    const { token, userId } = await signIn();
+    fakeAi.answer(suggestion());
+    expect((await call("POST", "/v1/assistant/parse", { token, body: { text: "مهمة" } })).status).toBe(200);
+    const global = await globalToday();
+    expect((await deleteAccount(token)).status).toBe(204);
+    expect(await windows(userId)).toEqual({});
+    expect(await globalToday()).toBe(global);
+  });
+
+  it("reads the limits by plan, falling back to the defaults", () => {
+    expect(env.AI_MINUTE_LIMIT_FREE).toBe("5");
+    expect(env.AI_MINUTE_LIMIT_PRO).toBe("10");
+    expect(env.AI_DAILY_LIMIT_FREE).toBe("10");
+    expect(env.AI_DAILY_LIMIT_PRO).toBe("60");
+    expect(env.AI_GLOBAL_DAILY_LIMIT).toBe("2000");
+    expect(planRateLimits(env, "free")).toEqual({ minute: 5, day: 10, global: 2000 });
+    expect(planRateLimits(env, "pro")).toEqual({ minute: 10, day: 60, global: 2000 });
+    expect(planRateLimits({}, "free")).toEqual({ minute: 5, day: 10, global: 2000 });
+    expect(planRateLimits({ AI_MINUTE_LIMIT_PRO: "x", AI_DAILY_LIMIT_PRO: "-3", AI_GLOBAL_DAILY_LIMIT: " " }, "pro")).toEqual({
+      minute: DEFAULT_RATE_LIMITS.minute.pro,
+      day: DEFAULT_RATE_LIMITS.day.pro,
+      global: DEFAULT_RATE_LIMITS.global,
+    });
+    expect(planRateLimits({ AI_MINUTE_LIMIT_FREE: "0", AI_DAILY_LIMIT_FREE: "7", AI_GLOBAL_DAILY_LIMIT: "0" }, "free")).toEqual({
+      minute: 0,
+      day: 7,
+      global: 0,
+    });
+  });
+});
+
 describe("POST /v1/assistant/breakdown", () => {
   it("suggests short subtasks for a visible task without saving them", async () => {
     const { token } = await signIn();
@@ -485,6 +685,8 @@ describe("AnthropicProvider", () => {
     expect(req!.headers.get("x-api-key")).toBe("sk-ant-test");
     expect(req!.headers.get("anthropic-version")).toBe("2023-06-01");
     expect(req!.headers.get("cf-aig-authorization")).toBe("Bearer gw-token");
+    // The gateway never logs the user's text (the privacy policy).
+    expect(req!.headers.get("cf-aig-collect-log")).toBe("false");
     expect(req!.headers.get("authorization")).toBeNull();
     expect(req!.body).toEqual({
       model: ANTHROPIC_MODEL,
@@ -526,12 +728,22 @@ describe("DeepSeekProvider", () => {
     expect(req!.headers.get("authorization")).toBe("Bearer sk-ds-test");
     expect(req!.headers.get("x-api-key")).toBeNull();
     expect(req!.headers.get("cf-aig-authorization")).toBeNull();
-    expect(req!.body).toMatchObject({ model: "deepseek-chat", response_format: { type: "json_object" } });
+    expect(req!.headers.get("cf-aig-collect-log")).toBe("false");
+    expect(req!.body).toMatchObject({ model: "deepseek-chat", max_tokens: 4096, response_format: { type: "json_object" } });
     expect(req!.body.messages).toHaveLength(2);
     expect(req!.body.messages[0].role).toBe("system");
     expect(req!.body.messages[0].content).toContain("System rules");
     expect(req!.body.messages[0].content).toContain(JSON.stringify(REQUEST.schema));
     expect(req!.body.messages[1]).toEqual({ role: "user", content: REQUEST.prompt });
+  });
+
+  it("never asks for more than MAX_OUTPUT_TOKENS", async () => {
+    const { calls, doFetch } = stubFetch({ choices: [{ finish_reason: "stop", message: { content: '{"title":"مهمة"}' } }] });
+    const provider = new DeepSeekProvider({ apiKey: "k", gatewayUrl: GATEWAY, fetch: doFetch });
+    await provider.complete({ ...REQUEST, maxTokens: 1_000_000 });
+    await provider.complete({ ...REQUEST, maxTokens: 512 });
+    expect(calls.map((c) => c.body.max_tokens)).toEqual([MAX_OUTPUT_TOKENS, 512]);
+    expect(MAX_OUTPUT_TOKENS).toBe(4096);
   });
 
   it("fails when the answer is cut off", async () => {

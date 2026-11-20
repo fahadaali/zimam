@@ -7,6 +7,7 @@ import { ZimamService } from "../src/service";
 import {
   appleToken,
   call,
+  deleteAccount,
   GOOGLE_WEB_CLIENT,
   googleToken,
   TEST_NONCE,
@@ -236,7 +237,7 @@ describe("Deleting a merged account", () => {
     const first = await apple(appleSub, { email: address });
     expect(userId(await google(googleSub, { email: address }))).toBe(userId(first));
 
-    expect((await call("DELETE", "/v1/me", { token: first.body.token })).status).toBe(204);
+    expect((await deleteAccount(first.body.token)).status).toBe(204);
     expect(await identities(userId(first))).toEqual([]);
 
     const again = await google(googleSub, { email: address });

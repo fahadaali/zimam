@@ -138,8 +138,10 @@ export async function deleteAccount(db: D1Database, access: Access, mutator: Mut
       `DELETE FROM import_oauth_pending WHERE user_id = ?1`,
       // The subscription itself stays with Apple until the user cancels it in their Apple account.
       `DELETE FROM entitlements WHERE user_id = ?1`,
-      // Their assistant counts, kept only to apply the monthly quota.
+      // Their assistant counts, kept only to apply the monthly quota and the minute and day limits.
+      // The global day's count is no one's and stays.
       `DELETE FROM ai_usage WHERE user_id = ?1`,
+      `DELETE FROM ai_rate WHERE user_id = ?1`,
       `DELETE FROM sessions WHERE user_id = ?1`,
       // Their Apple and Google accounts are no longer linked: signing in with them again starts a fresh account.
       `DELETE FROM identities WHERE user_id = ?1`,

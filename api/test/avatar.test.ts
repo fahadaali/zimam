@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { avatarKey, MAX_AVATAR_BYTES } from "../src/routes/me";
-import { app, call, signIn } from "./helpers";
+import { app, call, deleteAccount, signIn } from "./helpers";
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
@@ -86,7 +86,7 @@ describe("Avatar", () => {
   it("goes with the account", async () => {
     const { token, userId } = await signIn();
     await upload(token, JPEG);
-    expect((await call("DELETE", "/v1/me", { token })).status).toBe(204);
+    expect((await deleteAccount(token)).status).toBe(204);
     expect(await env.ATTACHMENTS.get(avatarKey(userId))).toBeNull();
   });
 });

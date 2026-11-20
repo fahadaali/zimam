@@ -15,7 +15,7 @@ import {
   type AppStoreTransaction,
   appStoreFromEnv,
 } from "../src/subscriptions/appstore";
-import { appleToken, fakeAi, googleToken, TEST_NONCE, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
+import { appleToken, fakeAi, googleToken, reauthBody, TEST_NONCE, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
 
 // MARK: Fakes
 
@@ -279,7 +279,7 @@ describe("POST /v1/subscriptions/apple", () => {
   it("restores a running subscription into a new account after the old one was deleted", async () => {
     const old = await signInUser();
     const tx = await subscribe(old);
-    expect((await request("DELETE", "/v1/me", { token: old.token })).status).toBe(204);
+    expect((await request("DELETE", "/v1/me", { token: old.token, body: await reauthBody(old.token) })).status).toBe(204);
     expect(await rows(old.userId)).toEqual([]);
 
     const fresh = await signInUser();
@@ -605,7 +605,7 @@ describe("Plan enforcement", () => {
     const user = await signInUser();
     await subscribe(user);
     expect((await rows(user.userId)).length).toBe(1);
-    expect((await request("DELETE", "/v1/me", { token: user.token })).status).toBe(204);
+    expect((await request("DELETE", "/v1/me", { token: user.token, body: await reauthBody(user.token) })).status).toBe(204);
     expect(await rows(user.userId)).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { call, pullAll, push, signIn, uuid } from "./helpers";
+import { call, deleteAccount, pullAll, push, signIn, uuid } from "./helpers";
 
 const HOME = { latitude: 24.7136, longitude: 46.6753, radius: 200 };
 
@@ -131,6 +131,6 @@ describe("Saved places", () => {
     const { token } = await signIn();
     const id = uuid();
     await push(token, [place(id, 1000)]);
-    expect((await call("DELETE", "/v1/me", { token })).status).toBe(204);
+    expect((await deleteAccount(token)).status).toBe(204);
   });
 });

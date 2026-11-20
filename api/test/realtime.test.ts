@@ -6,7 +6,7 @@ import { sha256Hex } from "../src/auth/crypto";
 import { SIGNED_OUT } from "../src/realtime/channel";
 import { channelRealtime, type Realtime } from "../src/realtime/notify";
 import { ZimamService } from "../src/service";
-import { addMember, call, fakeAi, pullAll, signIn, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
+import { addMember, call, fakeAi, pullAll, reauthBody, signIn, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
 
 type User = Awaited<ReturnType<typeof signIn>>;
 
@@ -282,7 +282,7 @@ describe("Nudges after writes", () => {
     await addMember(projectId, member.userId, "editor");
     fake.reset();
 
-    expect((await send(fakeApp, "DELETE", "/v1/me", { token: owner.token })).status).toBe(204);
+    expect((await send(fakeApp, "DELETE", "/v1/me", { token: owner.token, body: await reauthBody(owner.token) })).status).toBe(204);
     expect(fake.to(member.userId).length).toBe(1);
     expect(fake.closed).toEqual([{ userId: owner.userId, sessionHash: undefined }]);
   });
@@ -369,7 +369,7 @@ describe("Sockets", () => {
     const user = await signIn();
     const phone = await socketFor(user);
     const web = await socketFor(user, "ticket");
-    expect((await send(realApp, "DELETE", "/v1/me", { token: user.token })).status).toBe(204);
+    expect((await send(realApp, "DELETE", "/v1/me", { token: user.token, body: await reauthBody(user.token) })).status).toBe(204);
     await until(() => phone.closed !== null && web.closed !== null);
     expect([phone.closed!.code, web.closed!.code]).toEqual([SIGNED_OUT, SIGNED_OUT]);
   });

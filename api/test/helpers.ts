@@ -92,6 +92,8 @@ export const app = createApp({
 export const TEST_NONCE = "test-nonce";
 
 interface AppleTokenOptions {
+  /** The `iat` claim, Unix seconds; now by default. */
+  issuedAt?: number;
   audience?: string;
   issuer?: string;
   email?: string;
@@ -99,7 +101,8 @@ interface AppleTokenOptions {
   emailVerified?: boolean;
   /** `TEST_NONCE` by default; null leaves the claim out. */
   nonce?: string | null;
-  expiresIn?: string;
+  /** Relative ("10m") or Unix seconds. */
+  expiresIn?: string | number;
   key?: CryptoKey;
 }
 
@@ -117,12 +120,14 @@ export async function appleToken(sub: string, o: AppleTokenOptions = {}) {
     .setSubject(sub)
     .setIssuer(o.issuer ?? "https://appleid.apple.com")
     .setAudience(o.audience ?? "app.zimam.ios")
-    .setIssuedAt()
+    .setIssuedAt(o.issuedAt)
     .setExpirationTime(o.expiresIn ?? "10m")
     .sign(o.key ?? privateKey);
 }
 
 interface GoogleTokenOptions {
+  /** The `iat` claim, Unix seconds; now by default. */
+  issuedAt?: number;
   audience?: string;
   issuer?: string;
   email?: string;
@@ -132,7 +137,8 @@ interface GoogleTokenOptions {
   name?: string;
   /** `TEST_NONCE` by default; null leaves the claim out. */
   nonce?: string | null;
-  expiresIn?: string;
+  /** Relative ("10m") or Unix seconds. */
+  expiresIn?: string | number;
   key?: CryptoKey;
 }
 
@@ -152,7 +158,7 @@ export async function googleToken(sub: string, o: GoogleTokenOptions = {}) {
     .setSubject(sub)
     .setIssuer(o.issuer ?? "https://accounts.google.com")
     .setAudience(o.audience ?? GOOGLE_IOS_CLIENT)
-    .setIssuedAt()
+    .setIssuedAt(o.issuedAt)
     .setExpirationTime(o.expiresIn ?? "10m")
     .sign(o.key ?? google.privateKey);
 }
@@ -174,7 +180,30 @@ export async function call(
     options.env ? { ...env, ...options.env } : env,
   );
   const text = await response.text();
-  return { status: response.status, body: text ? JSON.parse(text) : null };
+  return { status: response.status, body: text ? JSON.parse(text) : null, headers: response.headers };
+}
+
+/**
+ * The body DELETE /v1/me needs: a fresh sign-in with the account's own Apple or Google account,
+ * found from the session (the first linked identity). `extra` adds fields such as
+ * `authorizationCode`.
+ */
+export async function reauthBody(token: string, extra: Record<string, unknown> = {}) {
+  const identity = await env.DB.prepare(
+    `SELECT i.provider, i.subject FROM identities i JOIN sessions s ON s.user_id = i.user_id
+     WHERE s.token_hash = ? ORDER BY i.created_at, i.provider LIMIT 1`,
+  )
+    .bind(await sha256Hex(token))
+    .first<{ provider: "apple" | "google"; subject: string }>();
+  if (!identity) throw new Error("reauthBody: no identity for this session");
+  return identity.provider === "apple"
+    ? { provider: "apple", identityToken: await appleToken(identity.subject), nonce: TEST_NONCE, ...extra }
+    : { provider: "google", idToken: await googleToken(identity.subject), nonce: TEST_NONCE, ...extra };
+}
+
+/** DELETE /v1/me with a valid re-authentication. */
+export async function deleteAccount(token: string) {
+  return call("DELETE", "/v1/me", { token, body: await reauthBody(token) });
 }
 
 /** Signs in a fresh Apple user and returns their session token and id. */

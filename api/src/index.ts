@@ -1,3 +1,4 @@
+import { deleteEndedRateWindows } from "./ai/limits";
 import { providerFromEnv } from "./ai/provider";
 import { createApp } from "./app";
 import { purgeAttachments } from "./attachments";
@@ -28,11 +29,13 @@ export default {
   fetch: app.fetch,
   /**
    * Every 5 minutes: reminder pushes beyond the app's local window (src/push/reminders.ts),
-   * and removing deleted attachments' files from R2 (src/attachments.ts).
+   * removing deleted attachments' files from R2 (src/attachments.ts), and deleting the
+   * assistant's ended rate windows (src/ai/limits.ts).
    */
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(sendDueReminders(env.DB, deps.push?.(env) ?? null, controller.scheduledTime));
     ctx.waitUntil(purgeAttachments(env.DB, env.ATTACHMENTS));
+    ctx.waitUntil(deleteEndedRateWindows(env.DB, controller.scheduledTime));
   },
   /**
    * zimam-imports and its dead-letter queue (src/imports/queue.ts). Imports write outside

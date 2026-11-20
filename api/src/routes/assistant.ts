@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { z } from "zod";
+import { planRateLimits, type RateRefusal, releaseRequest, takeRequest } from "../ai/limits";
 import { AiError, type AiRequest } from "../ai/provider";
 import { breakdownRequest, parseRequest, type SummaryTask, summaryRequest } from "../ai/prompts";
 import { planMonthlyLimit, reserveRequest, settleRequest } from "../ai/quota";
@@ -21,11 +22,17 @@ import { loadVisible } from "./resources";
  */
 export const assistant = new Hono<AppEnv>();
 
-// «زمام الاحترافية» when SUBSCRIPTIONS_ENFORCED is "true": a free user gets AI_MONTHLY_LIMIT_FREE
-// requests a month (runAi), or 403 pro_required when that is 0. Open to all with the pro limit otherwise.
+// «زمام الاحترافية» when SUBSCRIPTIONS_ENFORCED is "true": a free user gets the free limits
+// (runAi), or 403 pro_required when any of them (month, day, minute) is 0. Open to all with the
+// pro limits otherwise.
 assistant.use("*", async (c, next) => {
   const plan = await limitsPlan(c.env, c.var.userId);
-  if (plan === "free" && planMonthlyLimit(c.env, plan) === 0) return fail(c, 403, PRO_REQUIRED.code, PRO_REQUIRED.message);
+  if (plan === "free") {
+    const rate = planRateLimits(c.env, plan);
+    if (planMonthlyLimit(c.env, plan) === 0 || rate.minute === 0 || rate.day === 0) {
+      return fail(c, 403, PRO_REQUIRED.code, PRO_REQUIRED.message);
+    }
+  }
   await next();
 });
 
@@ -37,15 +44,42 @@ function issues(error: z.ZodError): string {
 }
 
 /**
- * Reserves a request from the monthly quota, calls the provider, and validates its answer. A
- * failure gives the request back; one the provider was paid for still counts as failed, and the
- * month's failures have the same limit (src/ai/quota.ts).
+ * The answer to a request the short-window limits refused: 429 `ai_rate_limited` for the user's
+ * own minute or day, 503 `ai_busy` when everyone's daily cap is reached. Both carry `retryAfter`
+ * (seconds) in the body and in Retry-After.
+ */
+function rateLimited(c: Ctx, refusal: RateRefusal): Response {
+  c.header("Retry-After", String(refusal.retryAfter));
+  if (refusal.scope === "global") {
+    const error = { code: "ai_busy", message: "The assistant is busy, try again later", retryAfter: refusal.retryAfter };
+    return c.json({ error }, 503);
+  }
+  const error = {
+    code: "ai_rate_limited",
+    message: `Assistant limit of ${refusal.limit} requests a ${refusal.scope} reached`,
+    scope: refusal.scope,
+    limit: refusal.limit,
+    retryAfter: refusal.retryAfter,
+  };
+  return c.json({ error }, 429);
+}
+
+/**
+ * Takes a request from the short-window limits (src/ai/limits.ts) and then from the monthly
+ * quota, calls the provider, and validates its answer. Refused by either, the model is not called
+ * and nothing stays counted: the windows are taken first, in one statement, and given back if the
+ * month refuses. A failure gives the month's request back; one the provider was paid for still
+ * counts as failed, and the month's failures have the same limit (src/ai/quota.ts). The day
+ * windows keep paid-for failures too, and give back the ones nobody was paid for.
  */
 async function runAi<T>(c: Ctx, request: AiRequest, validate: (json: unknown) => T | null): Promise<Run<T>> {
   const now = new Date();
   const plan = await limitsPlan(c.env, c.var.userId);
+  const rate = await takeRequest(c.env.DB, c.var.userId, planRateLimits(c.env, plan), now.getTime());
+  if (!rate.allowed) return { ok: false, response: rateLimited(c, rate.refusal) };
   const quota = await reserveRequest(c.env.DB, c.var.userId, planMonthlyLimit(c.env, plan), now);
   if (!quota.allowed) {
+    await releaseRequest(c.env.DB, rate.hold, "all");
     const error = {
       code: "ai_quota_exceeded",
       message: `Monthly assistant limit of ${quota.limit} requests reached`,
@@ -59,6 +93,7 @@ async function runAi<T>(c: Ctx, request: AiRequest, validate: (json: unknown) =>
   const provider = c.var.deps.ai(c.env);
   const unavailable = async (billed: boolean): Promise<Run<T>> => {
     await settleRequest(c.env.DB, c.var.userId, now, { ok: false, billed });
+    if (!billed) await releaseRequest(c.env.DB, rate.hold, "spend");
     return { ok: false, response: fail(c, 503, "ai_unavailable", "The assistant is unavailable, try again later") };
   };
   let result;

@@ -33,6 +33,20 @@ declare global {
       AI_MONTHLY_LIMIT_FREE?: string;
       /** The monthly limit for pro, and for everyone while SUBSCRIPTIONS_ENFORCED is not "true". */
       AI_MONTHLY_LIMIT_PRO?: string;
+      // Short-window assistant limits (src/ai/limits.ts); each falls back to its default when
+      // missing or not a whole number. Free applies only when SUBSCRIPTIONS_ENFORCED is "true".
+      /** Requests per free user per minute (default 5); "0" keeps the assistant pro-only. */
+      AI_MINUTE_LIMIT_FREE?: string;
+      /** Requests per pro user per minute, and everyone's while not enforced (default 10). */
+      AI_MINUTE_LIMIT_PRO?: string;
+      /** Requests per free user per UTC day (default 10); "0" keeps the assistant pro-only. */
+      AI_DAILY_LIMIT_FREE?: string;
+      /** Requests per pro user per UTC day, and everyone's while not enforced (default 60). */
+      AI_DAILY_LIMIT_PRO?: string;
+      /** Requests per UTC day across all users, the bill's circuit breaker (default 2000); "0" turns the assistant off. */
+      AI_GLOBAL_DAILY_LIMIT?: string;
+      /** Comma-separated bundle ids a device may register for pushes with (the APNs topic). */
+      APNS_BUNDLE_IDS: string;
       /** Optional model override for the chosen provider. */
       AI_MODEL?: string;
       /** Secret (`wrangler secret put`). */

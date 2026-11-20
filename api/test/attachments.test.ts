@@ -14,7 +14,7 @@ import {
 } from "../src/attachments";
 import type { Env } from "../src/env";
 import worker from "../src/index";
-import { addMember, app, call, pullAll, signIn, uuid } from "./helpers";
+import { addMember, app, call, deleteAccount, pullAll, signIn, uuid } from "./helpers";
 
 type User = Awaited<ReturnType<typeof signIn>>;
 
@@ -457,7 +457,7 @@ describe("Deleting what an attachment is on", () => {
     const inInbox = (await upload(leaver, inbox, file("خاص.txt"))).body as Attachment;
     const cursor = (await pullWithAttachments(owner.token)).cursor;
 
-    expect((await call("DELETE", "/v1/me", { token: leaver.token })).status).toBe(204);
+    expect((await deleteAccount(leaver.token)).status).toBe(204);
 
     for (const id of [inShared.id, inInbox.id]) {
       expect(await row(id)).toMatchObject({ deleted_at: expect.any(Number), file_name: "", r2_key: null });

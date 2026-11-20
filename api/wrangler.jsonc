@@ -41,6 +41,17 @@
     // SUBSCRIPTIONS_ENFORCED is "true"; "0" keeps the assistant pro-only (403 pro_required).
     "AI_MONTHLY_LIMIT_FREE": "20",
     "AI_MONTHLY_LIMIT_PRO": "300",
+    // Short-window limits, checked before the model is called (src/ai/limits.ts): requests per
+    // user per minute and per UTC day by plan, against flooding (429 ai_rate_limited), and per UTC
+    // day across all users, so nothing can run the bill up (503 ai_busy). Every assistant call in
+    // the apps is a tap or the end of a dictation, so these sit well above normal use. Free applies
+    // only when SUBSCRIPTIONS_ENFORCED is "true"; "0" for free keeps the assistant pro-only, and
+    // "0" for the global cap turns the assistant off for everyone.
+    "AI_MINUTE_LIMIT_FREE": "5",
+    "AI_MINUTE_LIMIT_PRO": "10",
+    "AI_DAILY_LIMIT_FREE": "10",
+    "AI_DAILY_LIMIT_PRO": "60",
+    "AI_GLOBAL_DAILY_LIMIT": "2000",
     // Attachment storage per uploader, in MB, by plan (src/attachments.ts). Pro is everyone's
     // while SUBSCRIPTIONS_ENFORCED is not "true".
     "ATTACHMENT_QUOTA_MB_FREE": "1024",
@@ -48,6 +59,10 @@
     // Reminder pushes over APNs. The key is a secret: `npx wrangler secret put APNS_KEY_ID`
     // and `npx wrangler secret put APNS_PRIVATE_KEY`. Never put them here.
     "APNS_TEAM_ID": "72V86SZ2XC",
+    // Bundle ids a device may register for pushes with (PUT /v1/devices/:token), comma-separated;
+    // each is an APNs topic the key may send to. Only the app itself registers (iPhone, iPad and
+    // Mac share this id); add the watch's or an extension's here if one ever does.
+    "APNS_BUNDLE_IDS": "app.zimam.ios",
     // «زمام الاحترافية» (src/subscriptions/). App Store transactions must be for this bundle id.
     // The In-App Purchase key is secret: `npx wrangler secret put APPSTORE_KEY_ID`,
     // `APPSTORE_ISSUER_ID` and `APPSTORE_PRIVATE_KEY`. Never put them here.
