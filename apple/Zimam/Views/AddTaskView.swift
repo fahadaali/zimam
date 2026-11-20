@@ -236,9 +236,9 @@ struct AddTaskView: View {
                 let suggestion = try await session.api.suggestTask(from: text, timeZone: formatter.timeZone)
                 withAnimation(.zimam(reduceMotion: reduceMotion)) { assistant = .suggestion(suggestion) }
             } catch {
-                let problem = AssistantProblem(error)
-                assistantNeedsPro = problem == .proRequired
-                assistant = .failed(problem.message(formatter: formatter))
+                let failure = AssistantFailure(error, formatter: formatter)
+                assistantNeedsPro = failure.needsPro
+                assistant = .failed(failure.message)
             }
         }
     }

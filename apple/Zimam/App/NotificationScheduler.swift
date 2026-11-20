@@ -12,7 +12,9 @@ import ZimamKit
 /// iOS allows 64 per app, so it schedules the soonest ones (see `ReminderPlanner`)
 /// and recomputes the window on launch, after each sync that changed something and after each
 /// local edit.
-/// The server sends what lies beyond the window over APNs. Adhan and iqama alerts
+/// The server sends what lies beyond the window over APNs. When the budget fills before the
+/// window ends, the scheduler tells it how far the local notifications reach
+/// (`ReminderPlan.scheduledThrough`, sent by `PushRegistration.reportSchedule`). Adhan and iqama alerts
 /// (`PrayerAlertPlanner`) take up to 20 of the 60 for the next two days; the app renews
 /// them whenever it runs, and in the background (`BackgroundRefresh`).
 ///
@@ -144,7 +146,8 @@ final class NotificationScheduler {
             return
         }
 
-        let (times, prayers, places, monitored) = plan()
+        let (window, prayers, places, monitored) = plan()
+        let times = window.notifications
         watchedPlaces = Set(places.map(\.reminderId)).union(monitored.flatMap(\.reminderIds))
         // With «دائماً» the app watches places itself; otherwise this stops it.
         self.places.watch(monitored)
@@ -177,6 +180,8 @@ final class NotificationScheduler {
             guard !Task.isCancelled else { return }
             await add(Self.request(for: alert), to: center)
         }
+        // The server pushes the task reminders beyond what fit; sent only when it changed.
+        PushRegistration.shared.reportSchedule(through: window.scheduledThrough, account: session.user?.id)
     }
 
     /// An adhan or iqama alert: no task, so none of the task actions. The adhan sound comes later;
@@ -252,7 +257,7 @@ final class NotificationScheduler {
 
     /// The time window; the places the system watches without «دائماً», which come out of the
     /// same budget; and the places the app watches itself with it.
-    private func plan() -> (times: [PlannedNotification], prayers: [PlannedPrayerAlert], places: [PlannedRegion],
+    private func plan() -> (times: ReminderPlan, prayers: [PlannedPrayerAlert], places: [PlannedRegion],
                             monitored: [WatchedPlace]) {
         let now = Date()
         let tasks = (try? context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { !$0.pendingDelete }))) ?? []
@@ -283,10 +288,10 @@ final class NotificationScheduler {
         // Adhan and iqama alerts first (at most `PrayerAlertPlanner.limit`); the reminders get the rest.
         let prayers = PrayerAlertPlanner.plan(settings: settings?.prayerAlerts ?? PrayerAlertSettings(), schedule: schedule,
                                               now: now)
-        let times = ReminderPlanner.plan(tasks: plannerTasks, reminders: plannerReminders, schedule: schedule,
-                                         now: now, formatter: formatter,
-                                         limit: LocationReminderPlanner.timeLimit(
-                                             reserving: places.count, total: ReminderPlanner.defaultLimit - prayers.count))
+        let times = ReminderPlanner.planWindow(tasks: plannerTasks, reminders: plannerReminders, schedule: schedule,
+                                               now: now, formatter: formatter,
+                                               limit: LocationReminderPlanner.timeLimit(
+                                                   reserving: places.count, total: ReminderPlanner.defaultLimit - prayers.count))
         return (times, prayers, places, monitored)
     }
 

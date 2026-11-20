@@ -16,7 +16,8 @@ struct SettingsView: View {
 
     @State private var saveFailed = false
     @State private var isDeletingAccount = false
-    @State private var deleteFailed = false
+    /// Why the last deletion failed (`SessionStore.deletionMessage`), if it did.
+    @State private var deleteError: String?
 
     private var settings: User.Settings {
         session.user?.settings ?? User.Settings()
@@ -84,9 +85,9 @@ struct SettingsView: View {
                             SettingsSyncSection()
                             SettingsAccountSection(
                                 isDeletingAccount: isDeletingAccount,
-                                deleteFailed: deleteFailed,
+                                deleteError: deleteError,
                                 onSignOut: { dismiss() },
-                                onDeleteAccount: { deleteAccount() }
+                                onDeleteAccount: { reauth in deleteAccount(reauth) }
                             )
                         }
                         .settingsPage("الحساب والمزامنة")
@@ -122,14 +123,15 @@ struct SettingsView: View {
     }
 
     /// Waits for the server before wiping anything, then clears local data as sign-out does.
-    private func deleteAccount() {
+    /// `reauth` is the fresh sign-in the user just gave (`ConfirmIdentitySheet`).
+    private func deleteAccount(_ reauth: Reauthentication) {
         isDeletingAccount = true
-        deleteFailed = false
+        deleteError = nil
         Task {
-            let deleted = await session.deleteAccount()
+            let failure = await session.deleteAccount(reauth)
             isDeletingAccount = false
-            guard deleted else {
-                deleteFailed = true
+            if let failure {
+                deleteError = failure
                 return
             }
             sync.reset()

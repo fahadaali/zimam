@@ -9,8 +9,15 @@ import Security
 /// On the Mac it uses the data protection keychain, as iOS does, rather than the login keychain,
 /// whose items belong to the signature of the build that saved them and can ask for the login
 /// password: refusing that prompt would read as no token.
+///
+/// Items are readable after the first unlock (background refresh and intents need the token while
+/// locked) and stay on this device: they are not restored from a backup onto another device, so
+/// after a restore the user signs in again. Items saved by earlier builds without "this device
+/// only" are moved to it on their next read.
 nonisolated enum Keychain {
     private static let service = "app.zimam.session"
+    /// `kSecAttrAccessible` for every item.
+    private static var accessibility: CFString { kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly }
 
     /// The Keychain could not answer (locked, or a prompt was refused): not the same as having no
     /// token, which `value(_:)` reports as nil.
@@ -23,12 +30,16 @@ nonisolated enum Keychain {
     static func value(_ account: String) throws -> String? {
         var query = baseQuery(account)
         query[kSecReturnData as String] = true
+        query[kSecReturnAttributes as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         switch status {
         case errSecSuccess:
-            guard let data = item as? Data else { return nil }
+            guard let found = item as? [String: Any], let data = found[kSecValueData as String] as? Data else { return nil }
+            if (found[kSecAttrAccessible as String] as? String) != (accessibility as String) {
+                moveToThisDeviceOnly(account)
+            }
             return String(data: data, encoding: .utf8)
         case errSecItemNotFound:
             #if os(macOS)
@@ -51,7 +62,7 @@ nonisolated enum Keychain {
     static func write(_ value: String, for account: String) -> Bool {
         SecItemDelete(baseQuery(account) as CFDictionary)
         var attributes = baseQuery(account)
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        attributes[kSecAttrAccessible as String] = accessibility
         attributes[kSecValueData as String] = Data(value.utf8)
         return SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess
     }
@@ -68,6 +79,14 @@ nonisolated enum Keychain {
         ] as CFDictionary)
         UserDefaults.standard.set(true, forKey: "keychain.movedFromLogin.\(account)")
         #endif
+    }
+
+    /// An item saved by an earlier build (`kSecAttrAccessibleAfterFirstUnlock`, which a backup
+    /// carries to a new device) takes this build's class in place, so the token is never without
+    /// one. A failure leaves it as it was, and the next read tries again.
+    private static func moveToThisDeviceOnly(_ account: String) {
+        let update: [String: Any] = [kSecAttrAccessible as String: accessibility]
+        SecItemUpdate(baseQuery(account) as CFDictionary, update as CFDictionary)
     }
 
     private static func baseQuery(_ account: String) -> [String: Any] {

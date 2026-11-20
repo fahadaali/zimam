@@ -109,11 +109,18 @@ struct SignInView: View {
 /// design tokens (CLAUDE.md): these colours are Google's, not Zimam's, so they are written
 /// here. Spacing, size and the Arabic font still come from the tokens (Google's Roboto has no
 /// Arabic), and the button takes the Apple button's height and corner radius.
-private struct GoogleButton: View {
+struct GoogleButton: View {
     var height: CGFloat
     var isBusy: Bool
     var action: () -> Void
     @Environment(\.colorScheme) private var colorScheme
+
+    /// Also the confirmation before deleting the account (`ConfirmIdentitySheet`).
+    init(height: CGFloat, isBusy: Bool, action: @escaping () -> Void) {
+        self.height = height
+        self.isBusy = isBusy
+        self.action = action
+    }
 
     // Google's branding colours (developers.google.com/identity/branding-guidelines).
     private var fill: Color { colorScheme == .dark ? Color(red: 0x13 / 255, green: 0x13 / 255, blue: 0x14 / 255) : .white }

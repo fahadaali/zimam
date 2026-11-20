@@ -1,4 +1,5 @@
 import SwiftUI
+import ZimamKit
 
 /// The assistant's suggestion card. See design/components/AISuggestion.
 /// `brandSoft` background, the label in `brandInk`, the content as one or two sentences in
@@ -95,6 +96,82 @@ struct AssistantStatus: View {
                 }
             }
             .sheet(isPresented: $showingPaywall) { PaywallView() }
+        }
+    }
+}
+
+/// What a failed assistant request shows: the Arabic sentence, and whether «الاشتراك» offers
+/// the paywall in place of retrying (`AssistantStatus.needsPro`). The one mapping of the in-app
+/// assistant's failures (the task from a sentence, the steps, the day's summary), worded as the
+/// web app's (web/public/app/lib/assistant.js). `AssistantProblem` (ZimamKit) reads most of them;
+/// the server's fair-use limits are read here first, since it takes any `429` for the month's
+/// quota and any `503` for a provider failure.
+struct AssistantFailure: Equatable {
+    let message: String
+    let needsPro: Bool
+
+    init(_ error: Error, formatter: DualDateFormatter) {
+        if let api = error as? APIError,
+           let message = Self.limitMessage(status: api.status, code: api.code, scope: api.scope, limit: api.limit,
+                                           retryAfter: api.retryAfter, locale: formatter.locale) {
+            self.message = message
+            needsPro = false
+            return
+        }
+        let problem = AssistantProblem(error)
+        message = problem.message(formatter: formatter)
+        needsPro = problem == .proRequired
+    }
+
+    /// `429 ai_rate_limited` (or any `429` but the month's `ai_quota_exceeded`): a fair-use limit
+    /// that passes on its own, per minute or, with `scope` "day", per day up to `limit`.
+    /// `503 ai_busy`: the assistant has more requests than it can take right now. Both say when
+    /// to try again from `retryAfter` (seconds). Nil for any other failure.
+    static func limitMessage(status: Int, code: String, scope: String?, limit: Int?, retryAfter: Int?,
+                             locale: Locale) -> String? {
+        if code == "ai_rate_limited" || (status == 429 && code != "ai_quota_exceeded") {
+            if scope == "day" {
+                var text = "بلغت حد طلبات المساعد لهذا اليوم"
+                if let limit {
+                    text += " (الحد \(limit.formatted(.number.locale(locale))))"
+                }
+                // Without a time, the day's limit is back tomorrow, not «بعد قليل».
+                let retry = waitText(retryAfter, locale: locale).map { "حاول بعد \($0)." } ?? "يتجدد الحد غداً."
+                return "\(text). \(retry)"
+            }
+            return "أرسلت إلى المساعد طلبات كثيرة في وقت قصير. \(retryText(retryAfter, locale: locale))"
+        }
+        if code == "ai_busy" {
+            return "المساعد مشغول الآن بطلبات كثيرة. \(retryText(retryAfter, locale: locale))"
+        }
+        return nil
+    }
+
+    /// «حاول بعد دقيقة.», or «حاول بعد قليل.» when the server did not say.
+    private static func retryText(_ seconds: Int?, locale: Locale) -> String {
+        waitText(seconds, locale: locale).map { "حاول بعد \($0)." } ?? "حاول بعد قليل."
+    }
+
+    /// How long to wait, from `retryAfter` in seconds: «دقيقة» up to a minute, then whole minutes
+    /// («دقيقتين»، «٣ دقائق»، «١٥ دقيقة»), then whole hours («ساعة»، «ساعتين»، «٥ ساعات»), each
+    /// rounded up so the request is not refused again. Nil without a usable number.
+    static func waitText(_ seconds: Int?, locale: Locale) -> String? {
+        guard let seconds, seconds > 0 else { return nil }
+        let minutes = (seconds + 59) / 60
+        if minutes < 60 {
+            return count(minutes, ["دقيقة", "دقيقتين", "دقائق", "دقيقة"], locale: locale)
+        }
+        return count((minutes + 59) / 60, ["ساعة", "ساعتين", "ساعات", "ساعة"], locale: locale)
+    }
+
+    /// One, two, three to ten, and eleven on, after «بعد».
+    private static func count(_ n: Int, _ words: [String], locale: Locale) -> String {
+        let number = n.formatted(.number.locale(locale).grouping(.never))
+        switch n {
+        case 1: return words[0]
+        case 2: return words[1]
+        case 3...10: return "\(number) \(words[2])"
+        default: return "\(number) \(words[3])"
         }
     }
 }

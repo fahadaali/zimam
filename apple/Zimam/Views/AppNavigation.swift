@@ -158,6 +158,10 @@ private struct CalendarDayChangedKey: EnvironmentKey {
     static let defaultValue: ((String) -> Void)? = nil
 }
 
+private struct CloseInspectedTaskKey: EnvironmentKey {
+    static let defaultValue: ((UUID) -> Bool)? = nil
+}
+
 extension EnvironmentValues {
     /// The task shown in the details column on the iPad and the Mac. Lists bind it with
     /// `List(selection:)`, so a row's `NavigationLink(value: TaskRoute)` selects the task
@@ -201,6 +205,16 @@ extension EnvironmentValues {
     var taskCompleteInToolbar: Bool {
         get { self[TaskCompleteInToolbarKey.self] }
         set { self[TaskCompleteInToolbarKey.self] = newValue }
+    }
+
+    /// Closes the inspector on the iPad and the Mac when given the id of the task it shows, and
+    /// says whether it did. That task is the root of the inspector's own stack, where `dismiss` is
+    /// the window's (on the Mac it closes the window): its details, once the task is deleted,
+    /// clear the selection through this instead. Nil, or false for any other task (a subtask
+    /// pushed inside the inspector), and the details go back with `dismiss`.
+    var closeInspectedTask: ((UUID) -> Bool)? {
+        get { self[CloseInspectedTaskKey.self] }
+        set { self[CloseInspectedTaskKey.self] = newValue }
     }
 }
 

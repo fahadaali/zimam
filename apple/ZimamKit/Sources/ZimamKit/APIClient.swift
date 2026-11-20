@@ -13,6 +13,10 @@ public struct APIError: Error, Equatable, Sendable {
     public var limit: Int?
     /// `429 ai_quota_exceeded` only: the day the quota resets, "2026-11-01".
     public var resetsOn: String?
+    /// `429 ai_rate_limited` and `503 ai_busy`: seconds to wait before asking again.
+    public var retryAfter: Int?
+    /// `429 ai_rate_limited` only: which limit was reached, "minute" or "day".
+    public var scope: String?
 
     public var isUnauthorized: Bool { status == 401 }
 }
@@ -20,6 +24,13 @@ public struct APIError: Error, Equatable, Sendable {
 public struct SignInResponse: Decodable, Sendable {
     public let token: String
     public let user: User
+}
+
+/// A fresh sign-in with the account's provider, which `DELETE /v1/me` asks for. `nonce` is the raw
+/// value whose SHA-256 went into the provider's request, as for signing in.
+public enum Reauthentication: Sendable, Equatable {
+    case apple(identityToken: String, nonce: String, authorizationCode: String?)
+    case google(idToken: String, nonce: String)
 }
 
 /// What the realtime socket says. It never carries data, only that something the user
@@ -93,8 +104,30 @@ public final class APIClient: Sendable {
 
     /// `DELETE /v1/me`: deletes the account and its data on the server, ends every session,
     /// and revokes Sign in with Apple. Shared projects the user owns pass to another member.
-    public func deleteAccount() async throws {
-        let _: Empty = try await send("DELETE", "v1/me")
+    /// The server asks for a fresh sign-in with the account's provider first (`reauth`); without
+    /// one it answers `403 reauth_required`, and with another account's `403 reauth_mismatch`.
+    public func deleteAccount(_ reauth: Reauthentication) async throws {
+        let _: Empty = try await send("DELETE", "v1/me", body: Self.deleteAccountBody(reauth))
+    }
+
+    /// The body of `DELETE /v1/me`: `{"provider":"apple","identityToken","nonce","authorizationCode"?}`
+    /// or `{"provider":"google","idToken","nonce"}`.
+    struct DeleteAccountBody: Encodable, Equatable {
+        let provider: String
+        let identityToken: String?
+        let idToken: String?
+        let nonce: String
+        let authorizationCode: String?
+    }
+
+    static func deleteAccountBody(_ reauth: Reauthentication) -> DeleteAccountBody {
+        switch reauth {
+        case let .apple(identityToken, nonce, authorizationCode):
+            DeleteAccountBody(provider: "apple", identityToken: identityToken, idToken: nil, nonce: nonce,
+                              authorizationCode: authorizationCode)
+        case let .google(idToken, nonce):
+            DeleteAccountBody(provider: "google", identityToken: nil, idToken: idToken, nonce: nonce, authorizationCode: nil)
+        }
     }
 
     public func me() async throws -> User {
@@ -193,6 +226,35 @@ public final class APIClient: Sendable {
                                       body: Body(platform: platform, environment: environment, bundleId: bundleId))
     }
 
+    /// `PATCH /v1/devices/:token`: tells the server how far this install's local notifications
+    /// reach. As of its last pull it has every task reminder it knows firing at or before
+    /// `scheduledThrough` scheduled; nil means the whole local window (`ReminderPlanner.windowDays`).
+    /// The server pushes task reminders after that instant. `404 not_found` when the token is not
+    /// registered for this session.
+    public func updateDeviceSchedule(token: String, scheduledThrough: Date?) async throws {
+        let _: Empty = try await send("PATCH", "v1/devices/\(token)", body: Self.deviceScheduleBody(scheduledThrough))
+    }
+
+    /// `{"scheduledThrough": <Unix ms> | null}`: the key is always sent, null included.
+    struct DeviceScheduleBody: Encodable, Equatable {
+        let scheduledThrough: Int64?
+
+        private enum CodingKeys: String, CodingKey { case scheduledThrough }
+
+        func encode(to encoder: any Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            if let scheduledThrough {
+                try container.encode(scheduledThrough, forKey: .scheduledThrough)
+            } else {
+                try container.encodeNil(forKey: .scheduledThrough)
+            }
+        }
+    }
+
+    static func deviceScheduleBody(_ scheduledThrough: Date?) -> DeviceScheduleBody {
+        DeviceScheduleBody(scheduledThrough: scheduledThrough.map { Int64(($0.timeIntervalSince1970 * 1000).rounded(.down)) })
+    }
+
     /// `DELETE /v1/devices/:token`: stops pushes to this install. Called before signing out.
     public func unregisterDevice(token: String) async throws {
         let _: Empty = try await send("DELETE", "v1/devices/\(token)")
@@ -208,8 +270,18 @@ public final class APIClient: Sendable {
             let message: String
             let limit: Int?
             let resetsOn: String?
+            let retryAfter: Int?
+            let scope: String?
         }
         let error: Detail
+    }
+
+    /// The `APIError` for a non-2xx answer: its `{ error: { code, message, ... } }` body, or
+    /// `http_<status>` when the body is not one.
+    static func apiError(status: Int, data: Data) -> APIError {
+        let detail = try? JSONDecoder().decode(ErrorBody.self, from: data).error
+        return APIError(status: status, code: detail?.code ?? "http_\(status)", message: detail?.message ?? "",
+                        limit: detail?.limit, resetsOn: detail?.resetsOn, retryAfter: detail?.retryAfter, scope: detail?.scope)
     }
 
     func send<Response: Decodable>(_ method: String, _ path: String, query: [URLQueryItem] = []) async throws -> Response {
@@ -232,11 +304,7 @@ public final class APIClient: Sendable {
 
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else {
-            let detail = try? JSONDecoder().decode(ErrorBody.self, from: data).error
-            throw APIError(status: status, code: detail?.code ?? "http_\(status)", message: detail?.message ?? "",
-                           limit: detail?.limit, resetsOn: detail?.resetsOn)
-        }
+        guard (200..<300).contains(status) else { throw Self.apiError(status: status, data: data) }
         if Response.self == Empty.self || data.isEmpty { return try JSONDecoder().decode(Response.self, from: Data("{}".utf8)) }
         return try JSONDecoder().decode(Response.self, from: data)
     }
@@ -249,10 +317,7 @@ public final class APIClient: Sendable {
         if let token = try token() { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else {
-            let detail = try? JSONDecoder().decode(ErrorBody.self, from: data).error
-            throw APIError(status: status, code: detail?.code ?? "http_\(status)", message: detail?.message ?? "")
-        }
+        guard (200..<300).contains(status) else { throw Self.apiError(status: status, data: data) }
         return data
     }
 }

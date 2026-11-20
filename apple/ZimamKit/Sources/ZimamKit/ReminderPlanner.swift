@@ -79,6 +79,21 @@ public struct PlannedNotification: Equatable, Sendable {
     }
 }
 
+/// The local notifications to schedule, and how far they reach.
+public struct ReminderPlan: Equatable, Sendable {
+    public let notifications: [PlannedNotification]
+    /// Every task reminder in the window firing at or before this instant is in `notifications`;
+    /// nil when none was left out, so the whole window (`ReminderPlanner.windowDays`) is covered.
+    /// When the budget fills, it is just before the first reminder left out, and the server pushes
+    /// what fires after it (`PATCH /v1/devices/:token`, `APIClient.updateDeviceSchedule`).
+    public let scheduledThrough: Date?
+
+    public init(notifications: [PlannedNotification], scheduledThrough: Date?) {
+        self.notifications = notifications
+        self.scheduledThrough = scheduledThrough
+    }
+}
+
 /// Chooses the local notifications to schedule. iOS keeps at most 64 per app,
 /// so this returns the soonest ones in a rolling window; the app recomputes the
 /// window after every change and on launch.
@@ -110,6 +125,19 @@ public enum ReminderPlanner {
         formatter: DualDateFormatter,
         limit: Int = defaultLimit
     ) -> [PlannedNotification] {
+        planWindow(tasks: tasks, reminders: reminders, schedule: schedule, now: now, formatter: formatter, limit: limit)
+            .notifications
+    }
+
+    /// `plan`, with how far the notifications reach (`ReminderPlan.scheduledThrough`).
+    public static func planWindow(
+        tasks: [PlannerTask],
+        reminders: [PlannerReminder],
+        schedule: PrayerSchedule?,
+        now: Date,
+        formatter: DualDateFormatter,
+        limit: Int = defaultLimit
+    ) -> ReminderPlan {
         let end = now.addingTimeInterval(TimeInterval(windowDays) * 86_400)
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = formatter.timeZone
@@ -199,15 +227,23 @@ public enum ReminderPlanner {
 
         planned.sort { $0.date == $1.date ? $0.id < $1.id : $0.date < $1.date }
 
-        // One notification per task per minute, even if two reminders fall together.
+        // One notification per task per minute, even if two reminders fall together: the one kept
+        // stands for the others, which are not left out.
         var seen = Set<String>()
         var result: [PlannedNotification] = []
         for notification in planned {
             let key = "\(notification.taskId.uuidString)|\(Int(notification.date.timeIntervalSince1970 / 60))"
-            if seen.insert(key).inserted { result.append(notification) }
-            if result.count >= limit { break }
+            guard !seen.contains(key) else { continue }
+            guard result.count < limit else {
+                // The first reminder over the budget: everything before it is scheduled. A
+                // millisecond earlier, as the server counts, so it and any at the same instant
+                // are pushed.
+                return ReminderPlan(notifications: result, scheduledThrough: notification.date.addingTimeInterval(-0.001))
+            }
+            seen.insert(key)
+            result.append(notification)
         }
-        return result
+        return ReminderPlan(notifications: result, scheduledThrough: nil)
     }
 
     /// «موعدها غداً», or a plain line for a task with no due day.
