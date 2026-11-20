@@ -17,6 +17,16 @@
       "id": "b74ed41be5be43c4aa567d1c010dd4df"
     }
   ],
+  // Per-IP limits on the open OAuth endpoints (src/limits.ts). The binding counts over 10 or 60
+  // seconds only. namespace_id is any number unique to this limiter in the Cloudflare account.
+  "ratelimits": [
+    // POST /oauth/register: a client registers once per connection, from Claude's or ChatGPT's
+    // servers, so many people connecting at once share an address.
+    { "name": "REGISTER_LIMITER", "namespace_id": "4101", "simple": { "limit": 10, "period": 60 } },
+    // /authorize (the consent page and its form, per address) and /oauth/token (codes and
+    // refreshes, per address and client).
+    { "name": "AUTH_LIMITER", "namespace_id": "4102", "simple": { "limit": 60, "period": 60 } }
+  ],
   // Tasks are read and written through the API worker's RPC entrypoint, never over the internet.
   "services": [{ "binding": "API", "service": "zimam", "entrypoint": "ZimamService" }],
   // Logos, tokens.css and the web fonts for the consent page.

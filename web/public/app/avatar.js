@@ -38,6 +38,11 @@ export function avatarUrl(version) {
   return loading;
 }
 
+/** Signed out: the photo of that account leaves this page (a read still on its way is dropped). */
+export function forgetAvatar() {
+  keep(null, null);
+}
+
 /** After an upload: the bytes just sent are the photo of the new version, with no read back. */
 export function rememberAvatar(version, blob) {
   if (version != null) keep(version, blob);

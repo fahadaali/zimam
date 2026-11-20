@@ -1,3 +1,4 @@
+import AuthenticationServices
 import SwiftUI
 import ZimamKit
 #if canImport(UIKit)
@@ -128,21 +129,24 @@ struct SettingsSyncSection: View {
 }
 
 /// «الحساب»: sign-out and deletion, each confirmed first. Sign-out is the account menu's
-/// (`signOutConfirmation`), with `onSignOut` closing the whole sheet first; deletion is the
-/// settings screen's (`onDeleteAccount`), which closes the sheet when it is done.
+/// (`signOutConfirmation`), with `onSignOut` closing the whole sheet first. Deletion asks twice:
+/// the confirmation, then a fresh sign-in with Apple or Google (`ConfirmIdentitySheet`), whose
+/// token goes to the settings screen's `onDeleteAccount`, which closes the sheet when it is done.
 struct SettingsAccountSection: View {
     let isDeletingAccount: Bool
-    let deleteFailed: Bool
+    /// Why the last deletion failed, if it did.
+    let deleteError: String?
     let onSignOut: () -> Void
-    let onDeleteAccount: () -> Void
+    let onDeleteAccount: (Reauthentication) -> Void
 
     @State private var signingOut = false
     @State private var confirmingDeleteAccount = false
+    @State private var confirmingIdentity = false
 
-    init(isDeletingAccount: Bool, deleteFailed: Bool,
-         onSignOut: @escaping () -> Void, onDeleteAccount: @escaping () -> Void) {
+    init(isDeletingAccount: Bool, deleteError: String?,
+         onSignOut: @escaping () -> Void, onDeleteAccount: @escaping (Reauthentication) -> Void) {
         self.isDeletingAccount = isDeletingAccount
-        self.deleteFailed = deleteFailed
+        self.deleteError = deleteError
         self.onSignOut = onSignOut
         self.onDeleteAccount = onDeleteAccount
     }
@@ -161,18 +165,117 @@ struct SettingsAccountSection: View {
             .disabled(isDeletingAccount)
             .frame(minHeight: ZimamSpacing.space11)
             .confirmationDialog("حذف الحساب؟", isPresented: $confirmingDeleteAccount, titleVisibility: .visible) {
-                Button("حذف الحساب", role: .destructive, action: onDeleteAccount)
+                Button("حذف الحساب", role: .destructive) { confirmingIdentity = true }
                 Button("إلغاء", role: .cancel) {}
             } message: {
                 Text("تُحذف مهامك ومشاريعك وتذكيراتك من خادم زمام ومن هذا الجهاز نهائياً، ولا يمكن استرجاعها. المشروع المشترك ينتقل إلى أقدم أعضائه. حذف الحساب لا يلغي اشتراك «زمام الاحترافية»: ألغه من إعدادات حسابك في App Store.")
             }
+            .sheet(isPresented: $confirmingIdentity) {
+                ConfirmIdentitySheet(onConfirmed: onDeleteAccount)
+            }
         } header: {
             Text("الحساب")
         } footer: {
-            if deleteFailed {
-                Text("تعذّر حذف الحساب. تحقّق من الاتصال وحاول مرة أخرى.")
+            if let deleteError {
+                Text(deleteError)
                     .foregroundStyle(ZimamColor.priorityHigh)
             }
+        }
+    }
+}
+
+/// Before the account is deleted, the user signs in again with Apple or Google: the server
+/// deletes it only with a fresh sign-in of an identity linked to it. The app does not know which
+/// providers the account has, so both are offered (Google when it is set up). Only the provider's
+/// token is read; the session stays as it is, and no new one is made. Closing this sheet, or the
+/// provider's, deletes nothing and says nothing.
+struct ConfirmIdentitySheet: View {
+    let onConfirmed: (Reauthentication) -> Void
+
+    @Environment(SessionStore.self) private var session
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
+    @State private var isCheckingGoogle = false
+    @State private var problem: String?
+
+    /// One height for both buttons, as on the welcome screen (`SignInView`).
+    @ScaledMetric(relativeTo: .headline) private var scaledButtonHeight = ZimamSpacing.space11
+    private var buttonHeight: CGFloat { min(scaledButtonHeight, ZimamSpacing.space8 * 2) }
+
+    init(onConfirmed: @escaping (Reauthentication) -> Void) {
+        self.onConfirmed = onConfirmed
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: ZimamSpacing.space4) {
+                    Text("لتأكيد أنك صاحب الحساب، سجّل الدخول مرة أخرى بالحساب الذي تدخل به زمام. لا يُحذف شيء قبل ذلك.")
+                        .font(ZimamType.callout)
+                        .foregroundStyle(ZimamColor.inkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(spacing: ZimamSpacing.space3) {
+                        SignInWithAppleButton(.signIn) { request in
+                            session.prepareReauthentication(request)
+                        } onCompletion: { result in
+                            finish(session.appleReauthentication(result))
+                        }
+                        // Black on the light theme, white on the dark one (Apple's guidelines).
+                        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: buttonHeight)
+                        .clipShape(RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
+                        .disabled(isCheckingGoogle)
+                        if SessionStore.isGoogleConfigured {
+                            GoogleButton(height: buttonHeight, isBusy: isCheckingGoogle, action: checkWithGoogle)
+                        }
+                    }
+                    if let problem {
+                        Text(problem)
+                            .font(ZimamType.callout)
+                            .foregroundStyle(ZimamColor.priorityHigh)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(ZimamSpacing.space4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(ZimamColor.surface)
+            .navigationTitle("تأكيد هويتك")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("إلغاء") { dismiss() }
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: ZimamSpacing.space8 * 12, minHeight: ZimamSpacing.space8 * 8)
+        #endif
+    }
+
+    private func checkWithGoogle() {
+        problem = nil
+        isCheckingGoogle = true
+        Task {
+            let check = await session.googleReauthentication()
+            isCheckingGoogle = false
+            finish(check)
+        }
+    }
+
+    /// A token closes the sheet and starts the deletion; a cancelled sign-in closes it quietly.
+    private func finish(_ check: SessionStore.IdentityCheck) {
+        switch check {
+        case .confirmed(let reauth):
+            dismiss()
+            onConfirmed(reauth)
+        case .cancelled:
+            dismiss()
+        case .failed(let message):
+            problem = message
         }
     }
 }

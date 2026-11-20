@@ -162,6 +162,67 @@ describe("Device registration", () => {
     expect((await device(phone.apns))!.last_seen_at).toBe(seen);
   });
 
+  it("accepts only the bundle ids in APNS_BUNDLE_IDS", async () => {
+    const { token } = await signIn();
+    expect(env.APNS_BUNDLE_IDS).toBe("app.zimam.ios");
+    for (const bundleId of ["com.example.other", "app.zimam.ios.web", "app.zimam.ios.watchkitapp", "APP.ZIMAM.IOS"]) {
+      const res = await call("PUT", `/v1/devices/${deviceToken()}`, { token, body: { ...deviceBody, bundleId } });
+      expect(res.status, bundleId).toBe(400);
+      expect(res.body.error.code).toBe("invalid");
+    }
+    const watch = deviceToken();
+    const vars = { APNS_BUNDLE_IDS: "app.zimam.ios, app.zimam.ios.watchkitapp" };
+    const body = { ...deviceBody, platform: "watchos", bundleId: "app.zimam.ios.watchkitapp" };
+    expect((await call("PUT", `/v1/devices/${watch}`, { token, body, env: vars })).status).toBe(204);
+    expect((await device(watch))!.bundle_id).toBe("app.zimam.ios.watchkitapp");
+    // Nothing registers while the list is empty.
+    expect((await call("PUT", `/v1/devices/${deviceToken()}`, { token, body: deviceBody, env: { APNS_BUNDLE_IDS: "" } })).status).toBe(400);
+  });
+
+  it("keeps how far the device scheduled, for its own session only", async () => {
+    const sub = `apple-${uuid()}`;
+    const phone = await userWithDevice(undefined, sub);
+    const ipad = await userWithDevice(undefined, sub);
+    const path = `/v1/devices/${phone.apns}`;
+    expect((await device(phone.apns))!.scheduled_through).toBeNull();
+
+    expect((await call("PATCH", path, { body: { scheduledThrough: 1 } })).status).toBe(401);
+    expect((await call("PATCH", "/v1/devices/not-hex", { token: phone.token, body: { scheduledThrough: 1 } })).status).toBe(400);
+    for (const body of [undefined, {}, { scheduledThrough: "soon" }, { scheduledThrough: -1 }, { scheduledThrough: 1.5 }]) {
+      const res = await call("PATCH", path, { token: phone.token, body });
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect(res.body.error.code).toBe("invalid");
+    }
+    // Unknown, or another session's (even the same user's): 404.
+    for (const [token, target] of [[phone.token, deviceToken()], [ipad.token, phone.apns]] as const) {
+      const res = await call("PATCH", `/v1/devices/${target}`, { token, body: { scheduledThrough: 1 } });
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    }
+
+    const through = Date.UTC(2027, 1, 10, 7, 30);
+    expect((await call("PATCH", `/v1/devices/${phone.apns.toUpperCase()}`, { token: phone.token, body: { scheduledThrough: through } })).status).toBe(204);
+    expect((await device(phone.apns))!.scheduled_through).toBe(through);
+    // Registering again from the same session keeps it, like the last pull.
+    expect((await call("PUT", path, { token: phone.token, body: deviceBody })).status).toBe(204);
+    expect((await device(phone.apns))!.scheduled_through).toBe(through);
+    // null: the whole window again.
+    expect((await call("PATCH", path, { token: phone.token, body: { scheduledThrough: null } })).status).toBe(204);
+    expect((await device(phone.apns))!.scheduled_through).toBeNull();
+  });
+
+  it("forgets how far a device scheduled when its token moves to another session", async () => {
+    const a = await signIn();
+    const b = await signIn();
+    const apns = deviceToken();
+    await call("PUT", `/v1/devices/${apns}`, { token: a.token, body: deviceBody });
+    expect((await call("PATCH", `/v1/devices/${apns}`, { token: a.token, body: { scheduledThrough: 5000 } })).status).toBe(204);
+    expect((await call("PUT", `/v1/devices/${apns}`, { token: b.token, body: deviceBody })).status).toBe(204);
+    expect(await device(apns)).toMatchObject({ user_id: b.userId, last_seen_at: 0, scheduled_through: null });
+    // A's session no longer has it.
+    expect((await call("PATCH", `/v1/devices/${apns}`, { token: a.token, body: { scheduledThrough: 1 } })).status).toBe(404);
+  });
+
   it("removes the device when its session signs out", async () => {
     const { token, apns } = await userWithDevice();
     expect((await call("POST", "/v1/auth/logout", { token })).status).toBe(204);
@@ -271,7 +332,69 @@ describe("Reminder pushes", () => {
     expect(fake.to(ipad.apns)).toHaveLength(0);
   });
 
+  it("pushes what lies past how far the device scheduled", async () => {
+    const now = Date.UTC(2027, 1, 4, 9, 0, 0);
+    const fireAt = now - MINUTE;
+    const setup = async (scheduledThrough: number | null) => {
+      const user = await userWithDevice();
+      const task = await addTask(user.token);
+      await addReminder(user.token, task, { kind: "time", at: iso(fireAt) });
+      // Pulled two days before, well inside its 14-day window.
+      await setSeen(user.apns, fireAt - 2 * DAY);
+      const res = await call("PATCH", `/v1/devices/${user.apns}`, { token: user.token, body: { scheduledThrough } });
+      expect(res.status).toBe(204);
+      return user;
+    };
+    // Scheduled past the reminder, or exactly to it: covered.
+    const covered = await setup(fireAt + DAY);
+    const edge = await setup(fireAt);
+    // The 64-notification limit dropped it: the server pushes.
+    const dropped = await setup(fireAt - 1000);
+    // null: the whole window, as before.
+    const whole = await setup(null);
+
+    const fake = new FakePush();
+    await sendDueReminders(env.DB, fake, now);
+    expect(fake.to(covered.apns)).toHaveLength(0);
+    expect(fake.to(edge.apns)).toHaveLength(0);
+    expect(fake.to(dropped.apns)).toHaveLength(1);
+    expect(fake.to(whole.apns)).toHaveLength(0);
+  });
+
+  it("pushes a prayer reminder past how far the device scheduled", async () => {
+    const riyadh = { location: { latitude: 24.7136, longitude: 46.6753 }, timeZone: "Asia/Riyadh" };
+    const day = "2027-02-05";
+    const asr = prayerInstants(day, { ...DEFAULT_SETTINGS, ...riyadh })!.asr.getTime();
+    const now = windowEnd(asr + 1000);
+    const setup = async (scheduledThrough: number | null) => {
+      const user = await userWithDevice(riyadh);
+      const task = await addTask(user.token, { dueDate: day });
+      await addReminder(user.token, task, { kind: "prayer", prayer: "asr" });
+      await setSeen(user.apns, asr - DAY);
+      await call("PATCH", `/v1/devices/${user.apns}`, { token: user.token, body: { scheduledThrough } });
+      return user;
+    };
+    const dropped = await setup(asr - HOUR);
+    const kept = await setup(asr + HOUR);
+    const fake = new FakePush();
+    await sendDueReminders(env.DB, fake, now);
+    expect(fake.to(dropped.apns)).toHaveLength(1);
+    expect(fake.to(kept.apns)).toHaveLength(0);
+  });
+
   it("applies the rule per fire time", () => {
+    const at = 100 * DAY;
+    const seen = at - DAY;
+    expect(isCovered([{ last_seen_at: seen, scheduled_through: null }], at, 0)).toBe(true);
+    expect(isCovered([{ last_seen_at: seen, scheduled_through: at }], at, 0)).toBe(true);
+    expect(isCovered([{ last_seen_at: seen, scheduled_through: at - 1 }], at, 0)).toBe(false);
+    // Another device that kept it covers the user.
+    expect(isCovered([{ last_seen_at: seen, scheduled_through: at - 1 }, { last_seen_at: seen, scheduled_through: at + DAY }], at, 0)).toBe(true);
+    // Scheduling far does not cover what changed after the pull.
+    expect(isCovered([{ last_seen_at: seen, scheduled_through: at + DAY }], at, seen + 1)).toBe(false);
+  });
+
+  it("applies the window rule per fire time", () => {
     const fireAt = 100 * DAY;
     expect(isCovered([], fireAt, 0)).toBe(false);
     expect(isCovered([{ last_seen_at: fireAt - LOCAL_WINDOW_MS }], fireAt, 0)).toBe(true);

@@ -144,8 +144,10 @@ targets:
         # reminder or saves a place, after the app explains why. Region monitoring relaunches the
         # app without the `location` background mode. The places (saved in «أماكني» or on the
         # reminder) sync with the account; the device's position does not. The Mac watches no
-        # places, so its text mentions only picking the current location as a place.
-        NSLocationWhenInUseUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، ولتذكيرك بمهمة حين تصل إلى مكان اخترته أو تغادره. يبقى موقعك على جهازك؛ ويُحفظ في حسابك المكان الذي تختاره للتذكير، وموقع تقريبي على مستوى المدينة إن فعّلت أوقات الصلاة في كلود وChatGPT.
+        # places: this one Info.plist serves both, and the Mac (macOS 11 and later) shows the
+        # when-in-use text too, so it names arriving and leaving for iPhone and iPad only. «Always»
+        # is asked on iPhone and iPad alone; NSLocationUsageDescription is the older Mac key.
+        NSLocationWhenInUseUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، ولتختار موقعك الحالي مكاناً لتذكير، وعلى الآيفون والآيباد ليذكّرك بمهمة حين تصل إلى مكان اخترته أو تغادره. يبقى موقعك على جهازك؛ ويُحفظ في حسابك المكان الذي تختاره للتذكير، وموقع تقريبي على مستوى المدينة إن فعّلت أوقات الصلاة في كلود وChatGPT.
         NSLocationAlwaysAndWhenInUseUsageDescription: يحتاج زمام إلى موقعك «دائماً» ليذكّرك حين تصل إلى أماكنك، مثل البيت أو العمل، أو تغادرها، والتطبيق مغلق، وليصلك التذكير المرتبط بمكان ووقت مرة واحدة عند أيهما أسبق. يراقب جهازك دخولك أماكنك وخروجك منها، ولا يُرسل موقعك ولا تحركاتك إلى زمام.
         NSLocationUsageDescription: يستعمل زمام موقعك لحساب أوقات الصلاة في مدينتك، ولتختار موقعك الحالي مكاناً لتذكير. يبقى موقعك على جهازك؛ ويُحفظ في حسابك المكان الذي تختاره للتذكير، وموقع تقريبي على مستوى المدينة إن فعّلت أوقات الصلاة في كلود وChatGPT.
         # Apple Reminders: the import (Zimam/Import/RemindersImporter.swift), and, when the user turns on

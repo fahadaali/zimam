@@ -15,6 +15,7 @@ import {
   messagePage,
 } from "./consent";
 import { type Env, type GrantProps, SCOPES } from "./env";
+import { rateLimit } from "./limits";
 import { buildServer } from "./tools";
 
 const html = (body: string, status = 200, headers = new Headers()) => {
@@ -68,7 +69,9 @@ async function authorize(request: Request, env: Env, backend: ZimamBackend): Pro
     const { redirectTo } = await oauth.completeAuthorization({
       request: approved.request,
       userId: signIn.value.userId,
-      metadata: { name: signIn.value.name },
+      // No metadata: the provider keeps it in KV unencrypted, and nothing here reads it back, so the
+      // account's name stays in the API alone (and goes when the account is deleted).
+      metadata: {},
       scope: approved.request.scope,
       props: { userId: signIn.value.userId } satisfies GrantProps,
     });
@@ -147,7 +150,10 @@ export function createWorker(backendFor: (env: Env) => ZimamBackend) {
     }));
 
   return {
-    fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+      // Registration, consent and tokens are open to anyone, so each address has a limit (limits.ts).
+      const limited = await rateLimit(request, env);
+      if (limited) return limited;
       return providerFor(env).fetch(request, env, ctx);
     },
   } satisfies ExportedHandler<Env>;

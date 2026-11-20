@@ -38,7 +38,8 @@ export function takePendingJoin() {
 }
 
 /**
- * The view. `ctx`: { code, primary, today, timeZone, announce(text), onJoined(projectId) } from main.js.
+ * The view. `ctx`: { code, primary, today, announce(text), onJoined(projectId) } from main.js. The
+ * expiry reads in the device's time zone, as the other dates on the web do.
  * Returns its nodes, like the other views.
  */
 export async function viewJoin(ctx) {
@@ -71,7 +72,7 @@ export async function viewJoin(ctx) {
     h("dd", { className: "body" }, `${roleName(preview.role)}: ${roleDescription(preview.role)}`),
     preview.invitedBy ? [h("dt", { className: "caption muted" }, "من"), h("dd", { className: "body" }, preview.invitedBy)] : null,
     h("dt", { className: "caption muted" }, "تنتهي في"),
-    h("dd", { className: "body" }, jobDate(preview.expiresAt, { primary: ctx.primary, today: ctx.today, timeZone: ctx.timeZone })),
+    h("dd", { className: "body" }, jobDate(preview.expiresAt, { primary: ctx.primary, today: ctx.today })),
   );
 
   const error = h("p", { className: "callout field-error", role: "alert" });

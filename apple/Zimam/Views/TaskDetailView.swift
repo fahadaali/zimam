@@ -50,6 +50,7 @@ private struct TaskDetailForm: View {
     @Environment(SyncEngine.self) private var sync
     @Environment(\.dismiss) private var dismiss
     @Environment(\.taskCompleteInToolbar) private var completeInToolbar
+    @Environment(\.closeInspectedTask) private var closeInspectedTask
 
     let task: TaskItem
     let subtasks: [TaskItem]
@@ -127,9 +128,14 @@ private struct TaskDetailForm: View {
         .onChange(of: task.updatedAt) { _, _ in refresh() }
     }
 
+    /// Deletes the task and leaves its details. In the inspector on the iPad and the Mac the task
+    /// is the root of the inspector's stack, where `dismiss` would close the Mac window, so the
+    /// inspector closes instead (`closeInspectedTask`); pushed details (the iPhone, a subtask in
+    /// the inspector, the timeline and the project screens) go back with `dismiss`.
     private func deleteTask() {
+        let id = task.id
         store.delete(task)
-        dismiss()
+        if closeInspectedTask?(id) != true { dismiss() }
     }
 
     private func load() {
@@ -162,6 +168,9 @@ private struct TaskDetailForm: View {
         let newTags = tagsEdited ? Self.parseTags(tags) : task.tags
         if titleEdited && (trimmedTitle.isEmpty || ServerText.exceeds(title, ServerText.maxTitle)) { title = newTitle }
         if notesEdited && ServerText.exceeds(notes, ServerText.maxNotes) { notes = trimmedNotes }
+        // The tags as they are kept: cut to the server's limits, so a tag cut short or past the
+        // thirtieth does not stay in the field as if it were saved.
+        if tagsEdited && newTags != Self.parseTags(tags, limited: false) { tags = newTags.joined(separator: "، ") }
         savedTitle = title
         savedNotes = notes
         savedTags = tags
@@ -173,14 +182,15 @@ private struct TaskDetailForm: View {
         }
     }
 
-    /// Splits on the Latin or the Arabic comma, dropping blanks and repeats.
-    static func parseTags(_ text: String) -> [String] {
+    /// Splits on the Latin or the Arabic comma, dropping blanks and repeats, then (`limited`) cuts
+    /// to the server's limits (`ServerText.tags`), as `Store` saves them.
+    static func parseTags(_ text: String, limited: Bool = true) -> [String] {
         var result: [String] = []
         for part in text.split(whereSeparator: { $0 == "," || $0 == "،" }) {
             let tag = part.trimmingCharacters(in: .whitespacesAndNewlines)
             if !tag.isEmpty && !result.contains(tag) { result.append(tag) }
         }
-        return result
+        return limited ? ServerText.tags(result) : result
     }
 }
 

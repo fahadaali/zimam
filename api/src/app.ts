@@ -33,6 +33,8 @@ export function createApp(deps: Deps) {
       origin: (origin, c) => (c.env.ALLOWED_ORIGINS.split(",").map((o: string) => o.trim()).includes(origin) ? origin : null),
       allowHeaders: ["Authorization", "Content-Type"],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+      // The assistant's limits (429 ai_rate_limited, 503 ai_busy) say when to try again.
+      exposeHeaders: ["Retry-After"],
       maxAge: 86_400,
     }),
   );

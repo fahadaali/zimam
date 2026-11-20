@@ -2,14 +2,15 @@
 // - NextPrayerLine on «اليوم»: «العصر بعد ١:١٢:٠٥», or «مضى على أذان العصر ١٢:٠٣» for half an
 //   hour after it, in sand on sand-soft; it opens «أوقات الصلاة».
 // - «أوقات الصلاة» (PrayerTimesView.swift): the clock card, «مواقيت اليوم» with the sunrise,
-//   «الموقع» and «الحساب». Adhan and iqama alerts are the devices' own, set in the app.
+//   «الموقع» («إزالة الموقع» clears the saved one) and «الحساب». Adhan and iqama alerts are the
+//   devices' own, set in the app.
 // - The clock time of a prayer-anchored task on its day, for its chip («٢:٥٠ م»).
 import { request } from "./lib/api.js";
 import { Button, h } from "./lib/components.js";
 import { addDays, dualDateWithYear, timeLabel } from "./lib/dates.js";
 import { icon } from "./lib/icons.js";
 import { MADHAB_NAMES, METHOD_NAMES, clockIn, clockState, prayerInstant, timerText } from "./lib/prayer-clock.js";
-import { PRAYERS, PRAYER_NAMES, prayerPhrase } from "./lib/prayer.js";
+import { PRAYERS, PRAYER_NAMES, cityLevel, prayerPhrase } from "./lib/prayer.js";
 
 /** Days read at once: today and the month ahead, for the chips of the coming tasks. */
 const SPAN = 30;
@@ -184,7 +185,7 @@ export function createPrayers(ctx) {
 
   function locationSection() {
     const status = h("p", { className: "caption muted form-footer", role: "status" });
-    const use = h("button", { type: "button", className: "zm-btn zm-btn-quiet form-add" }, icon("pin", { size: "sm" }), hasLocation() ? "تحديث موقعي" : "استعمال موقعي الحالي");
+    const use = h("button", { type: "button", className: "zm-btn zm-btn-quiet form-add", dataset: { focus: "location-use" } }, icon("pin", { size: "sm" }), hasLocation() ? "تحديث موقعي" : "استعمال موقعي الحالي");
     use.addEventListener("click", () => {
       if (!("geolocation" in navigator)) {
         status.textContent = "المتصفح لا يتيح تحديد الموقع.";
@@ -194,10 +195,9 @@ export function createPrayers(ctx) {
       status.textContent = "يحدّد المتصفح موقعك…";
       navigator.geolocation.getCurrentPosition(
         async ({ coords }) => {
-          // The city is enough for prayer times: two decimals, about a kilometre.
-          const round = (n) => Math.round(n * 100) / 100;
+          // The city is enough for prayer times: one decimal, about 11 km (lib/prayer.js cityLevel).
           try {
-            await ctx.saveSettings({ location: { latitude: round(coords.latitude), longitude: round(coords.longitude) }, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+            await ctx.saveSettings({ location: cityLevel(coords), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
             ctx.announce("حُفظ موقعك لأوقات الصلاة.");
             await load({ force: true });
             redrawSheet();
@@ -214,14 +214,39 @@ export function createPrayers(ctx) {
         { enableHighAccuracy: false, timeout: 15_000, maximumAge: 600_000 },
       );
     });
+    // «إزالة الموقع»: PATCH /v1/me with settings.location = null, at once (nothing is lost that
+    // «استعمال موقعي الحالي» cannot bring back). The times read for the old place go with it, so
+    // the chips, the line on «اليوم» and this sheet say a location is needed.
+    const remove = hasLocation()
+      ? h("button", { type: "button", className: "zm-btn zm-btn-quiet form-add danger", dataset: { focus: "location-remove" } }, icon("trash", { size: "sm" }), "إزالة الموقع")
+      : null;
+    remove?.addEventListener("click", async () => {
+      remove.disabled = true;
+      use.disabled = true;
+      status.textContent = "";
+      try {
+        await ctx.saveSettings({ location: null });
+      } catch (failure) {
+        status.textContent = ctx.errorText(failure);
+        remove.disabled = false;
+        use.disabled = false;
+        return;
+      }
+      forget();
+      ctx.onChange();
+      redrawSheet();
+      sheet?.querySelector('[data-focus="location-use"]')?.focus();
+      ctx.announce("أُزيل موقعك. أوقات الصلاة تحتاج موقعاً.");
+      await load({ force: true });
+    });
     const place = hasLocation()
       ? h("div", { className: "form-row" }, h("span", { className: "body" }, "المكان"), h("span", { className: "body" }, "موقعي الحالي"))
-      : h("p", { className: "callout form-note" }, "لا موقع محفوظ بعد.");
+      : h("p", { className: "callout form-note" }, "لا موقع محفوظ. أوقات الصلاة تحتاج موقعك على مستوى المدينة.");
     return h(
       "section",
       { className: "form-section", "aria-labelledby": "prayer-location" },
       h("h3", { className: "caption muted form-section-title", id: "prayer-location" }, "الموقع"),
-      h("div", { className: "form-card" }, place, use),
+      h("div", { className: "form-card" }, place, use, remove),
       h("p", { className: "caption muted form-footer" }, "تُحسب الأوقات لموقعك على مستوى المدينة، والتطبيق يحدّثه حين تتنقّل."),
       status,
     );

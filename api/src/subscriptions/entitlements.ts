@@ -48,10 +48,11 @@ async function isOverride(env: Env, userId: string): Promise<boolean> {
   if (list.includes(userId.toLowerCase())) return true;
   const emails = list.filter((s) => s.includes("@"));
   if (emails.length === 0) return false;
-  // The account's email and every linked sign-in's (Apple, Google).
+  // Every linked sign-in's (Apple, Google) address, only where the provider vouches for it as merging
+  // does (`signInUser`): anyone can put an address on a new Google account without owning it, and
+  // `users.email` follows whichever sign-in last gave one, verified or not.
   const { results } = await env.DB.prepare(
-    `SELECT lower(email) AS email FROM users WHERE id = ?1 AND email IS NOT NULL AND apple_sub NOT LIKE 'deleted:%'
-     UNION SELECT lower(email) FROM identities WHERE user_id = ?1 AND email IS NOT NULL`,
+    `SELECT DISTINCT lower(email) AS email FROM identities WHERE user_id = ? AND email IS NOT NULL AND email_verified = 1`,
   )
     .bind(userId)
     .all<{ email: string }>();

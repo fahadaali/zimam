@@ -14,11 +14,12 @@ export function apiBase() {
 // (no inline or third-party script except Apple's and Google's sign-in), DOM built with textContent only, and an
 // opaque token the server can revoke: signing out deletes it on the server and here.
 export const session = {
+  /** The stored token, or the one kept in memory when storage is blocked (see set). */
   get() {
     try {
-      return localStorage.getItem(TOKEN_KEY);
+      return localStorage.getItem(TOKEN_KEY) ?? memoryToken;
     } catch {
-      return null;
+      return memoryToken;
     }
   },
   set(token) {
@@ -39,7 +40,7 @@ export const session = {
   },
 };
 let memoryToken = null;
-const currentToken = () => session.get() ?? memoryToken;
+const currentToken = () => session.get();
 
 export class ApiError extends Error {
   constructor(status, code, message, details = null) {
@@ -56,6 +57,9 @@ const MESSAGES = {
   unauthorized: "انتهت الجلسة. سجّل الدخول مرة أخرى.",
   invalid_token: "تعذّر التحقق من حسابك. حاول مرة أخرى.",
   google_unavailable: "تسجيل الدخول بحساب قوقل غير متاح الآن. استعمل حساب أبل.",
+  // DELETE /v1/me without a fresh sign-in, or with one for another account (lib/reauth.js).
+  reauth_required: "تعذّر التحقق من هويتك، أو انتهت مهلته. سجّل الدخول مرة أخرى للمتابعة.",
+  reauth_mismatch: "الحساب الذي دخلت به ليس هذا الحساب. ادخل بحساب أبل أو قوقل الذي تستعمله في زمام.",
   invalid: "تحقق من البيانات المدخلة ثم حاول مرة أخرى.",
   forbidden: "لا تملك صلاحية هذا التعديل.",
   not_found: "لم نجد هذا العنصر، وربما حُذف.",
@@ -72,6 +76,16 @@ export function errorText(error) {
 let onUnauthorized = () => {};
 export function whenSignedOut(handler) {
   onUnauthorized = handler;
+}
+
+/**
+ * A 401 for `token` ends the session, unless another one was set while the request was on its way
+ * (signed out and back in meanwhile): a late answer for the old token must not sign the new one out.
+ */
+function endSession(token) {
+  if ((currentToken() ?? null) !== (token ?? null)) return;
+  session.clear();
+  onUnauthorized();
 }
 
 export async function request(method, path, body) {
@@ -101,10 +115,7 @@ export async function request(method, path, body) {
   const data = await response.json().catch(() => null);
   if (!response.ok) {
     const code = data?.error?.code ?? (response.status === 401 ? "unauthorized" : "internal");
-    if (response.status === 401 && path !== "/v1/auth/apple" && path !== "/v1/auth/google") {
-      session.clear();
-      onUnauthorized();
-    }
+    if (response.status === 401 && path !== "/v1/auth/apple" && path !== "/v1/auth/google") endSession(token);
     throw new ApiError(response.status, code, data?.error?.message ?? response.statusText, data?.error ?? null);
   }
   return data;
@@ -123,10 +134,7 @@ export async function requestBlob(path) {
   }
   if (response.ok) return response.blob();
   const data = await response.json().catch(() => null);
-  if (response.status === 401) {
-    session.clear();
-    onUnauthorized();
-  }
+  if (response.status === 401) endSession(token);
   throw new ApiError(response.status, data?.error?.code ?? (response.status === 401 ? "unauthorized" : "internal"), data?.error?.message ?? "");
 }
 
@@ -168,7 +176,8 @@ export const api = {
   signOut: () => request("POST", "/v1/auth/logout"),
   me: () => request("GET", "/v1/me"),
   updateMe: (fields) => request("PATCH", "/v1/me", fields),
-  deleteMe: () => request("DELETE", "/v1/me"),
+  /** `reauth`: a fresh sign-in, as lib/reauth.js builds it (appleReauthBody, googleReauthBody). */
+  deleteMe: (reauth) => request("DELETE", "/v1/me", reauth),
   /** The account photo: JPEG or PNG bytes up to 1 MB (avatar.js makes a 512×512 JPEG); answers the user. */
   uploadAvatar: (blob) => request("PUT", "/v1/me/avatar", blob.type ? blob : new Blob([blob], { type: "image/jpeg" })),
   removeAvatar: () => request("DELETE", "/v1/me/avatar"),

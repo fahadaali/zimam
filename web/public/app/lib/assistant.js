@@ -71,13 +71,19 @@ export function breakdownText(n) {
   return `قسّمت المهمة إلى ${stepCount(n)}. أزل ما لا تريده، ثم أضف الباقي مهامَّ فرعية.`;
 }
 
-/** Why a request failed: offline, quota, unavailable, pro, notFound, invalid, signedOut or other. */
+/**
+ * Why a request failed: offline, quota, rateLimited, busy, unavailable, pro, notFound, invalid,
+ * signedOut or other. Only `ai_quota_exceeded` is the month's quota; any other 429 is a fair-use
+ * limit (per minute or per day) that passes on its own.
+ */
 export function assistantProblem(error, { online = true } = {}) {
   const code = error?.code;
   const status = error?.status;
   if (code === "network" || status === 0 || !online) return "offline";
   if (code === "pro_required") return "pro";
-  if (code === "ai_quota_exceeded" || status === 429) return "quota";
+  if (code === "ai_quota_exceeded") return "quota";
+  if (code === "ai_rate_limited" || status === 429) return "rateLimited";
+  if (code === "ai_busy") return "busy";
   if (code === "ai_unavailable" || status === 503) return "unavailable";
   if (status === 404) return "notFound";
   if (status === 400) return "invalid";
@@ -85,9 +91,36 @@ export function assistantProblem(error, { online = true } = {}) {
   return "other";
 }
 
+/** «دقيقة», «دقيقتين», «٣ دقائق», «١٥ دقيقة»; the same for hours. */
+function countOf(n, [one, two, few, many]) {
+  if (n === 1) return one;
+  if (n === 2) return two;
+  if (n >= 3 && n <= 10) return `${arabicNumber(n)} ${few}`;
+  return `${arabicNumber(n)} ${many}`;
+}
+
+/**
+ * How long to wait, from the server's `retryAfter` (seconds): «دقيقة» up to a minute, then whole
+ * minutes, then whole hours, each rounded up so the request is not refused again. Null without a
+ * usable number.
+ */
+export function waitText(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return countOf(minutes, ["دقيقة", "دقيقتين", "دقائق", "دقيقة"]);
+  return countOf(Math.ceil(minutes / 60), ["ساعة", "ساعتين", "ساعات", "ساعة"]);
+}
+
+/** «حاول بعد دقيقة.», or «حاول بعد قليل.» when the server did not say. */
+const retryText = (details) => {
+  const wait = waitText(Number(details?.retryAfter));
+  return wait ? `حاول بعد ${wait}.` : "حاول بعد قليل.";
+};
+
 /**
  * The sentence shown in place of a suggestion. A spent quota names the limit and the day it
  * renews in both calendars: «… (الحد ٣٠٠)، ولم يبقَ منها شيء. تتجدد في ٢١ جمادى الأولى، ١ نوفمبر.»
+ * A fair-use limit or a busy assistant says when to try again: «… حاول بعد دقيقة.»
  */
 export function assistantErrorText(error, { primary = "hijri", today, online = true } = {}) {
   switch (assistantProblem(error, { online })) {
@@ -101,6 +134,17 @@ export function assistantErrorText(error, { primary = "hijri", today, online = t
       if (isIsoDate(details.resetsOn)) text += ` تتجدد في ${dualDate(details.resetsOn, { primary, today })}.`;
       return text;
     }
+    case "rateLimited": {
+      const details = error?.details ?? {};
+      if (details.scope === "day") {
+        let text = "بلغت حد طلبات المساعد لهذا اليوم";
+        if (Number.isInteger(details.limit)) text += ` (الحد ${arabicNumber(details.limit)})`;
+        return `${text}. ${retryText(details)}`;
+      }
+      return `أرسلت إلى المساعد طلبات كثيرة في وقت قصير. ${retryText(details)}`;
+    }
+    case "busy":
+      return `المساعد مشغول الآن بطلبات كثيرة. ${retryText(error?.details)}`;
     case "unavailable":
       return "المساعد غير متاح الآن. حاول بعد قليل.";
     case "pro":

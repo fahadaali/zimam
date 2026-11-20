@@ -10,7 +10,7 @@ import googleTasksJson from "./fixtures/imports/google-tasks.json?raw";
 import tickTickBackup from "./fixtures/imports/ticktick-backup.csv?raw";
 import todoistApiJson from "./fixtures/imports/todoist-api.json?raw";
 import todoistTemplate from "./fixtures/imports/todoist-template.csv?raw";
-import { call, fakeAi, pullAll, push, signIn, testAppleKeys, testGoogleKeys } from "./helpers";
+import { call, deleteAccount, fakeAi, pullAll, push, signIn, testAppleKeys, testGoogleKeys } from "./helpers";
 
 // MARK: Fakes
 
@@ -440,7 +440,7 @@ describe("Imports API", () => {
     const { token } = await signIn();
     const res = await upload(token, "csv", "title\nأ\n", "a.csv");
     const id = res.body.job.id;
-    expect((await call("DELETE", "/v1/me", { token })).status).toBe(204);
+    expect((await deleteAccount(token)).status).toBe(204);
     expect(await env.DB.prepare(`SELECT 1 FROM import_jobs WHERE id = ?`).bind(id).first()).toBeNull();
     const result = await deliver(sent.shift()!);
     expect(result.explicitAcks).toHaveLength(1);

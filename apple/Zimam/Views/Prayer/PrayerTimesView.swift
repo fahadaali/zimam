@@ -141,7 +141,9 @@ struct NextPrayerLine: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: ZimamSpacing.space2) {
+                // Decorative: VoiceOver reads the line, not the symbols' names.
                 Image(systemName: "moon.stars")
+                    .accessibilityHidden(true)
                 if let schedule = location.schedule(session.user?.settings) {
                     TimelineView(.periodic(from: .now, by: 30)) { context in
                         if let state = PrayerClock(schedule: schedule).state(at: context.date) {
@@ -154,6 +156,7 @@ struct NextPrayerLine: View {
                 Spacer(minLength: ZimamSpacing.space2)
                 Image(systemName: "chevron.forward")
                     .font(ZimamType.caption)
+                    .accessibilityHidden(true)
             }
             .font(ZimamType.callout)
             .foregroundStyle(ZimamColor.sand)

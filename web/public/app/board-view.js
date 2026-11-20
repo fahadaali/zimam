@@ -75,7 +75,9 @@ export function boardView({ project, sections, tasks }, ctx) {
     ctx.markLocalChange();
     ctx.announce(message);
     try {
-      await Promise.all(changes.map((c) => boardApi.patchTask(c.id, { sortOrder: c.sortOrder, sectionId: c.sectionId })));
+      // Each in turn with that task's edits from its open pane (main.js queueTaskRequest), so neither undoes the other.
+      const patch = (c) => () => boardApi.patchTask(c.id, { sortOrder: c.sortOrder, sectionId: c.sectionId });
+      await Promise.all(changes.map((c) => (ctx.queueTaskRequest ? ctx.queueTaskRequest(c.id, patch(c)) : patch(c)())));
     } catch (error) {
       if (error.status === 401) return;
       ctx.showError(error);

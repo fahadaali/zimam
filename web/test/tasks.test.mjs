@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomNonce, sha256Hex } from "../public/app/lib/nonce.js";
 import { arabicNumber } from "../public/app/lib/numbers.js";
-import { groupByDay, priorityKey, progressText, taskCount } from "../public/app/lib/tasks.js";
+import { groupByDay, priorityKey, progressText, resultCount, taskCount } from "../public/app/lib/tasks.js";
 
 const task = (id, dueDate, extra = {}) => ({ id, title: id, status: "todo", dueDate, ...extra });
 
@@ -19,6 +19,9 @@ test("task counts agree with the number", () => {
   assert.equal(taskCount(2), "مهمتان");
   assert.equal(taskCount(5), "٥ مهام");
   assert.equal(taskCount(12), "١٢ مهمة");
+  assert.equal(taskCount(100), "١٠٠ مهمة");
+  assert.equal(taskCount(103), "١٠٣ مهام");
+  assert.equal(taskCount(111), "١١١ مهمة");
 });
 
 test("upcoming tasks group by day in date order", () => {
@@ -72,4 +75,13 @@ test("today's list puts a prayer task among the clock times, at the prayer's usu
     "2026-10-20",
   );
   assert.deepEqual(list.map((t) => t.id), ["ten", "asr", "late"]);
+});
+
+test("search counts agree with the number", () => {
+  assert.equal(resultCount(0), "لا نتائج.");
+  assert.equal(resultCount(1), "نتيجة واحدة");
+  assert.equal(resultCount(2), "نتيجتان");
+  assert.equal(resultCount(7), "٧ نتائج");
+  assert.equal(resultCount(25), "٢٥ نتيجة");
+  assert.equal(resultCount(104), "١٠٤ نتائج");
 });

@@ -17,6 +17,9 @@ struct PrayerPlacePicker: View {
     @State private var chosenName: String?
     @State private var query = ""
     @State private var results: [PlaceOption] = []
+    /// The last search found nothing (or could not reach Apple Maps): said under the field,
+    /// rather than leaving the map as if nothing had been typed.
+    @State private var noResults = false
     @State private var isSaving = false
 
     /// Wide enough to see the city, close enough to place the pin in it.
@@ -36,6 +39,14 @@ struct PrayerPlacePicker: View {
         NavigationStack {
             VStack(spacing: 0) {
                 PrayerPlaceSearchField(query: $query)
+                if noResults {
+                    Text("لا نتائج. جرّب اسماً آخر، أو حرّك الخريطة إلى المكان.")
+                        .font(ZimamType.callout)
+                        .foregroundStyle(ZimamColor.inkMuted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, ZimamSpacing.space4)
+                        .padding(.bottom, ZimamSpacing.space2)
+                }
                 if !results.isEmpty {
                     PrayerPlaceResultsList(results: results, onPick: { pick($0) })
                 } else {
@@ -111,6 +122,7 @@ struct PrayerPlacePicker: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2 else {
             results = []
+            noResults = false
             return
         }
         try? await Task.sleep(for: .milliseconds(400))
@@ -121,6 +133,7 @@ struct PrayerPlacePicker: View {
         let response = try? await MKLocalSearch(request: request).start()
         guard !Task.isCancelled else { return }
         results = response?.mapItems.prefix(8).map(PlaceOption.init(item:)) ?? []
+        noResults = results.isEmpty
     }
 }
 

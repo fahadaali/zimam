@@ -1,18 +1,22 @@
 // «الإعدادات» on the web (SettingsView.swift), opened from the account menu: the account card with
 // the photo («تغيير الصورة»، «إزالة الصورة») and the name; «عام» (the primary calendar and the
 // first day of the week); «أوقات الصلاة»; «استيراد المهام»; «الحساب والمزامنة» («مزامنة الآن»،
-// «تسجيل الخروج»، «حذف الحساب» after a confirmation); and «عن زمام». Settings save through PATCH /v1/me as soon as they change.
+// «تسجيل الخروج»، «حذف الحساب» after a confirmation and a fresh sign-in, «تأكيد هويتك»); and
+// «عن زمام». Settings save through PATCH /v1/me as soon as they change.
 import { avatarView, preparePhoto, rememberAvatar } from "./avatar.js";
 import { api } from "./lib/api.js";
 import { Button, h } from "./lib/components.js";
 import { dualDateWithYear } from "./lib/dates.js";
 import { icon } from "./lib/icons.js";
+import { deleteAccountErrorText, reauthErrorText } from "./lib/reauth.js";
 import { WEEKDAYS, WEEKDAY_NAMES } from "./lib/recurrence.js";
 
 /**
  * `ctx` (from main.js): { me(), today(), saveMe({ name?, settings? }) → Promise<me>, setMe(me) (the
- * account after its photo changed), openPrayers(), sync(), signOut(), deleteAccount() → Promise,
- * announce, errorText }.
+ * account after its photo changed), openPrayers(), sync(), signOut(), reauthProviders() → ["apple",
+ * "google"…], prepareReauth() → Promise, reauthenticate(provider) → Promise<body> (opens the
+ * provider's popup, so it is called inside the click), cancelReauth(), deleteAccount(body) →
+ * Promise, announce, errorText }.
  */
 export function openSettings(ctx) {
   document.getElementById("settings-dialog")?.remove();
@@ -24,7 +28,10 @@ export function openSettings(ctx) {
     h("div", { className: "sheet-form" }, h("div", { className: "sheet-bar" }, h("span"), h("h2", { className: "headline sheet-bar-title", id: "settings-title" }, "الإعدادات"), close), body),
   );
   close.addEventListener("click", () => dialog.close());
-  dialog.addEventListener("close", () => dialog.remove());
+  dialog.addEventListener("close", () => {
+    ctx.cancelReauth?.();
+    dialog.remove();
+  });
   document.body.append(dialog);
 
   const error = h("p", { className: "callout field-error", role: "alert" });
@@ -169,35 +176,94 @@ export function openSettings(ctx) {
     });
     const confirm = h("div", { className: "reminder-sheet", hidden: true });
     const remove = h("button", { type: "button", className: "zm-btn zm-btn-quiet form-add danger", dataset: { focus: "delete" } }, icon("trash", { size: "sm" }), "حذف الحساب");
+    const cancelDelete = () => {
+      ctx.cancelReauth?.();
+      confirm.hidden = true;
+      remove.hidden = false;
+      remove.focus();
+    };
     remove.addEventListener("click", () => {
+      // The nonces for «تأكيد هويتك» get ready now, so its popups can open inside the click.
+      ctx.prepareReauth().catch(() => {});
       const yes = Button({ variant: "secondary", className: "danger" }, "حذف الحساب");
-      const no = Button({ variant: "quiet" }, "إلغاء");
-      const failed = h("p", { className: "callout field-error", role: "alert" });
-      no.addEventListener("click", () => {
-        confirm.hidden = true;
-        remove.hidden = false;
-        remove.focus();
-      });
-      yes.addEventListener("click", async () => {
-        yes.disabled = true;
-        try {
-          await ctx.deleteAccount();
-          dialog.close();
-        } catch {
-          failed.textContent = "تعذّر حذف الحساب. تحقّق من الاتصال وحاول مرة أخرى.";
-          yes.disabled = false;
-        }
-      });
+      const no = Button({ variant: "quiet", onclick: cancelDelete }, "إلغاء");
+      yes.addEventListener("click", confirmIdentity);
       confirm.replaceChildren(
         h("p", { className: "headline" }, "حذف الحساب؟"),
         h("p", { className: "callout" }, "تُحذف مهامك ومشاريعك وتذكيراتك من خادم زمام نهائياً، ولا يمكن استرجاعها. المشروع المشترك ينتقل إلى أقدم أعضائه. حذف الحساب لا يلغي اشتراك «زمام الاحترافية»: ألغه من إعدادات حسابك في App Store."),
-        failed,
         h("div", { className: "sheet-actions" }, yes, no),
       );
       confirm.hidden = false;
       remove.hidden = true;
       no.focus();
     });
+
+    // «تأكيد هويتك»: a new sign-in with a provider linked to the account, in its popup; its token
+    // goes with DELETE /v1/me and nowhere else (main.js, reauth.js). The session stays as it was.
+    function confirmIdentity() {
+      const failed = h("p", { className: "callout field-error", role: "alert" });
+      const status = h("p", { className: "callout muted", role: "status" });
+      const no = Button({ variant: "quiet", onclick: cancelDelete }, "إلغاء");
+      const logo = (id) => document.querySelector(`#${id} .provider-logo`)?.cloneNode(true) ?? null;
+      const providers = ctx.reauthProviders();
+      const buttons = providers.map((provider) => {
+        const apple = provider === "apple";
+        const button = h(
+          "button",
+          { type: "button", className: `provider-button ${apple ? "provider-apple" : "provider-google"} headline` },
+          logo(apple ? "signin-button" : "google-button"),
+          h("span", {}, apple ? "المتابعة بحساب أبل" : "المتابعة بحساب قوقل"),
+        );
+        button.addEventListener("click", () => verify(provider));
+        return button;
+      });
+      const setBusy = (busy) => {
+        for (const button of [...buttons, no]) button.disabled = busy;
+      };
+
+      async function verify(provider) {
+        failed.textContent = "";
+        status.textContent = "أكمل الدخول في النافذة التي فُتحت.";
+        let body;
+        try {
+          // Opens the popup now, inside the click.
+          body = await ctx.reauthenticate(provider);
+        } catch (problem) {
+          status.textContent = "";
+          failed.textContent = reauthErrorText(problem, provider) ?? "";
+          return;
+        }
+        setBusy(true);
+        status.textContent = "جارٍ حذف الحساب…";
+        try {
+          await ctx.deleteAccount(body);
+          dialog.close();
+        } catch (failure) {
+          status.textContent = "";
+          failed.textContent = deleteAccountErrorText(failure);
+          setBusy(false);
+          ctx.prepareReauth().catch(() => {});
+          buttons[providers.indexOf(provider)]?.focus();
+        }
+      }
+
+      const several = providers.length > 1;
+      confirm.replaceChildren(
+        h("p", { className: "headline", id: "settings-reauth-title" }, "تأكيد هويتك"),
+        h(
+          "p",
+          { className: "callout" },
+          several
+            ? "لحماية حسابك، سجّل الدخول مرة أخرى بحساب أبل أو قوقل الذي تستعمله في زمام. يُحذف الحساب بعد التحقق مباشرة، ولا يتغيّر دخولك في هذا المتصفح."
+            : "لحماية حسابك، سجّل الدخول مرة أخرى بالحساب الذي تستعمله في زمام. يُحذف الحساب بعد التحقق مباشرة، ولا يتغيّر دخولك في هذا المتصفح.",
+        ),
+        h("div", { className: "signin-providers", role: "group", "aria-labelledby": "settings-reauth-title" }, buttons),
+        status,
+        failed,
+        h("div", { className: "sheet-actions" }, no),
+      );
+      buttons[0]?.focus();
+    }
     const accountSection = h(
       "section",
       { className: "form-section", "aria-labelledby": "settings-account" },

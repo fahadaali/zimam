@@ -15,6 +15,7 @@ export interface AiRequest {
   prompt: string;
   /** JSON Schema of the object to return: every object closed, every property required. */
   schema: JsonSchema;
+  /** The output cap; `MAX_OUTPUT_TOKENS` when absent, and never more. */
   maxTokens?: number;
 }
 
@@ -67,7 +68,13 @@ interface ProviderOptions {
  */
 export const ANTHROPIC_MODEL = "claude-haiku-5-5";
 export const DEEPSEEK_MODEL = "deepseek-chat";
-const DEFAULT_MAX_TOKENS = 4096;
+/**
+ * The output cap of every call, and the most a request may ask for: a bound on what any one
+ * call can cost, whatever a caller passes.
+ */
+export const MAX_OUTPUT_TOKENS = 4096;
+
+const maxTokens = (request: AiRequest) => Math.min(request.maxTokens ?? MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS);
 
 function base(url: string): string {
   return url.replace(/\/+$/, "");
@@ -101,8 +108,15 @@ async function post(doFetch: Fetch, url: string, headers: Record<string, string>
   }
 }
 
+/**
+ * Headers for AI Gateway. `cf-aig-collect-log: false` keeps the gateway from logging the request
+ * and response bodies (the user's notes and tasks), as the privacy policy promises, whatever the
+ * gateway's own setting; its analytics counts and rate limiting do not need the logs.
+ */
 function gatewayHeaders(o: ProviderOptions): Record<string, string> {
-  return o.gatewayToken ? { "cf-aig-authorization": `Bearer ${o.gatewayToken}` } : {};
+  const headers: Record<string, string> = { "cf-aig-collect-log": "false" };
+  if (o.gatewayToken) headers["cf-aig-authorization"] = `Bearer ${o.gatewayToken}`;
+  return headers;
 }
 
 /** Anthropic Messages API through the gateway, with structured output (`output_config.format`). */
@@ -113,7 +127,7 @@ export class AnthropicProvider implements AiProvider {
   async complete(request: AiRequest): Promise<AiResult> {
     const body = {
       model: this.o.model ?? ANTHROPIC_MODEL,
-      max_tokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
+      max_tokens: maxTokens(request),
       system: request.system,
       messages: [{ role: "user", content: request.prompt }],
       output_config: { effort: "low", format: { type: "json_schema", schema: request.schema } },
@@ -153,7 +167,7 @@ export class DeepSeekProvider implements AiProvider {
     const system = `${request.system}\n\nReply with one JSON object only, matching this JSON Schema:\n${JSON.stringify(request.schema)}`;
     const body = {
       model: this.o.model ?? DEEPSEEK_MODEL,
-      max_tokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
+      max_tokens: maxTokens(request),
       messages: [
         { role: "system", content: system },
         { role: "user", content: request.prompt },

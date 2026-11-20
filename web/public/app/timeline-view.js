@@ -330,7 +330,9 @@ function timeline({ tasks, groups, groupOf, undated, label, empty }, ctx) {
     ctx.markLocalChange();
     paint({ keepScroll: true });
     try {
-      Object.assign(task, await boardApi.patchTask(task.id, patch));
+      // In turn with the open task's edits (main.js queueTaskRequest), so neither undoes the other.
+      const send = () => boardApi.patchTask(task.id, patch);
+      Object.assign(task, await (ctx.queueTaskRequest ? ctx.queueTaskRequest(task.id, send) : send()));
       ctx.announce(`«${task.title}»: ${spanText(taskSpan(task), ctx)}.`);
       paint({ keepScroll: true });
       ctx.onChanged?.(task); // the same task open beside the timeline follows

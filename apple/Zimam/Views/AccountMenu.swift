@@ -29,6 +29,8 @@ struct AccountMenu: View {
             } else {
                 Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
                     .accessibilityLabel("الحساب والمزامنة")
+                    // The warning the symbol shows, said too.
+                    .accessibilityValue("تعذّرت المزامنة")
             }
         }
         // On the menu itself: a dialog on one of its buttons would go with the closed menu.

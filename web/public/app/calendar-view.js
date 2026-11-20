@@ -410,7 +410,10 @@ export async function viewCalendar(ctx) {
     const where = dualDate(day, { primary: kind(), today: ctx.today });
     await paint(follow ? `[data-day="${day}"]` : null);
     try {
-      Object.assign(task, await boardApi.patchTask(id, patch));
+      // After the open task's edits still on their way (main.js queueTaskRequest): the server writes
+      // the whole task for each request, so two at once could undo each other.
+      const send = () => boardApi.patchTask(id, patch);
+      Object.assign(task, await (ctx.queueTaskRequest ? ctx.queueTaskRequest(id, send) : send()));
       index();
       ctx.onChanged?.(task); // the same task open beside the calendar follows
       ctx.announce(`نُقلت إلى ${where}.`);

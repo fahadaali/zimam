@@ -6,6 +6,10 @@ import ZimamKit
 /// The accessory widgets: the iPhone Lock Screen (ZimamWidgets) and the watch complications
 /// (ZimamWatchWidgets) share these views; each target brings its own provider of
 /// `GlanceSnapshot`.
+///
+/// Task titles are `privacySensitive`: while the iPhone is locked, or the watch is locked or its
+/// wrist is down, the system shows a placeholder in their place. Counts, dates and prayer times
+/// stay visible.
 struct GlanceEntry: TimelineEntry {
     let date: Date
     let snapshot: GlanceSnapshot
@@ -149,6 +153,7 @@ private struct GlanceRectangular: View {
                     .font(ZimamType.headline)
                     .foregroundStyle(style.primary)
                     .lineLimit(whenText(next, formatter: dates) == nil ? 2 : 1)
+                    .privacySensitive()
                 if let when = whenText(next, formatter: dates) {
                     HStack(spacing: ZimamSpacing.space1) {
                         if next.prayerText != nil {
@@ -197,6 +202,7 @@ private struct GlanceInline: View {
             Text("زمام")
         } else if let next = snapshot.next(at: entry.date) {
             Label(next.title, systemImage: "circle")
+                .privacySensitive()
         } else {
             Label("لا مهام اليوم", systemImage: "checkmark.circle")
         }
@@ -210,23 +216,32 @@ private struct GlanceInline: View {
 private struct GlanceCorner: View {
     let entry: GlanceEntry
     @Environment(\.widgetRenderingMode) private var mode
+    @Environment(\.redactionReasons) private var redaction
 
     var body: some View {
         let snapshot = entry.snapshot
         let style = GlanceStyle(mode: mode)
+        let title = snapshot.isSignedIn ? snapshot.next(at: entry.date)?.title : nil
         Text(snapshot.isSignedIn ? glanceNumber(snapshot.openCount) : "زمام")
             .font(ZimamType.headline)
             .foregroundStyle(style.primary)
             .widgetAccentable()
+            // A plain Text, as the curved label takes: the title gives way to a generic line while
+            // private content is hidden (`privacySensitive` elsewhere), and is not read out then.
             .widgetLabel {
-                Text(label(snapshot))
+                Text(title.map { isHidden ? "المهمة التالية" : $0 } ?? label(snapshot))
             }
-            .accessibilityLabel(label(snapshot))
+            .accessibilityLabel(title.map { isHidden ? openLabel(snapshot) : $0 } ?? label(snapshot))
     }
 
+    private var isHidden: Bool { redaction.contains(.privacy) }
+
     private func label(_ snapshot: GlanceSnapshot) -> String {
-        guard snapshot.isSignedIn else { return "سجّل الدخول" }
-        return snapshot.next(at: entry.date)?.title ?? "لا مهام اليوم"
+        snapshot.isSignedIn ? "لا مهام اليوم" : "سجّل الدخول"
+    }
+
+    private func openLabel(_ snapshot: GlanceSnapshot) -> String {
+        "\(ArabicCount.tasks(snapshot.openCount, locale: ZimamLocale.current)) مفتوحة اليوم"
     }
 }
 #endif

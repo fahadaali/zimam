@@ -7,6 +7,8 @@ import WidgetKit
 /// «المهمة الجارية» on the Lock Screen and in the Dynamic Island: the task, its project,
 /// a timer counting up from the start, and «إنجاز» (CompleteFocusTaskIntent) and «إنهاء»
 /// (EndFocusIntent). Arabic and right to left; the Dynamic Island is always dark.
+/// The task's title and project are `privacySensitive`: hidden while the iPhone is locked, like the
+/// Lock Screen widgets; the timer and the actions stay.
 struct FocusLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: FocusActivityAttributes.self) { context in
@@ -31,6 +33,7 @@ struct FocusLiveActivity: Widget {
                         .font(ZimamType.headline)
                         .foregroundStyle(ZimamColor.ink)
                         .lineLimit(1)
+                        .privacySensitive()
                         .zimamActivityEnvironment(dark: true)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
@@ -40,6 +43,7 @@ struct FocusLiveActivity: Widget {
                                 .font(ZimamType.caption)
                                 .foregroundStyle(ZimamColor.inkMuted)
                                 .lineLimit(1)
+                                .privacySensitive()
                         }
                         FocusActions(taskId: context.attributes.taskId, title: context.shownTitle)
                     }
@@ -86,11 +90,13 @@ private struct FocusLockScreenView: View {
                     .font(ZimamType.headline)
                     .foregroundStyle(ZimamColor.ink)
                     .lineLimit(2)
+                    .privacySensitive()
                 if let project = context.shownProject {
                     Text(project)
                         .font(ZimamType.caption)
                         .foregroundStyle(ZimamColor.inkMuted)
                         .lineLimit(1)
+                        .privacySensitive()
                 }
             }
             FocusActions(taskId: context.attributes.taskId, title: context.shownTitle)
@@ -101,9 +107,15 @@ private struct FocusLockScreenView: View {
 }
 
 /// «إنجاز» (the action, in brand) and «إنهاء» (secondary, bordered in line-strong), each 44pt tall.
+/// Their spoken labels name the task only while its title is shown.
 private struct FocusActions: View {
     let taskId: UUID
     let title: String
+    @Environment(\.redactionReasons) private var redaction
+
+    private var isHidden: Bool { redaction.contains(.privacy) }
+    private var doneLabel: String { isHidden ? "إنجاز المهمة" : "إنجاز \(title)" }
+    private var endLabel: String { isHidden ? "إنهاء التركيز" : "إنهاء التركيز على \(title)" }
 
     var body: some View {
         HStack(spacing: ZimamSpacing.space2) {
@@ -115,7 +127,7 @@ private struct FocusActions: View {
                     .background(ZimamColor.brand, in: RoundedRectangle(cornerRadius: ZimamRadius.radiusMd))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("إنجاز \(title)")
+            .accessibilityLabel(doneLabel)
 
             Button(intent: EndFocusIntent(taskId: taskId)) {
                 Text("إنهاء")
@@ -125,7 +137,7 @@ private struct FocusActions: View {
                     .overlay(RoundedRectangle(cornerRadius: ZimamRadius.radiusMd).stroke(ZimamColor.lineStrong))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("إنهاء التركيز على \(title)")
+            .accessibilityLabel(endLabel)
         }
     }
 }

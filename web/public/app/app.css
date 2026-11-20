@@ -242,7 +242,22 @@
 }
 
 .zm-check {
+  position: relative;
   transition: background-color var(--duration-complete) ease, border-color var(--duration-complete) ease;
+}
+
+/* The circle is drawn at 24px (bundle.css); its target reaches 44px around it, within the row's
+   padding and the gap before the title, as the title's own target does. */
+.zm-check::after {
+  content: "";
+  position: absolute;
+  inset: calc((var(--space-11) - var(--space-6)) / -2);
+  border-radius: 50%;
+}
+
+/* A viewer's row: the circle shows the state but does not change it. */
+.zm-check:disabled {
+  cursor: default;
 }
 
 .zm-task {

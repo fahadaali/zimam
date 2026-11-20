@@ -8,7 +8,7 @@ import { PENDING_TTL_MS, STATE_TTL_MS } from "../src/imports/oauth";
 import { TRELLO_PAGE_SCRIPT } from "../src/routes/import-oauth";
 import { handleImportBatch, IMPORT_QUEUE } from "../src/imports/queue";
 import todoistApiJson from "./fixtures/imports/todoist-api.json?raw";
-import { fakeAi, signIn, testAppleKeys, testGoogleKeys } from "./helpers";
+import { fakeAi, reauthBody, signIn, testAppleKeys, testGoogleKeys } from "./helpers";
 
 // MARK: Fakes
 
@@ -825,7 +825,7 @@ describe("OAuth imports", () => {
 
     await env.DB.prepare(`DELETE FROM import_jobs WHERE user_id = ?`).bind(userId).run();
     await start(token, "notion");
-    expect((await request("DELETE", "/v1/me", { token })).status).toBeLessThan(300);
+    expect((await request("DELETE", "/v1/me", { token, json: await reauthBody(token) })).status).toBe(204);
     expect(await env.DB.prepare(`SELECT COUNT(*) AS n FROM import_oauth_states WHERE user_id = ?`).bind(userId).first("n")).toBe(0);
     expect(await env.DB.prepare(`SELECT COUNT(*) AS n FROM import_oauth_pending WHERE user_id = ?`).bind(userId).first("n")).toBe(0);
   });

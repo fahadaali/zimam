@@ -377,9 +377,19 @@ private struct TaskInspector: View {
         }
         // The details' own «إنجاز» gives way to the one above.
         .environment(\.taskCompleteInToolbar, false)
+        // Deleting the task from its details closes the inspector, not the window.
+        .environment(\.closeInspectedTask, closeTask)
         // A new identity per task for the whole stack: the form loads the newly selected task's
         // fields, and a subtask opened inside it closes with it.
         .id(route?.id)
+    }
+
+    /// Closes the inspector for the task it shows; any other task (a subtask pushed inside it)
+    /// is left to go back with `dismiss`.
+    private func closeTask(_ id: UUID) -> Bool {
+        guard id == route?.id else { return false }
+        onClose()
+        return true
     }
 }
 

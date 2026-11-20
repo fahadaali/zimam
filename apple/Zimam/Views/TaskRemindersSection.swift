@@ -28,6 +28,11 @@ struct TaskRemindersSection: View {
     /// A day or a prayer to count from; an undated task at a prayer repeats daily.
     private var hasTime: Bool { task.dueDate != nil || task.duePrayer != nil }
 
+    /// The task's time or one of its reminders is a prayer, so it needs the place for prayer times.
+    private var usesPrayer: Bool {
+        task.duePrayer != nil || reminders.contains { $0.kindRaw == ReminderRecord.Kind.prayer.rawValue }
+    }
+
     /// The relative ones first, soonest first; then the rest as they were added.
     private var sorted: [ReminderItem] {
         let relative = reminders.filter { $0.kindRaw == ReminderRecord.Kind.relative.rawValue }
@@ -86,7 +91,8 @@ struct TaskRemindersSection: View {
         } header: {
             Text("التذكيرات")
         } footer: {
-            TaskRemindersFooter(hasTime: hasTime, isUnscheduled: task.dueDate == nil, hasPlaces: hasPlaces)
+            TaskRemindersFooter(hasTime: hasTime, isUnscheduled: task.dueDate == nil, hasPlaces: hasPlaces,
+                                usesPrayer: usesPrayer)
         }
         // A reminder added from a sheet that has just closed.
         .sensoryFeedback(.success, trigger: reminders.count) { old, new in new > old }
@@ -234,12 +240,14 @@ private struct TaskRemindersFooter: View {
     /// The task has no due day, so a prayer reminder repeats every day.
     let isUnscheduled: Bool
     let hasPlaces: Bool
+    /// A prayer time or a prayer reminder: only then does a missing place keep reminders away.
+    let usesPrayer: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
             if notifications.isDenied {
                 Text("الإشعارات متوقفة لزمام. فعّلها من إعدادات النظام لتصلك التذكيرات.")
-            } else if location.coordinate == nil {
+            } else if usesPrayer && location.coordinate == nil {
                 Text("تذكيرات الصلاة تحتاج موقعك. حدّده من الإعدادات.")
             } else if !hasTime {
                 Text("حدّد موعداً للمهمة لتختار «عند الموعد» أو «قبل الموعد».")

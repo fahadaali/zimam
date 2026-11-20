@@ -56,11 +56,22 @@ export function progressText(done, total) {
   return `${arabicNumber(done)} من ${arabicNumber(total)}`;
 }
 
-/** «مهمة واحدة», «مهمتان», «٣ مهام», «١١ مهمة». */
+/** The search's count: «لا نتائج.», «نتيجة واحدة», «نتيجتان», «٣ نتائج», «١١ نتيجة». */
+export function resultCount(n) {
+  if (n === 0) return "لا نتائج.";
+  if (n === 1) return "نتيجة واحدة";
+  if (n === 2) return "نتيجتان";
+  const rest = n % 100;
+  if (rest >= 3 && rest <= 10) return `${arabicNumber(n)} نتائج`;
+  return `${arabicNumber(n)} نتيجة`;
+}
+
+/** «مهمة واحدة», «مهمتان», «٣ مهام», «١١ مهمة», «١٠٣ مهام»: the noun follows the last two digits. */
 export function taskCount(n) {
   if (n === 0) return "لا مهام";
   if (n === 1) return "مهمة واحدة";
   if (n === 2) return "مهمتان";
-  if (n >= 3 && n <= 10) return `${arabicNumber(n)} مهام`;
+  const rest = n % 100;
+  if (rest >= 3 && rest <= 10) return `${arabicNumber(n)} مهام`;
   return `${arabicNumber(n)} مهمة`;
 }

@@ -26,9 +26,12 @@ export async function verifyAppleToken(
   keys: JWTVerifyGetKey,
   audiences: string[],
   nonce: string,
+  /** Also requires the token's `iat` within this age ("10m"), for re-authentication. */
+  maxTokenAge?: string,
 ): Promise<AppleIdentity> {
   const { payload } = await jwtVerify(token, keys, {
     issuer: APPLE_ISSUER,
+    ...(maxTokenAge ? { maxTokenAge } : {}),
     audience: audiences,
     algorithms: ["RS256"],
   });

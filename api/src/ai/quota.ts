@@ -16,7 +16,7 @@ export function resetDate(now: Date): string {
 }
 
 /** A whole number of requests, or null when the value is missing or not one. */
-function parseLimit(value: string | undefined): number | null {
+export function parseLimit(value: string | undefined): number | null {
   const text = value?.trim() ?? "";
   if (!/^\d+$/.test(text)) return null;
   const n = Number.parseInt(text, 10);

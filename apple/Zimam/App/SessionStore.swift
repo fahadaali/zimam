@@ -25,6 +25,8 @@ final class SessionStore {
     let api: APIClient
 
     @ObservationIgnored private var pendingNonce: String?
+    /// The nonce of the Apple request that confirms the user's identity before deletion.
+    @ObservationIgnored private var reauthNonce: String?
     /// The settings as the server last returned them: what a save that failed goes back to.
     @ObservationIgnored private var confirmedSettings: User.Settings?
     /// Settings saves go out one at a time, in order, so the server ends with the last one. Nil
@@ -295,19 +297,106 @@ final class SessionStore {
         endSession()
     }
 
-    /// Deletes the account on the server, then ends the session here; local data is wiped
-    /// by the caller, as on sign-out. Returns false, still signed in, if the server did not
-    /// confirm the deletion (an expired session is handled by the next sync, which signs out).
-    func deleteAccount() async -> Bool {
+    // MARK: Deleting the account
+
+    /// What confirming the user's identity before deletion gave: a fresh sign-in token to send
+    /// with `deleteAccount`, a sheet the user closed, or why it failed.
+    enum IdentityCheck: Equatable {
+        case confirmed(Reauthentication)
+        case cancelled
+        case failed(String)
+    }
+
+    /// Fills the Apple request that confirms who is deleting the account: a fresh nonce of its
+    /// own (a sign-in under way keeps `pendingNonce`), and no name or email, which it does not need.
+    func prepareReauthentication(_ request: ASAuthorizationAppleIDRequest) {
+        let nonce = Self.randomNonce()
+        reauthNonce = nonce
+        request.requestedScopes = []
+        request.nonce = Self.sha256(nonce)
+    }
+
+    /// Apple's answer to `prepareReauthentication`, as proof for `deleteAccount`. Only reads the
+    /// token: the session stays as it is, and no new one is made.
+    func appleReauthentication(_ result: Result<ASAuthorization, Error>) -> IdentityCheck {
+        let failed = IdentityCheck.failed("تعذّر تأكيد هويتك. حاول مرة أخرى.")
+        switch result {
+        case .failure(let error):
+            if (error as? ASAuthorizationError)?.code == .canceled { return .cancelled }
+            return failed
+        case .success(let authorization):
+            guard let nonce = reauthNonce,
+                  let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                  let tokenData = credential.identityToken,
+                  let identityToken = String(data: tokenData, encoding: .utf8) else {
+                return failed
+            }
+            reauthNonce = nil
+            let authorizationCode = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
+            return .confirmed(.apple(identityToken: identityToken, nonce: nonce, authorizationCode: authorizationCode))
+        }
+    }
+
+    /// Google's sign-in sheet again, as proof for `deleteAccount`: the ID token for a fresh nonce,
+    /// without exchanging it for a session. The session stays as it is.
+    func googleReauthentication() async -> IdentityCheck {
+        let failed = IdentityCheck.failed("تعذّر تأكيد هويتك بحساب قوقل. حاول مرة أخرى.")
+        guard Self.isGoogleConfigured else { return failed }
+        let nonce = Self.randomNonce()
+        let result: GIDSignInResult
         do {
-            try await api.deleteAccount()
+            #if os(iOS)
+            guard let presenter = Self.presentingViewController() else { return failed }
+            result = try await GIDSignIn.sharedInstance.signIn(
+                withPresenting: presenter, hint: nil, additionalScopes: nil, nonce: Self.sha256(nonce))
+            #else
+            guard let window = NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first(where: \.isVisible) else {
+                return failed
+            }
+            result = try await GIDSignIn.sharedInstance.signIn(
+                withPresenting: window, hint: nil, additionalScopes: nil, nonce: Self.sha256(nonce))
+            #endif
         } catch {
-            return false
+            if (error as? GIDSignInError)?.code == .canceled { return .cancelled }
+            return failed
+        }
+        guard let idToken = result.user.idToken?.tokenString else { return failed }
+        return .confirmed(.google(idToken: idToken, nonce: nonce))
+    }
+
+    /// Deletes the account on the server with the fresh sign-in `reauth`, then ends the session
+    /// here; local data is wiped by the caller, as on sign-out. Returns why it failed, still signed
+    /// in, if the server did not confirm the deletion (an expired session is handled by the next
+    /// sync, which signs out); nil once deleted.
+    func deleteAccount(_ reauth: Reauthentication) async -> String? {
+        do {
+            try await api.deleteAccount(reauth)
+        } catch {
+            return Self.deletionMessage(for: error)
         }
         // Also ends Zimam's access to the Google account, if this device signed in with Google.
         try? await GIDSignIn.sharedInstance.disconnect()
         endSession()
-        return true
+        return nil
+    }
+
+    /// Why the server refused to delete the account. `403 reauth_mismatch`: the sign-in was with
+    /// an account other than this one; `403 reauth_required`: no fresh sign-in reached it (too old,
+    /// or not readable).
+    nonisolated static func deletionMessage(for error: Error) -> String {
+        deletionMessage(code: (error as? APIError)?.code)
+    }
+
+    /// `deletionMessage(for:)` by the error's code (nil for a failure without one).
+    nonisolated static func deletionMessage(code: String?) -> String {
+        switch code {
+        case "reauth_mismatch":
+            return "سجّلت الدخول بحساب غير هذا الحساب، فلم يُحذف شيء. احذفه مرة أخرى وسجّل الدخول بالحساب الذي تدخل به زمام."
+        case "reauth_required":
+            return "لم يتأكد زمام من هويتك، فلم يُحذف شيء. احذف الحساب مرة أخرى وسجّل الدخول حين يُطلب منك."
+        default:
+            return "تعذّر حذف الحساب. تحقّق من الاتصال وحاول مرة أخرى."
+        }
     }
 
     /// Called when the server rejects the token (expired or revoked).

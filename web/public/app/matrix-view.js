@@ -183,7 +183,9 @@ export async function viewMatrix(ctx) {
     if (landed.indexOf(task) >= VISIBLE_ROWS) expanded.add(to);
     paint(focus);
     try {
-      Object.assign(task, await boardApi.patchTask(task.id, patch));
+      // In turn with the open task's edits (main.js queueTaskRequest), so neither undoes the other.
+      const send = () => boardApi.patchTask(task.id, patch);
+      Object.assign(task, await (ctx.queueTaskRequest ? ctx.queueTaskRequest(task.id, send) : send()));
       ctx.onChanged?.(task); // the same task open beside the matrix follows
       ctx.announce(`نُقلت إلى «${target.title}».`);
     } catch (error) {

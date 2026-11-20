@@ -20,6 +20,7 @@ import {
 } from "./lib/google.js";
 import { icon } from "./lib/icons.js";
 import { randomNonce, sha256Hex } from "./lib/nonce.js";
+import { reauthProviders } from "./lib/reauth.js";
 import { arabicNumber } from "./lib/numbers.js";
 import { byManualOrder } from "./lib/order.js";
 import { prayerPhrase } from "./lib/prayer.js";
@@ -27,7 +28,7 @@ import { createRealtime, realtimeUrl } from "./lib/realtime.js";
 import { parseRoute as parseHash, routeKey, withTask } from "./lib/routes.js";
 import { hasPendingImport, rememberPendingImport, viewImport } from "./import-view.js";
 import { rememberPendingJoin, takePendingJoin, viewJoin } from "./invite-view.js";
-import { groupByDay, isOpen, priorityKey, progressText, taskCount, todayList, topLevel } from "./lib/tasks.js";
+import { groupByDay, isOpen, priorityKey, progressText, resultCount, taskCount, todayList, topLevel } from "./lib/tasks.js";
 // Features in their own modules: the assistant, the board, the calendar and sharing.
 import { AT_TIME_FAILED, forgetSummaries, resetAddAssistant, setupAddAssistant, todaySummary } from "./assistant-view.js";
 import { boardView, layoutOf, layoutToggle } from "./board-view.js";
@@ -46,10 +47,12 @@ import { viewMatrix } from "./matrix-view.js";
 import { projectTimeline, viewTimeline } from "./timeline-view.js";
 // The frame and the open task.
 import { createShell } from "./shell.js";
+import { forgetAvatar } from "./avatar.js";
 import { createTaskPane } from "./task-pane.js";
 import { swipeActions, swipeToDelete } from "./swipe.js";
 import { createPrayers } from "./prayer-view.js";
 import { openSettings } from "./settings-view.js";
+import { createReauth } from "./reauth.js";
 import { showTaskMenu } from "./move-sheet.js";
 
 const APPLE_CLIENT_ID = "app.zimam.ios.web";
@@ -177,7 +180,9 @@ function forgetAccount() {
   frame.forget();
   forgetSummaries();
   forgetMembers();
+  forgetAvatar();
   prayers.forget();
+  reauth.cancel();
   openFolds.clear();
   for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
   // The place in the URL (its project, section, search or task) was the account's: the next one
@@ -260,8 +265,14 @@ els.googleButton.addEventListener("click", () => {
   location.assign(authUrl("redirect"));
 });
 
+// The fresh sign-in before deleting the account (reauth.js): its own nonces and popups, and its
+// answer only ever becomes the body of DELETE /v1/me, never a session.
+const reauth = createReauth({ appleClientId: APPLE_CLIENT_ID, googleClientId: GOOGLE_CLIENT_ID });
+
 /** Google's answer from the popup, taken only for the attempt that opened it. */
 function receiveGoogleAnswer(answer) {
+  // An answer for «تأكيد هويتك» is the settings sheet's, and must not sign in here.
+  if (reauth.receive(answer)) return;
   const attempt = googleAttempt;
   if (!attempt || !googleStateMatches(attempt.state, answer.state)) return;
   googleAttempt = null;
@@ -485,8 +496,11 @@ async function liveRefresh() {
     return;
   }
   // The account too: settings, name or photo changed on another device.
+  const signedIn = state.me?.id;
   const [, me] = await Promise.all([refreshProjects(), api.me().catch(() => null)]);
-  if (me && accountKey(me) !== accountKey(state.me)) {
+  // Signed out (or into another account) meanwhile: nothing of this reload is drawn.
+  if (els.shell.hidden || !signedIn || state.me?.id !== signedIn) return;
+  if (me && me.id === signedIn && accountKey(me) !== accountKey(state.me)) {
     state.me = me;
     prayers.load();
   }
@@ -636,8 +650,13 @@ $("settings-button").addEventListener("click", () =>
     openPrayers: () => prayers.openSheet(),
     sync: syncNow,
     signOut: () => els.signout.click(),
-    deleteAccount: async () => {
-      await api.deleteMe();
+    // «تأكيد هويتك»: the providers to offer, their nonces, and the popup for one (reauth.js).
+    reauthProviders: () => reauthProviders(state.me, { google: reauth.googleEnabled() }),
+    prepareReauth: () => reauth.prepare(),
+    reauthenticate: (provider) => reauth.signIn(provider),
+    cancelReauth: () => reauth.cancel(),
+    deleteAccount: async (body) => {
+      await api.deleteMe(body);
       session.clear();
       showSignIn("حُذف حسابك.");
     },
@@ -865,7 +884,7 @@ async function moveTask(taskId, { projectId, sectionId, label }) {
   clearError();
   state.localChangeAt = Date.now();
   try {
-    const saved = await boardApi.patchTask(taskId, { projectId, sectionId });
+    const saved = await queueTaskRequest(taskId, () => boardApi.patchTask(taskId, { projectId, sectionId }));
     if (known) Object.assign(known, saved);
     announce(`نُقلت «${saved.title}» إلى ${label}.`);
     pane.refresh(saved);
@@ -930,6 +949,7 @@ function taskItem(task, options) {
     prayer: prayers.chipFor(task),
     project: options.showProject && task.projectId ? projectName(task.projectId) : null,
     selected: pane.currentId() === task.id,
+    canToggle: canEdit(roleFor(task)),
     onToggle: () => toggleTask(task, li),
     onOpen: () => selectTask(task),
   });
@@ -1371,8 +1391,7 @@ async function viewSearch({ q }) {
   }
   const { tasks, truncated } = await api.tasks({ q: q.trim() });
   const found = topLevel(tasks);
-  const count = found.length === 0 ? "لا نتائج." : found.length === 1 ? "نتيجة واحدة" : `${arabicNumber(found.length)} نتائج`;
-  out.push(h("p", { className: "caption muted result-count", role: "status" }, count));
+  out.push(h("p", { className: "caption muted result-count", role: "status" }, resultCount(found.length)));
   if (truncated) out.push(cutNote());
   if (found.length) out.push(taskList(found, { leaveWhenDone: false, label: "نتائج البحث" }));
   return out;
@@ -1490,6 +1509,12 @@ function defaultDue(route) {
 }
 
 function openAdd() {
+  // A page left open past midnight: «اليوم» and «غداً» are the new day's, and the list behind follows.
+  const now = localIsoDate();
+  if (now !== state.today) {
+    state.today = now;
+    render({ focus: false });
+  }
   addDialog.form.reset();
   addDialog.error.textContent = "";
   addDialog.titleError.textContent = "";

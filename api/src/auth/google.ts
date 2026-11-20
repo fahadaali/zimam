@@ -29,10 +29,13 @@ export async function verifyGoogleToken(
   keys: JWTVerifyGetKey,
   audiences: string[],
   nonce: string,
+  /** Also requires the token's `iat` within this age ("10m"), for re-authentication. */
+  maxTokenAge?: string,
 ): Promise<GoogleIdentity> {
   if (audiences.length === 0) throw new Error("No Google client IDs configured");
   const { payload } = await jwtVerify(token, keys, {
     issuer: GOOGLE_ISSUERS,
+    ...(maxTokenAge ? { maxTokenAge } : {}),
     audience: audiences,
     algorithms: ["RS256"],
   });

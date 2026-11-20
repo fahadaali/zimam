@@ -165,9 +165,9 @@ struct SubtaskBreakdown: View {
                 selected = Set(titles.indices)
                 phase = titles.isEmpty ? .failed("لم يقترح المساعد خطوات لهذه المهمة.") : .ready(titles)
             } catch {
-                let problem = AssistantProblem(error)
-                needsPro = problem == .proRequired
-                phase = .failed(problem.message(formatter: formatter))
+                let failure = AssistantFailure(error, formatter: formatter)
+                needsPro = failure.needsPro
+                phase = .failed(failure.message)
             }
         }
     }
@@ -205,6 +205,8 @@ private struct StepToggle: View {
             HStack(spacing: ZimamSpacing.space2) {
                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isOn ? ZimamColor.brand : ZimamColor.lineStrong)
+                    // The tick is the `.isSelected` trait below, not the symbol's name.
+                    .accessibilityHidden(true)
                 Text(title)
                     .foregroundStyle(ZimamColor.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -268,9 +270,9 @@ struct DaySummaryRow: View {
                 let summary = try await session.api.daySummary(day: today)
                 phase = .ready(summary)
             } catch {
-                let problem = AssistantProblem(error)
-                needsPro = problem == .proRequired
-                phase = .failed(problem.message(formatter: formatter))
+                let failure = AssistantFailure(error, formatter: formatter)
+                needsPro = failure.needsPro
+                phase = .failed(failure.message)
             }
         }
     }

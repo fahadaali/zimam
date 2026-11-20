@@ -33,3 +33,12 @@ export function prayerPhrase(prayer, offsetMinutes) {
   if (offset === 0) return `عند ${name}`;
   return `${offset < 0 ? "قبل" : "بعد"} ${name} ${durationPhrase(offset)}`;
 }
+
+/**
+ * A place as the server keeps it for prayer times: to one decimal, about 11 km, the city and not the
+ * street, as the privacy policy says and the app sends it (SessionStore.swift).
+ */
+export function cityLevel({ latitude, longitude }) {
+  const round = (n) => Math.round(n * 10) / 10;
+  return { latitude: round(latitude), longitude: round(longitude) };
+}

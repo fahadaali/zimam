@@ -160,4 +160,65 @@ final class ReminderPlannerTests {
         #expect(result.last?.date == now.addingTimeInterval(TimeInterval(ReminderPlanner.defaultLimit) * 3600))
         #expect(plan([task], reminders, schedule: nil, limit: 5).count == 5)
     }
+
+    private func hourly(_ task: PlannerTask, hours: ClosedRange<Int>) -> [PlannerReminder] {
+        hours.map { hour in
+            let at = ReminderPlanner.isoString(from: now.addingTimeInterval(TimeInterval(hour) * 3600), timeZone: riyadh)
+            return PlannerReminder(id: UUID(), taskId: task.id, kind: .time, at: at)
+        }
+    }
+
+    @Test func aWindowThatFitsReachesItsEnd() {
+        let task = PlannerTask(id: UUID(), title: "كل ساعة")
+        let window = ReminderPlanner.planWindow(tasks: [task], reminders: hourly(task, hours: 1...10), schedule: nil,
+                                                now: now, formatter: formatter)
+        #expect(window.notifications.count == 10)
+        #expect(window.scheduledThrough == nil)
+        // Exactly full is not over the budget.
+        let full = ReminderPlanner.planWindow(tasks: [task], reminders: hourly(task, hours: 1...10), schedule: nil,
+                                              now: now, formatter: formatter, limit: 10)
+        #expect(full.scheduledThrough == nil)
+        // What fires after the 14 days is the server's anyway: not left out of the budget.
+        let past = ReminderPlanner.planWindow(tasks: [task], reminders: hourly(task, hours: 1...400), schedule: nil,
+                                              now: now, formatter: formatter, limit: 400)
+        #expect(past.notifications.count == ReminderPlanner.windowDays * 24)
+        #expect(past.scheduledThrough == nil)
+    }
+
+    @Test func aFullBudgetReachesJustBeforeTheFirstLeftOut() throws {
+        let task = PlannerTask(id: UUID(), title: "كل ساعة")
+        let reminders = hourly(task, hours: 1...100)
+        let window = ReminderPlanner.planWindow(tasks: [task], reminders: reminders.reversed(), schedule: nil,
+                                                now: now, formatter: formatter, limit: 5)
+        #expect(window.notifications == plan([task], reminders, schedule: nil, limit: 5))
+        #expect(window.notifications.last?.date == now.addingTimeInterval(5 * 3600))
+        let through = try #require(window.scheduledThrough)
+        let firstLeftOut = now.addingTimeInterval(6 * 3600)
+        #expect(through < firstLeftOut)
+        #expect(through >= window.notifications.last!.date)
+        // In the server's milliseconds, the one left out is after it.
+        #expect(Int64((through.timeIntervalSince1970 * 1000).rounded(.down)) < Int64(firstLeftOut.timeIntervalSince1970 * 1000))
+    }
+
+    @Test func remindersFoldedIntoOneAreNotLeftOut() {
+        let task = PlannerTask(id: UUID(), title: "مراجعة")
+        // Two reminders of one task in the same minute make one notification; the second is not
+        // over the budget even when the budget is full.
+        let at = ReminderPlanner.isoString(from: now.addingTimeInterval(3600), timeZone: riyadh)
+        let reminders = [PlannerReminder(id: UUID(), taskId: task.id, kind: .time, at: at),
+                         PlannerReminder(id: UUID(), taskId: task.id, kind: .time, at: at)]
+        let window = ReminderPlanner.planWindow(tasks: [task], reminders: reminders, schedule: nil,
+                                                now: now, formatter: formatter, limit: 1)
+        #expect(window.notifications.count == 1)
+        #expect(window.scheduledThrough == nil)
+    }
+
+    @Test func noBudgetSchedulesNothingAndReportsNow() throws {
+        let task = PlannerTask(id: UUID(), title: "كل ساعة")
+        let window = ReminderPlanner.planWindow(tasks: [task], reminders: hourly(task, hours: 1...3), schedule: nil,
+                                                now: now, formatter: formatter, limit: 0)
+        #expect(window.notifications.isEmpty)
+        let through = try #require(window.scheduledThrough)
+        #expect(through < now.addingTimeInterval(3600))
+    }
 }
