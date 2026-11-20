@@ -152,6 +152,8 @@ struct ScreenHeader: View {
                 .font(ZimamType.display)
                 .lineSpacing(ZimamType.displayLineSpacing)
                 .foregroundStyle(ZimamColor.ink)
+                // The screen's title: VoiceOver's headings rotor finds it, as the section headers.
+                .accessibilityAddTraits(.isHeader)
             if let subtitle {
                 Text(subtitle)
                     .font(ZimamType.caption)

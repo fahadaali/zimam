@@ -19,7 +19,8 @@ private struct CalendarTaskActions: ViewModifier {
             .draggable(TaskDragItem(id: task.id)) { TaskDragPreview(title: task.title) }
             .contextMenu {
                 if let onComplete {
-                    Button("إنجاز", systemImage: "checkmark.circle", action: onComplete)
+                    // A task completed a moment ago lingers here; the same item takes it back.
+                    Button(task.isDone ? "إلغاء الإنجاز" : "إنجاز", systemImage: "checkmark.circle", action: onComplete)
                 }
                 Button("نقل إلى…", systemImage: "calendar") { onMove(task.id) }
             }

@@ -293,6 +293,12 @@ final class NotificationScheduler {
     /// «إنجاز» completes the task; «تأجيل ساعة» adds a one-off reminder an hour from now.
     /// Both sync right away, since the app may be in the background.
     private func handle(action: String, taskId: UUID?) async {
+        // Tapping the reminder itself opens its task, as a widget's link or Siri does: `MainView`
+        // shows it once it is on screen. Prayer alerts carry no task and only open the app.
+        if action == UNNotificationDefaultActionIdentifier {
+            if let taskId { TaskOpener.shared.pending = taskId }
+            return
+        }
         guard action == Self.doneAction || action == Self.snoozeAction, let taskId else { return }
         // A reminder pushed by the server may name a task this device has not pulled yet.
         if fetchTask(taskId) == nil { await sync.sync() }

@@ -58,6 +58,7 @@ struct UpcomingView: View {
                         .font(ZimamType.headline)
                         .foregroundStyle(ZimamColor.ink)
                         .textCase(nil)
+                        .accessibilityAddTraits(.isHeader)
                 }
             }
         }

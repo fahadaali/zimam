@@ -205,6 +205,8 @@ private struct StepToggle: View {
             HStack(spacing: ZimamSpacing.space2) {
                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isOn ? ZimamColor.brand : ZimamColor.lineStrong)
+                    // The tick is the `.isSelected` trait below, not the symbol's name.
+                    .accessibilityHidden(true)
                 Text(title)
                     .foregroundStyle(ZimamColor.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
