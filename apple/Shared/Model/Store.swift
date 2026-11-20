@@ -44,7 +44,7 @@ struct Store {
         }
         let record = TaskRecord(projectId: projectId, sectionId: section, title: Self.taskTitle(title),
                                 notes: trimmedNotes?.isEmpty == false ? trimmedNotes : nil,
-                                priority: priority, tags: tags, dueDate: dueDate,
+                                priority: priority, tags: ServerText.tags(tags), dueDate: dueDate,
                                 startDate: DaySpan(startDate: startDate, dueDate: dueDate)?.startDate,
                                 dueTime: dueDate != nil && duePrayer == nil ? dueTime : nil, duePrayer: duePrayer,
                                 duePrayerOffset: duePrayer == nil ? nil : duePrayerOffset)
@@ -77,6 +77,9 @@ struct Store {
         let day = task.dueDate
         let rule = task.recurrence
         change(task)
+        // Tags past the server's limits would have it refuse the whole edit (`ServerText.tags`).
+        let tags = ServerText.tags(task.tags)
+        if tags != task.tags { task.tags = tags }
         if let day, task.dueDate != nil, task.dueDate != day, task.recurrence == rule,
            let text = rule, let current = Recurrence(rrule: text) {
             let moved = current.moved(from: day)

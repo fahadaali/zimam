@@ -113,6 +113,17 @@ struct AppleCalendarTests {
         let monthly = AppleRemindersImport.Repeat(frequency: .monthly, count: 5)
         #expect(AppleCalendarImport.recurrence(monthly, anchorDay: "2026-04-30", seriesStartDay: "2026-01-31",
                                                       timeZone: riyadh) == "FREQ=MONTHLY;BYMONTHDAY=31;COUNT=2")
+        // Without a count too: a series on the 31st first met on a 30th keeps the 31st (the app
+        // reads every monthly and yearly series' start, `CalendarEvents.occurrences`), and one on
+        // its own day reads as the plain rule.
+        let everyMonth = AppleRemindersImport.Repeat(frequency: .monthly)
+        #expect(AppleCalendarImport.recurrence(everyMonth, anchorDay: "2026-11-30", seriesStartDay: "2026-01-31",
+                                                      timeZone: riyadh) == "FREQ=MONTHLY;BYMONTHDAY=31")
+        #expect(AppleCalendarImport.recurrence(everyMonth, anchorDay: "2026-11-15", seriesStartDay: "2026-01-15",
+                                                      timeZone: riyadh) == "FREQ=MONTHLY")
+        let everyYear = AppleRemindersImport.Repeat(frequency: .yearly)
+        #expect(AppleCalendarImport.recurrence(everyYear, anchorDay: "2027-02-28", seriesStartDay: "2024-02-29",
+                                                      timeZone: riyadh) == "FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=29")
     }
 
     @Test func calendarsBecomeProjectsAndEventsBecomeTasks() {

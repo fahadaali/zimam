@@ -14,6 +14,24 @@ public enum ServerText {
     public static let maxName = 200
     /// A section's name.
     public static let maxSectionName = 100
+    /// A task's tags: at most this many, each at most `maxTagLength`.
+    public static let maxTags = 30
+    public static let maxTagLength = 50
+
+    /// Tags as the server takes them: trimmed, blanks left out, each cut to `maxTagLength`, and no
+    /// more than `maxTags`. The server refuses the whole task otherwise, and with it a title or
+    /// notes edited in the same save.
+    public static func tags(_ tags: [String]) -> [String] {
+        var result: [String] = []
+        for tag in tags {
+            let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cut = clip(trimmed, to: maxTagLength).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cut.isEmpty else { continue }
+            result.append(cut)
+            if result.count == maxTags { break }
+        }
+        return result
+    }
 
     /// Whether the server may count `text` as longer than `limit`.
     public static func exceeds(_ text: String, _ limit: Int) -> Bool {

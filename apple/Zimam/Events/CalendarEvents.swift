@@ -227,10 +227,17 @@ final class CalendarEvents {
         for item in store.events(matching: predicate) {
             guard let event = EventKitEvents.event(from: item) else { continue }
             events.append(event)
-            if event.repeatRule?.count != nil, seriesStarts[event.externalId] == nil,
+            // Counted series, for their `COUNT`, and monthly or yearly ones, for their day of the
+            // month: a series on the 31st whose first occurrence in the window is on a 30th keeps
+            // the 31st (`AppleCalendarImport.recurrence`).
+            if let rule = event.repeatRule,
+               rule.count != nil || rule.frequency == .monthly || rule.frequency == .yearly,
+               seriesStarts[event.externalId] == nil,
                let identifier = event.eventId, let first = store.event(withIdentifier: identifier) {
+                // As the series planned it, even when that first occurrence was moved on its own.
+                let firstOccurrence: Date? = first.occurrenceDate
                 let firstStart: Date? = first.startDate
-                if let firstStart { seriesStarts[event.externalId] = firstStart }
+                if let start = firstOccurrence ?? firstStart { seriesStarts[event.externalId] = start }
             }
         }
         return (events, seriesStarts)

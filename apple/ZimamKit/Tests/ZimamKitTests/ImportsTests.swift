@@ -374,4 +374,14 @@ struct AppleRemindersImportTests {
         #expect(ServerText.clip("أ🇸🇦", to: 5) == "أ🇸🇦")
         #expect(ServerText.exceeds(String(repeating: "بِ", count: 251), ServerText.maxTitle))
     }
+
+    @Test func serverTextKeepsTagsWithinTheServersLimits() {
+        #expect(ServerText.tags([" عمل ", "", "  ", "بيت"]) == ["عمل", "بيت"])
+        let long = String(repeating: "م", count: 60)
+        #expect(ServerText.tags([long]) == [String(repeating: "م", count: 50)])
+        let many = (1...40).map { "وسم\($0)" }
+        #expect(ServerText.tags(many) == Array(many.prefix(30)))
+        // Valid tags come back as they were, so a task's tags are not rewritten for nothing.
+        #expect(ServerText.tags(["عمل", "عمل"]) == ["عمل", "عمل"])
+    }
 }
