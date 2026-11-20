@@ -22,8 +22,8 @@ interface OwnedProject {
  * - Inbox tasks, reminders, saved places, the comments they wrote and the files they attached are
  *   deleted everywhere (the files leave R2 on the next purge). Tasks they created in
  *   projects that live on stay with those projects.
- * - Their App Store entitlements are deleted; the subscription itself is Apple's, and
- *   the user cancels it in their Apple account settings.
+ * - Their App Store entitlements and assistant counts are deleted; the subscription itself is
+ *   Apple's, and the user cancels it in their Apple account settings.
  * - Invites they created are revoked, every session ends, and their sign-in
  *   identities (Apple, Google) are unlinked, so signing in again starts afresh.
  * - Deleted rows stay as tombstones for sync, but their text is cleared, and
@@ -138,11 +138,13 @@ export async function deleteAccount(db: D1Database, access: Access, mutator: Mut
       `DELETE FROM import_oauth_pending WHERE user_id = ?1`,
       // The subscription itself stays with Apple until the user cancels it in their Apple account.
       `DELETE FROM entitlements WHERE user_id = ?1`,
+      // Their assistant counts, kept only to apply the monthly quota.
+      `DELETE FROM ai_usage WHERE user_id = ?1`,
       `DELETE FROM sessions WHERE user_id = ?1`,
       // Their Apple and Google accounts are no longer linked: signing in with them again starts a fresh account.
       `DELETE FROM identities WHERE user_id = ?1`,
       `UPDATE users SET apple_sub = 'deleted:' || id, email = NULL, name = NULL, settings = '{}',
-         apple_refresh_token = NULL, apple_client_id = NULL, updated_at = ?2 WHERE id = ?1`,
+         apple_refresh_token = NULL, apple_client_id = NULL, avatar_updated_at = NULL, updated_at = ?2 WHERE id = ?1`,
     ].map((sql) => (sql.includes("?2") ? db.prepare(sql).bind(userId, now) : db.prepare(sql).bind(userId))),
   );
 }

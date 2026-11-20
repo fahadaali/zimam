@@ -64,6 +64,10 @@ describe("Account deletion", () => {
     const reminderId = await addReminder(user, projectTask);
     const commentId = await comment(user, projectTask, "ملاحظة");
     const invite = await call("POST", `/v1/projects/${projectId}/invites`, { token: user.token, body: { role: "editor" } });
+    await env.DB.prepare(`INSERT INTO ai_usage (user_id, month, requests, input_tokens) VALUES (?, '2026-11', 3, 900)`)
+      .bind(user.userId)
+      .run();
+    await env.DB.prepare(`UPDATE users SET avatar_updated_at = 1 WHERE id = ?`).bind(user.userId).run();
 
     expect((await deleteMe(user)).status).toBe(204);
 
@@ -75,7 +79,9 @@ describe("Account deletion", () => {
     expect(sessions!.n).toBe(0);
 
     const row = await userRow(user.userId);
-    expect(row).toMatchObject({ apple_sub: `deleted:${user.userId}`, name: null, email: null, settings: "{}" });
+    expect(row).toMatchObject({ apple_sub: `deleted:${user.userId}`, name: null, email: null, settings: "{}", avatar_updated_at: null });
+    const usage = await env.DB.prepare(`SELECT COUNT(*) AS n FROM ai_usage WHERE user_id = ?`).bind(user.userId).first<{ n: number }>();
+    expect(usage!.n).toBe(0);
 
     // Tombstones remain for sync, without their text.
     const tasks = await env.DB.prepare(`SELECT id, title, notes, deleted_at FROM tasks WHERE id IN (?, ?)`)

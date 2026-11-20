@@ -15,7 +15,7 @@ import {
   type AppStoreTransaction,
   appStoreFromEnv,
 } from "../src/subscriptions/appstore";
-import { appleToken, fakeAi, TEST_NONCE, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
+import { appleToken, fakeAi, googleToken, TEST_NONCE, testAppleKeys, testGoogleKeys, uuid } from "./helpers";
 
 // MARK: Fakes
 
@@ -540,6 +540,24 @@ describe("Plan enforcement", () => {
     expect((await summary(other.token, overrides)).status).toBe(403);
     const plan = await request("GET", "/v1/subscriptions", { token: byEmail.token, env: overrides });
     expect(plan.body).toMatchObject({ plan: "pro", source: "override", expiresAt: null, enforced: true });
+  });
+
+  it("matches PRO_USERS emails only on addresses the provider vouches for", async () => {
+    const overrides = { ...ENFORCED, AI_MONTHLY_LIMIT_FREE: "0", PRO_USERS: "owner@zimam.work" };
+    // A Google account anyone can open with the owner's address: unverified, and not Gmail or Workspace.
+    for (const claims of [{ emailVerified: false }, { emailVerified: true }]) {
+      const res = await request("POST", "/v1/auth/google", {
+        body: { idToken: await googleToken(`google-${uuid()}`, { email: "owner@zimam.work", ...claims }), nonce: TEST_NONCE },
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.user.email).toBe("owner@zimam.work");
+      expect((await summary(res.body.token, overrides)).status).toBe(403);
+      const plan = await request("GET", "/v1/subscriptions", { token: res.body.token, env: overrides });
+      expect(plan.body).toMatchObject({ plan: "free", source: null });
+    }
+    // The owner's own Apple sign-in, which Apple verified, still is.
+    const owner = await signInUser("owner@zimam.work");
+    expect((await summary(owner.token, overrides)).status).toBe(200);
   });
 
   it("requires pro for server imports when enforced, and keeps the sources list open", async () => {

@@ -84,6 +84,13 @@ async function loadSettings(c: Ctx) {
 
 // MARK: POST /v1/assistant/parse
 
+/**
+ * The most projects named to the model, first by the user's own order. Places are capped at 100
+ * the same way: a user can make projects without limit, and every one would be paid for as input
+ * on every request.
+ */
+export const MAX_PROMPT_PROJECTS = 200;
+
 const ParseBody = z.object({
   text: z.string().trim().min(1).max(1000),
   /** The device's current time; the server's by default. */
@@ -100,6 +107,7 @@ assistant.post("/parse", async (c) => {
   // Only projects the user can add tasks to.
   const projects = (await listProjects(c.env.DB, c.var.userId))
     .filter((p) => p.kind === "project" && p.archived_at == null && (p.role === "owner" || p.role === "editor"))
+    .slice(0, MAX_PROMPT_PROJECTS)
     .map((p) => ({ id: p.id as string, name: p.name as string }));
   const projectIds = new Set(projects.map((p) => p.id));
   const { results: places } = await c.env.DB.prepare(

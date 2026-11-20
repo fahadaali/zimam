@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AiError, ANTHROPIC_MODEL, AnthropicProvider, DeepSeekProvider, providerFromEnv } from "../src/ai/provider";
 import { DEFAULT_MONTHLY_LIMIT, monthOf, planMonthlyLimit, resetDate } from "../src/ai/quota";
+import { MAX_PROMPT_PROJECTS } from "../src/routes/assistant";
 import { addDays, dayIn, dayOfHijri, hijriParts } from "../src/data/dates";
 import type { Env } from "../src/env";
 import { call, fakeAi, push, signIn, uuid } from "./helpers";
@@ -54,6 +55,30 @@ beforeEach(() => fakeAi.reset());
 
 describe("POST /v1/assistant/parse", () => {
   const NOW = "2026-10-13T06:00:00+03:00"; // Tuesday 2 Jumada al-Ula 1448 in Riyadh
+
+  it("names at most MAX_PROMPT_PROJECTS projects to the model, first by the user's order", async () => {
+    const a = await signIn();
+    const total = MAX_PROMPT_PROJECTS + 25;
+    const ids = Array.from({ length: total }, () => uuid());
+    const now = Date.now();
+    await env.DB.batch(
+      ids.flatMap((id, i) => [
+        env.DB.prepare(
+          `INSERT INTO projects (id, owner_id, kind, name, view, sort_order, created_at, updated_at) VALUES (?, ?, 'project', ?, 'list', ?, ?, ?)`,
+        ).bind(id, a.userId, `مشروع ${i}`, i, now, now),
+        env.DB.prepare(`INSERT INTO project_members (project_id, user_id, role, added_at) VALUES (?, ?, 'owner', ?)`).bind(id, a.userId, now),
+      ]),
+    );
+    fakeAi.answer(suggestion({ title: "مهمة", projectId: ids.at(-1) }));
+    const res = await call("POST", "/v1/assistant/parse", { token: a.token, body: { text: "مهمة", now: NOW } });
+    expect(res.status).toBe(200);
+    // A project the model was not told of is not taken from its answer.
+    expect(res.body.projectId).toBeUndefined();
+    const prompt = fakeAi.requests[0]!.prompt;
+    expect(prompt).toContain(`${ids[0]} | مشروع 0`);
+    expect(prompt).toContain(ids[MAX_PROMPT_PROJECTS - 1]);
+    expect(prompt).not.toContain(ids[MAX_PROMPT_PROJECTS]);
+  });
 
   it("turns a note into a validated suggestion without saving it", async () => {
     const a = await signIn();

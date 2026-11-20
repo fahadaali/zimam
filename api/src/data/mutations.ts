@@ -418,7 +418,9 @@ export class Mutator {
           .prepare(
             `${DESCENDANTS} UPDATE tasks SET project_id = ?2, section_id = NULL,
                owner_id = CASE WHEN ?2 IS NULL THEN ?3 ELSE owner_id END,
-               assignee_id = CASE WHEN ?2 IS NULL THEN NULL ELSE assignee_id END,
+               -- Only a member of the new project stays assigned, as the moved task itself must be.
+               assignee_id = CASE WHEN ?2 IS NOT NULL AND assignee_id IN (SELECT user_id FROM project_members WHERE project_id = ?2)
+                 THEN assignee_id END,
                updated_at = MAX(updated_at, ?4)
              WHERE id IN sub AND deleted_at IS NULL`,
           )

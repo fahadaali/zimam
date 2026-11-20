@@ -268,6 +268,35 @@ describe("Sync", () => {
     );
   });
 
+  it("unassigns subtasks whose assignee is not a member of the project they move into", async () => {
+    const owner = await signIn();
+    const both = await signIn(); // a member of both projects
+    const fromOnly = await signIn(); // a member of the first only
+    const from = uuid();
+    const to = uuid();
+    const taskId = uuid();
+    const [keeps, loses] = [uuid(), uuid()];
+    await push(owner.token, [project(from, 1000), project(to, 1000)]);
+    await addMember(from, both.userId, "editor");
+    await addMember(to, both.userId, "editor");
+    await addMember(from, fromOnly.userId, "editor");
+    const results = await push(owner.token, [
+      task(taskId, 1000, { projectId: from }),
+      task(keeps, 1000, { projectId: from, parentId: taskId, assigneeId: both.userId }),
+      task(loses, 1000, { projectId: from, parentId: taskId, assigneeId: fromOnly.userId }),
+    ]);
+    expect(results.map((r) => r.status)).toEqual(["applied", "applied", "applied"]);
+
+    expect((await push(owner.token, [task(taskId, 2000, { projectId: to })]))[0]!.status).toBe("applied");
+
+    const rows = new Map(
+      (await env.DB.prepare(`SELECT id, project_id, assignee_id FROM tasks WHERE id IN (?, ?)`).bind(keeps, loses).all<Record<string, unknown>>())
+        .results.map((r) => [r.id, r]),
+    );
+    expect(rows.get(keeps)).toMatchObject({ project_id: to, assignee_id: both.userId });
+    expect(rows.get(loses)).toMatchObject({ project_id: to, assignee_id: null });
+  });
+
   it("applies a full batch of plain edits, and answers a heavier one in part for the client to resend", async () => {
     const { token, userId } = await signIn();
     const plain = Array.from({ length: 200 }, () => task(uuid(), 1000));
