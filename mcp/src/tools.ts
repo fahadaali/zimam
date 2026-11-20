@@ -33,7 +33,20 @@ const taskFields = {
   recurrence: z.string().max(500).nullable().optional().describe('RFC 5545 RRULE in the subset Zimam repeats: FREQ=DAILY|WEEKLY|MONTHLY|YEARLY, INTERVAL, BYDAY with plain day codes (weekly), one BYMONTHDAY (monthly, or yearly with BYMONTH), one BYMONTH (yearly), COUNT, UNTIL. E.g. "FREQ=WEEKLY;BYDAY=TH". Other rules show as a custom repeat and do not add the next occurrence.'),
 };
 
-function answer<T>(outcome: Outcome<T>): CallToolResult {
+/**
+ * Runs one backend call and answers the tool with its outcome. The API's own failures (not_found,
+ * invalid, pro_required…) are written for the model and pass as they are; anything thrown on the way
+ * (the service binding, D1) is logged here and answered without its message, which could carry
+ * internal details.
+ */
+async function answer<T>(work: () => Promise<Outcome<T>>): Promise<CallToolResult> {
+  let outcome: Outcome<T>;
+  try {
+    outcome = await work();
+  } catch (error) {
+    console.error("zimam-mcp: backend call failed", error);
+    return { isError: true, content: [{ type: "text", text: "unavailable: Zimam could not answer just now. Try again shortly." }] };
+  }
   if (!outcome.ok) {
     return { isError: true, content: [{ type: "text", text: `${outcome.error.code}: ${outcome.error.message}` }] };
   }
@@ -63,7 +76,7 @@ export function buildServer(backend: ZimamBackend, userId: string, canWrite: boo
       },
       annotations: readOnly,
     },
-    async (args) => answer(await backend.listTasks(userId, args)),
+    async (args) => answer(() => backend.listTasks(userId, args)),
   );
 
   server.registerTool(
@@ -80,7 +93,7 @@ export function buildServer(backend: ZimamBackend, userId: string, canWrite: boo
       annotations: readOnly,
     },
     async ({ query, includeDone, limit }) =>
-      answer(await backend.listTasks(userId, { query, status: includeDone ? "all" : "open", limit })),
+      answer(() => backend.listTasks(userId, { query, status: includeDone ? "all" : "open", limit })),
   );
 
   server.registerTool(
@@ -91,7 +104,7 @@ export function buildServer(backend: ZimamBackend, userId: string, canWrite: boo
       inputSchema: {},
       annotations: readOnly,
     },
-    async () => answer(await backend.listProjects(userId)),
+    async () => answer(() => backend.listProjects(userId)),
   );
 
   server.registerTool(
@@ -106,7 +119,7 @@ export function buildServer(backend: ZimamBackend, userId: string, canWrite: boo
       },
       annotations: readOnly,
     },
-    async (args) => answer(await backend.getAgenda(userId, args)),
+    async (args) => answer(() => backend.getAgenda(userId, args)),
   );
 
   server.registerTool(
@@ -118,7 +131,7 @@ export function buildServer(backend: ZimamBackend, userId: string, canWrite: boo
       inputSchema: {},
       annotations: readOnly,
     },
-    async () => answer(await backend.listPlaces(userId)),
+    async () => answer(() => backend.listPlaces(userId)),
   );
 
   if (!canWrite) return server;
@@ -133,7 +146,7 @@ export function buildServer(backend: ZimamBackend, userId: string, canWrite: boo
       inputSchema: { title: z.string().min(1).max(500), ...taskFields },
       annotations: writes,
     },
-    async (args) => answer(await backend.createTask(userId, args)),
+    async (args) => answer(() => backend.createTask(userId, args)),
   );
 
   server.registerTool(
@@ -150,7 +163,7 @@ export function buildServer(backend: ZimamBackend, userId: string, canWrite: boo
       },
       annotations: { ...writes, idempotentHint: true },
     },
-    async ({ id, ...fields }) => answer(await backend.updateTask(userId, id, fields)),
+    async ({ id, ...fields }) => answer(() => backend.updateTask(userId, id, fields)),
   );
 
   server.registerTool(
@@ -168,7 +181,7 @@ export function buildServer(backend: ZimamBackend, userId: string, canWrite: boo
       },
       annotations: writes,
     },
-    async (args) => answer(await backend.addPlaceReminder(userId, args)),
+    async (args) => answer(() => backend.addPlaceReminder(userId, args)),
   );
 
   server.registerTool(
@@ -179,7 +192,7 @@ export function buildServer(backend: ZimamBackend, userId: string, canWrite: boo
       inputSchema: { id: z.string().describe("Task id.") },
       annotations: { ...writes, idempotentHint: true },
     },
-    async ({ id }) => answer(await backend.completeTask(userId, id)),
+    async ({ id }) => answer(() => backend.completeTask(userId, id)),
   );
 
   return server;

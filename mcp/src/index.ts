@@ -68,7 +68,9 @@ async function authorize(request: Request, env: Env, backend: ZimamBackend): Pro
     const { redirectTo } = await oauth.completeAuthorization({
       request: approved.request,
       userId: signIn.value.userId,
-      metadata: { name: signIn.value.name },
+      // No metadata: the provider keeps it in KV unencrypted, and nothing here reads it back, so the
+      // account's name stays in the API alone (and goes when the account is deleted).
+      metadata: {},
       scope: approved.request.scope,
       props: { userId: signIn.value.userId } satisfies GrantProps,
     });

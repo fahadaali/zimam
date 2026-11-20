@@ -374,6 +374,24 @@ describe("Zimam MCP server", () => {
     });
   });
 
+  it("answers a backend failure without its internal message", async () => {
+    const token = await connect();
+    backend.listProjects = async () => {
+      throw new Error("D1_ERROR: no such column: secret_internal_detail");
+    };
+    const failed = await rpc(token, "tools/call", { name: "list_projects", arguments: {} });
+    expect(failed.result.isError).toBe(true);
+    expect(failed.result.content[0].text).toMatch(/^unavailable:/);
+    expect(failed.result.content[0].text).not.toContain("secret_internal_detail");
+  });
+
+  it("keeps the account's name out of the grant stored in KV", async () => {
+    await connect();
+    const { keys } = await env.OAUTH_KV.list({ prefix: "grant:" });
+    expect(keys.length).toBeGreaterThan(0);
+    for (const { name } of keys) expect(await env.OAUTH_KV.get(name)).not.toContain("فهد");
+  });
+
   it("rejects bad tool input before it reaches the backend", async () => {
     const token = await connect();
     const bad = await rpc(token, "tools/call", { name: "create_task", arguments: { title: "x", dueDate: "15/10/2026" } });
