@@ -135,7 +135,7 @@ struct CalendarEventsSettingsSheet: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("تم") { dismiss() }
+                    Button("إغلاق") { dismiss() }
                 }
             }
             .task { events.refresh() }

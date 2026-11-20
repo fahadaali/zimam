@@ -172,7 +172,7 @@ describe("Todoist API", () => {
     ]);
     expect(bundle.sections.map((s) => s.name)).toEqual(["للعمل", "قيد التنفيذ"]);
     expect(byTitle(bundle.tasks, "ورد الصباح")).toMatchObject({ projectKey: null, sectionKey: null });
-    expect(bundle.warnings).toContain("أقسام في صندوق الوارد لا تُنقل، فبقيت مهامها في الصندوق بلا قسم: ١");
+    expect(bundle.warnings).toContain("أقسام في صندوق المهام لا تُنقل، فبقيت مهامها في الصندوق بلا قسم: ١");
   });
 
   it("maps due dates, recurrence, deadlines, labels and priorities", () => {

@@ -28,9 +28,9 @@ struct CalendarEventSheet: View {
     #endif
 
     private var footer: String {
-        if converted { return "أُضيفت إلى «الوارد» بعنوان الحدث وموعده وملاحظاته. الحدث نفسه باقٍ في التقويم كما هو." }
+        if converted { return "أُضيفت إلى «صندوق المهام» بعنوان الحدث وموعده وملاحظاته. الحدث نفسه باقٍ في التقويم كما هو." }
         if wasConvertedBefore { return "حُوِّل هذا الحدث إلى مهمة من قبل." }
-        return "تُضاف مهمة في «الوارد» بعنوان الحدث وموعده ومكانه وملاحظاته، ولا يتغيّر الحدث في التقويم."
+        return "تُضاف مهمة في «صندوق المهام» بعنوان الحدث وموعده ومكانه وملاحظاته، ولا يتغيّر الحدث في التقويم."
     }
 
     private var refs: CalendarImportRefs { CalendarImportRefs(userId: session.user?.id) }
