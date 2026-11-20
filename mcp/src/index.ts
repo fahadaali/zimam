@@ -15,6 +15,7 @@ import {
   messagePage,
 } from "./consent";
 import { type Env, type GrantProps, SCOPES } from "./env";
+import { rateLimit } from "./limits";
 import { buildServer } from "./tools";
 
 const html = (body: string, status = 200, headers = new Headers()) => {
@@ -149,7 +150,10 @@ export function createWorker(backendFor: (env: Env) => ZimamBackend) {
     }));
 
   return {
-    fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+      // Registration, consent and tokens are open to anyone, so each address has a limit (limits.ts).
+      const limited = await rateLimit(request, env);
+      if (limited) return limited;
       return providerFor(env).fetch(request, env, ctx);
     },
   } satisfies ExportedHandler<Env>;

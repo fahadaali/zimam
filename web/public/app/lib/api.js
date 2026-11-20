@@ -57,6 +57,9 @@ const MESSAGES = {
   unauthorized: "انتهت الجلسة. سجّل الدخول مرة أخرى.",
   invalid_token: "تعذّر التحقق من حسابك. حاول مرة أخرى.",
   google_unavailable: "تسجيل الدخول بحساب قوقل غير متاح الآن. استعمل حساب أبل.",
+  // DELETE /v1/me without a fresh sign-in, or with one for another account (lib/reauth.js).
+  reauth_required: "تعذّر التحقق من هويتك، أو انتهت مهلته. سجّل الدخول مرة أخرى للمتابعة.",
+  reauth_mismatch: "الحساب الذي دخلت به ليس هذا الحساب. ادخل بحساب أبل أو قوقل الذي تستعمله في زمام.",
   invalid: "تحقق من البيانات المدخلة ثم حاول مرة أخرى.",
   forbidden: "لا تملك صلاحية هذا التعديل.",
   not_found: "لم نجد هذا العنصر، وربما حُذف.",
@@ -173,7 +176,8 @@ export const api = {
   signOut: () => request("POST", "/v1/auth/logout"),
   me: () => request("GET", "/v1/me"),
   updateMe: (fields) => request("PATCH", "/v1/me", fields),
-  deleteMe: () => request("DELETE", "/v1/me"),
+  /** `reauth`: a fresh sign-in, as lib/reauth.js builds it (appleReauthBody, googleReauthBody). */
+  deleteMe: (reauth) => request("DELETE", "/v1/me", reauth),
   /** The account photo: JPEG or PNG bytes up to 1 MB (avatar.js makes a 512×512 JPEG); answers the user. */
   uploadAvatar: (blob) => request("PUT", "/v1/me/avatar", blob.type ? blob : new Blob([blob], { type: "image/jpeg" })),
   removeAvatar: () => request("DELETE", "/v1/me/avatar"),

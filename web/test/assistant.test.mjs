@@ -6,6 +6,7 @@ import {
   breakdownText,
   isoWithOffset,
   stepCount,
+  waitText,
   suggestionLines,
   suggestionPriority,
   suggestionToTask,
@@ -44,6 +45,38 @@ test("the other failures read as the app's sentences", () => {
   const pro = assistantErrorText(new ApiError(403, "pro_required", ""));
   assert.match(pro, /«زمام الاحترافية»/);
   assert.match(pro, /من تطبيق زمام/);
+});
+
+test("fair-use limits and a busy assistant are not the month's quota", () => {
+  const minute = new ApiError(429, "ai_rate_limited", "", { code: "ai_rate_limited", scope: "minute", limit: 10, retryAfter: 42 });
+  const day = new ApiError(429, "ai_rate_limited", "", { code: "ai_rate_limited", scope: "day", limit: 100, retryAfter: 5 * 3600 - 30 });
+  const busy = new ApiError(503, "ai_busy", "", { code: "ai_busy", retryAfter: 90 });
+  assert.equal(assistantProblem(minute), "rateLimited");
+  assert.equal(assistantProblem(day), "rateLimited");
+  assert.equal(assistantProblem(busy), "busy");
+  assert.equal(assistantProblem(new ApiError(429, "too_many", "")), "rateLimited", "a 429 that is not the quota passes on its own");
+  assert.equal(assistantProblem(new ApiError(503, "unknown", "")), "unavailable");
+
+  assert.equal(assistantErrorText(minute), "أرسلت إلى المساعد طلبات كثيرة في وقت قصير. حاول بعد دقيقة.");
+  assert.equal(assistantErrorText(day), "بلغت حد طلبات المساعد لهذا اليوم (الحد ١٠٠). حاول بعد ٥ ساعات.");
+  assert.equal(assistantErrorText(busy), "المساعد مشغول الآن بطلبات كثيرة. حاول بعد دقيقتين.");
+  // Without retryAfter or the limit, the sentence still says what to do.
+  assert.equal(assistantErrorText(new ApiError(429, "ai_rate_limited", "", { scope: "day" })), "بلغت حد طلبات المساعد لهذا اليوم. حاول بعد قليل.");
+  assert.equal(assistantErrorText(new ApiError(503, "ai_busy", "")), "المساعد مشغول الآن بطلبات كثيرة. حاول بعد قليل.");
+});
+
+test("the wait reads in whole minutes or hours, rounded up", () => {
+  assert.equal(waitText(1), "دقيقة");
+  assert.equal(waitText(60), "دقيقة");
+  assert.equal(waitText(61), "دقيقتين");
+  assert.equal(waitText(5 * 60), "٥ دقائق");
+  assert.equal(waitText(15 * 60), "١٥ دقيقة");
+  assert.equal(waitText(3600), "ساعة");
+  assert.equal(waitText(3601), "ساعتين");
+  assert.equal(waitText(11 * 3600), "١١ ساعة");
+  assert.equal(waitText(0), null);
+  assert.equal(waitText(Number.NaN), null);
+  assert.equal(waitText(undefined), null);
 });
 
 test("a suggestion becomes a task body; the prayer wins over a clock time", () => {

@@ -60,3 +60,13 @@ test("the policy and terms are dated in both calendars, Hijri first, with the Ar
     assert.match(read(page), /آخر تحديث: [٠-٩]+ [^،<]+ [٠-٩]{4}هـ، [٠-٩]+ [^،<]+ [٠-٩]{4}\./, page);
   }
 });
+
+test("HSTS covers the subdomains and is ready for the preload list", () => {
+  const headers = read("_headers");
+  const hsts = headers.match(/^\s+Strict-Transport-Security: (.+)$/m)?.[1];
+  assert.ok(hsts, "_headers sends Strict-Transport-Security");
+  const maxAge = Number(hsts.match(/max-age=(\d+)/)?.[1]);
+  assert.ok(maxAge >= 31536000, "max-age of a year or more, as the preload list requires");
+  assert.match(hsts, /;\s*includeSubDomains\b/);
+  assert.match(hsts, /;\s*preload\b/);
+});

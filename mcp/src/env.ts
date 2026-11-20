@@ -13,6 +13,10 @@ declare global {
       APPLE_WEB_CLIENT_ID: string;
       /** Google OAuth web client ID for the consent page; empty hides Sign in with Google. */
       GOOGLE_WEB_CLIENT_ID: string;
+      /** Per-IP limit on /oauth/register (src/limits.ts); absent in local runs. */
+      REGISTER_LIMITER?: RateLimit;
+      /** Per-IP limit on /authorize and /oauth/token (src/limits.ts); absent in local runs. */
+      AUTH_LIMITER?: RateLimit;
     }
   }
 }

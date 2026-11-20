@@ -445,3 +445,93 @@ describe("Zimam MCP server", () => {
     expect(response.status).toBe(400);
   });
 });
+
+/** A rate limiter that records its keys and answers `allow` (or throws). */
+function fakeLimiter(allow: boolean | "throw") {
+  const keys: string[] = [];
+  const limiter = {
+    keys,
+    async limit({ key }: { key: string }) {
+      keys.push(key);
+      if (allow === "throw") throw new Error("limiter down");
+      return { success: allow };
+    },
+  };
+  return limiter as RateLimit & { keys: string[] };
+}
+
+describe("per-address limits on the open OAuth endpoints", () => {
+  const IP = { "CF-Connecting-IP": "203.0.113.7" };
+  const registration = (headers: Record<string, string> = IP) => ({
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ client_name: "Claude", redirect_uris: [REDIRECT], token_endpoint_auth_method: "none" }),
+  });
+
+  it("is configured in wrangler.jsonc with periods the binding accepts", () => {
+    for (const name of ["REGISTER_LIMITER", "AUTH_LIMITER"] as const) {
+      expect(typeof (env as unknown as Record<string, RateLimit | undefined>)[name]?.limit).toBe("function");
+    }
+  });
+
+  it("answers a limited registration with an OAuth-style JSON 429 and Retry-After", async () => {
+    const limiter = fakeLimiter(false);
+    const response = await send("/oauth/register", registration(), { REGISTER_LIMITER: limiter });
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("60");
+    expect(response.headers.get("Content-Type")).toContain("application/json");
+    expect(await response.json()).toMatchObject({ error: "rate_limited" });
+    expect(limiter.keys).toEqual(["/oauth/register:203.0.113.7"]);
+  });
+
+  it("answers a limited consent page in Arabic HTML", async () => {
+    const response = await send("/authorize?client_id=x", { headers: IP }, { AUTH_LIMITER: fakeLimiter(false) });
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("60");
+    const html = await response.text();
+    expect(html).toContain("طلبات كثيرة");
+    expect(html).toContain('dir="rtl"');
+  });
+
+  it("counts token requests per address and client, so many connections from one server are not one", async () => {
+    const limiter = fakeLimiter(false);
+    const response = await send(
+      "/oauth/token",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", ...IP },
+        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: "r", client_id: "client-a" }),
+      },
+      { AUTH_LIMITER: limiter },
+    );
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({ error: "rate_limited" });
+    expect(limiter.keys).toEqual(["/oauth/token:203.0.113.7:client-a"]);
+  });
+
+  it("lets requests through when allowed, without an address, without the binding, or when the limiter fails", async () => {
+    const allowed = fakeLimiter(true);
+    expect((await send("/oauth/register", registration(), { REGISTER_LIMITER: allowed })).status).toBe(201);
+    expect(allowed.keys).toHaveLength(1);
+    const denying = fakeLimiter(false);
+    expect((await send("/oauth/register", registration({}), { REGISTER_LIMITER: denying })).status).toBe(201);
+    expect(denying.keys).toHaveLength(0);
+    expect((await send("/oauth/register", registration(), { REGISTER_LIMITER: undefined })).status).toBe(201);
+    expect((await send("/oauth/register", registration(), { REGISTER_LIMITER: fakeLimiter("throw") })).status).toBe(201);
+  });
+
+  it("leaves the MCP endpoint and the metadata alone", async () => {
+    const limiter = fakeLimiter(false);
+    const vars = { REGISTER_LIMITER: limiter, AUTH_LIMITER: limiter };
+    expect((await send("/.well-known/oauth-authorization-server", { headers: IP }, vars)).status).toBe(200);
+    expect((await send("/mcp", { method: "POST", headers: IP }, vars)).status).toBe(401);
+    expect(limiter.keys).toHaveLength(0);
+  });
+
+  it("stops a flood of registrations from one address with the configured binding", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 12; i++) statuses.push((await send("/oauth/register", registration({ "CF-Connecting-IP": "198.51.100.9" }))).status);
+    expect(statuses.slice(0, 10).every((s) => s === 201)).toBe(true);
+    expect(statuses.at(-1)).toBe(429);
+  });
+});

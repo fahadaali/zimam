@@ -20,6 +20,7 @@ import {
 } from "./lib/google.js";
 import { icon } from "./lib/icons.js";
 import { randomNonce, sha256Hex } from "./lib/nonce.js";
+import { reauthProviders } from "./lib/reauth.js";
 import { arabicNumber } from "./lib/numbers.js";
 import { byManualOrder } from "./lib/order.js";
 import { prayerPhrase } from "./lib/prayer.js";
@@ -51,6 +52,7 @@ import { createTaskPane } from "./task-pane.js";
 import { swipeActions, swipeToDelete } from "./swipe.js";
 import { createPrayers } from "./prayer-view.js";
 import { openSettings } from "./settings-view.js";
+import { createReauth } from "./reauth.js";
 import { showTaskMenu } from "./move-sheet.js";
 
 const APPLE_CLIENT_ID = "app.zimam.ios.web";
@@ -180,6 +182,7 @@ function forgetAccount() {
   forgetMembers();
   forgetAvatar();
   prayers.forget();
+  reauth.cancel();
   openFolds.clear();
   for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
   // The place in the URL (its project, section, search or task) was the account's: the next one
@@ -262,8 +265,14 @@ els.googleButton.addEventListener("click", () => {
   location.assign(authUrl("redirect"));
 });
 
+// The fresh sign-in before deleting the account (reauth.js): its own nonces and popups, and its
+// answer only ever becomes the body of DELETE /v1/me, never a session.
+const reauth = createReauth({ appleClientId: APPLE_CLIENT_ID, googleClientId: GOOGLE_CLIENT_ID });
+
 /** Google's answer from the popup, taken only for the attempt that opened it. */
 function receiveGoogleAnswer(answer) {
+  // An answer for «تأكيد هويتك» is the settings sheet's, and must not sign in here.
+  if (reauth.receive(answer)) return;
   const attempt = googleAttempt;
   if (!attempt || !googleStateMatches(attempt.state, answer.state)) return;
   googleAttempt = null;
@@ -641,8 +650,13 @@ $("settings-button").addEventListener("click", () =>
     openPrayers: () => prayers.openSheet(),
     sync: syncNow,
     signOut: () => els.signout.click(),
-    deleteAccount: async () => {
-      await api.deleteMe();
+    // «تأكيد هويتك»: the providers to offer, their nonces, and the popup for one (reauth.js).
+    reauthProviders: () => reauthProviders(state.me, { google: reauth.googleEnabled() }),
+    prepareReauth: () => reauth.prepare(),
+    reauthenticate: (provider) => reauth.signIn(provider),
+    cancelReauth: () => reauth.cancel(),
+    deleteAccount: async (body) => {
+      await api.deleteMe(body);
       session.clear();
       showSignIn("حُذف حسابك.");
     },
