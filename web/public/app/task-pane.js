@@ -218,6 +218,8 @@ export function createTaskPane(ctx) {
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || !current) return;
     if (document.querySelector("dialog[open]") || event.isComposing || isTyping(event.target)) return;
+    // Only where «إنجاز» shows: a viewer of a shared project cannot complete its tasks.
+    if (els.pane.hidden || !ctx.canEdit(current)) return;
     event.preventDefault();
     ctx.toggle(current).then(() => current && setToggle(current));
   });

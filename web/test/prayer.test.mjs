@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { durationPhrase, prayerPhrase } from "../public/app/lib/prayer.js";
+import { cityLevel, durationPhrase, prayerPhrase } from "../public/app/lib/prayer.js";
 
 test("after a prayer by minutes", () => {
   assert.equal(prayerPhrase("asr", 20), "بعد العصر بـ٢٠ د");
@@ -28,4 +28,10 @@ test("no prayer, no phrase; never a middle dot", () => {
   assert.equal(prayerPhrase(null, 20), null);
   assert.equal(prayerPhrase("noon", 20), null);
   assert.ok(!prayerPhrase("asr", 20).includes("·"));
+});
+
+test("a saved place keeps one decimal, the city and not the street", () => {
+  assert.deepEqual(cityLevel({ latitude: 24.71361, longitude: 46.67532 }), { latitude: 24.7, longitude: 46.7 });
+  assert.deepEqual(cityLevel({ latitude: -33.86882, longitude: 151.20929 }), { latitude: -33.9, longitude: 151.2 });
+  assert.deepEqual(cityLevel({ latitude: 21.4225, longitude: 39.8262, accuracy: 12 }), { latitude: 21.4, longitude: 39.8 });
 });

@@ -27,7 +27,7 @@ import { createRealtime, realtimeUrl } from "./lib/realtime.js";
 import { parseRoute as parseHash, routeKey, withTask } from "./lib/routes.js";
 import { hasPendingImport, rememberPendingImport, viewImport } from "./import-view.js";
 import { rememberPendingJoin, takePendingJoin, viewJoin } from "./invite-view.js";
-import { groupByDay, isOpen, priorityKey, progressText, taskCount, todayList, topLevel } from "./lib/tasks.js";
+import { groupByDay, isOpen, priorityKey, progressText, resultCount, taskCount, todayList, topLevel } from "./lib/tasks.js";
 // Features in their own modules: the assistant, the board, the calendar and sharing.
 import { AT_TIME_FAILED, forgetSummaries, resetAddAssistant, setupAddAssistant, todaySummary } from "./assistant-view.js";
 import { boardView, layoutOf, layoutToggle } from "./board-view.js";
@@ -46,6 +46,7 @@ import { viewMatrix } from "./matrix-view.js";
 import { projectTimeline, viewTimeline } from "./timeline-view.js";
 // The frame and the open task.
 import { createShell } from "./shell.js";
+import { forgetAvatar } from "./avatar.js";
 import { createTaskPane } from "./task-pane.js";
 import { swipeActions, swipeToDelete } from "./swipe.js";
 import { createPrayers } from "./prayer-view.js";
@@ -177,6 +178,7 @@ function forgetAccount() {
   frame.forget();
   forgetSummaries();
   forgetMembers();
+  forgetAvatar();
   prayers.forget();
   openFolds.clear();
   for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
@@ -485,8 +487,11 @@ async function liveRefresh() {
     return;
   }
   // The account too: settings, name or photo changed on another device.
+  const signedIn = state.me?.id;
   const [, me] = await Promise.all([refreshProjects(), api.me().catch(() => null)]);
-  if (me && accountKey(me) !== accountKey(state.me)) {
+  // Signed out (or into another account) meanwhile: nothing of this reload is drawn.
+  if (els.shell.hidden || !signedIn || state.me?.id !== signedIn) return;
+  if (me && me.id === signedIn && accountKey(me) !== accountKey(state.me)) {
     state.me = me;
     prayers.load();
   }
@@ -865,7 +870,7 @@ async function moveTask(taskId, { projectId, sectionId, label }) {
   clearError();
   state.localChangeAt = Date.now();
   try {
-    const saved = await boardApi.patchTask(taskId, { projectId, sectionId });
+    const saved = await queueTaskRequest(taskId, () => boardApi.patchTask(taskId, { projectId, sectionId }));
     if (known) Object.assign(known, saved);
     announce(`نُقلت «${saved.title}» إلى ${label}.`);
     pane.refresh(saved);
@@ -930,6 +935,7 @@ function taskItem(task, options) {
     prayer: prayers.chipFor(task),
     project: options.showProject && task.projectId ? projectName(task.projectId) : null,
     selected: pane.currentId() === task.id,
+    canToggle: canEdit(roleFor(task)),
     onToggle: () => toggleTask(task, li),
     onOpen: () => selectTask(task),
   });
@@ -1371,8 +1377,7 @@ async function viewSearch({ q }) {
   }
   const { tasks, truncated } = await api.tasks({ q: q.trim() });
   const found = topLevel(tasks);
-  const count = found.length === 0 ? "لا نتائج." : found.length === 1 ? "نتيجة واحدة" : `${arabicNumber(found.length)} نتائج`;
-  out.push(h("p", { className: "caption muted result-count", role: "status" }, count));
+  out.push(h("p", { className: "caption muted result-count", role: "status" }, resultCount(found.length)));
   if (truncated) out.push(cutNote());
   if (found.length) out.push(taskList(found, { leaveWhenDone: false, label: "نتائج البحث" }));
   return out;
@@ -1490,6 +1495,12 @@ function defaultDue(route) {
 }
 
 function openAdd() {
+  // A page left open past midnight: «اليوم» and «غداً» are the new day's, and the list behind follows.
+  const now = localIsoDate();
+  if (now !== state.today) {
+    state.today = now;
+    render({ focus: false });
+  }
   addDialog.form.reset();
   addDialog.error.textContent = "";
   addDialog.titleError.textContent = "";

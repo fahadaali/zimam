@@ -14,11 +14,12 @@ export function apiBase() {
 // (no inline or third-party script except Apple's and Google's sign-in), DOM built with textContent only, and an
 // opaque token the server can revoke: signing out deletes it on the server and here.
 export const session = {
+  /** The stored token, or the one kept in memory when storage is blocked (see set). */
   get() {
     try {
-      return localStorage.getItem(TOKEN_KEY);
+      return localStorage.getItem(TOKEN_KEY) ?? memoryToken;
     } catch {
-      return null;
+      return memoryToken;
     }
   },
   set(token) {
@@ -39,7 +40,7 @@ export const session = {
   },
 };
 let memoryToken = null;
-const currentToken = () => session.get() ?? memoryToken;
+const currentToken = () => session.get();
 
 export class ApiError extends Error {
   constructor(status, code, message, details = null) {
@@ -74,6 +75,16 @@ export function whenSignedOut(handler) {
   onUnauthorized = handler;
 }
 
+/**
+ * A 401 for `token` ends the session, unless another one was set while the request was on its way
+ * (signed out and back in meanwhile): a late answer for the old token must not sign the new one out.
+ */
+function endSession(token) {
+  if ((currentToken() ?? null) !== (token ?? null)) return;
+  session.clear();
+  onUnauthorized();
+}
+
 export async function request(method, path, body) {
   const headers = { Accept: "application/json" };
   const token = currentToken();
@@ -101,10 +112,7 @@ export async function request(method, path, body) {
   const data = await response.json().catch(() => null);
   if (!response.ok) {
     const code = data?.error?.code ?? (response.status === 401 ? "unauthorized" : "internal");
-    if (response.status === 401 && path !== "/v1/auth/apple" && path !== "/v1/auth/google") {
-      session.clear();
-      onUnauthorized();
-    }
+    if (response.status === 401 && path !== "/v1/auth/apple" && path !== "/v1/auth/google") endSession(token);
     throw new ApiError(response.status, code, data?.error?.message ?? response.statusText, data?.error ?? null);
   }
   return data;
@@ -123,10 +131,7 @@ export async function requestBlob(path) {
   }
   if (response.ok) return response.blob();
   const data = await response.json().catch(() => null);
-  if (response.status === 401) {
-    session.clear();
-    onUnauthorized();
-  }
+  if (response.status === 401) endSession(token);
   throw new ApiError(response.status, data?.error?.code ?? (response.status === 401 ? "unauthorized" : "internal"), data?.error?.message ?? "");
 }
 

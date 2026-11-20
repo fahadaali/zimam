@@ -426,7 +426,12 @@ export function remindersSection(taskId, getTask, ctx) {
     let prayer = "asr";
     let offset = 0;
     const stepperSlot = h("div");
-    const drawStepper = () => stepperSlot.replaceChildren(prayerStepper(prayer, offset, (o) => ((offset = o), drawStepper())));
+    // Drawn anew on each step: the − or + that had the focus gets it back, so the keyboard can keep stepping.
+    const drawStepper = () => {
+      const key = stepperSlot.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+      stepperSlot.replaceChildren(prayerStepper(prayer, offset, (o) => ((offset = o), drawStepper())));
+      if (key) stepperSlot.querySelector(`[data-key="${key}"]`)?.focus();
+    };
     drawStepper();
     const select = prayerSelect(prayer, (p) => ((prayer = p), drawStepper()), id);
     const ok = Button({ variant: "primary", onclick: () => addReminder({ kind: "prayer", prayer, offsetMinutes: offset }) }, "إضافة");

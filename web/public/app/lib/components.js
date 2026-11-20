@@ -80,9 +80,10 @@ export function PriorityFlag(priority) {
 /**
  * TaskRow. The completion circle toggles; the title is a button that opens the task's details
  * (the reference renders it as text). At most three chips, as TaskRow.swift: the date, then the
- * clock time or the prayer, then the project as plain text. `selected` is the task open beside it.
+ * clock time or the prayer, then the project as plain text. `selected` is the task open beside it;
+ * `canToggle` false disables the circle (a viewer's row).
  */
-export function TaskRow({ title, note, done = false, priority, date, time, prayer, project, selected = false, onToggle, onOpen }) {
+export function TaskRow({ title, note, done = false, priority, date, time, prayer, project, selected = false, canToggle = true, onToggle, onOpen }) {
   const check = h(
     "button",
     {
@@ -90,6 +91,8 @@ export function TaskRow({ title, note, done = false, priority, date, time, praye
       className: `zm-check${done ? " zm-check-on" : ""}`,
       "aria-pressed": done ? "true" : "false",
       "aria-label": `${done ? "إلغاء إنجاز" : "إنجاز"}: ${title}`,
+      // A viewer of a shared project reads its tasks but does not complete them (as the pane's «إنجاز»).
+      disabled: !canToggle,
       onclick: onToggle,
     },
     done ? icons.check() : null,

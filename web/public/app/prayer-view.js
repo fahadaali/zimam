@@ -9,7 +9,7 @@ import { Button, h } from "./lib/components.js";
 import { addDays, dualDateWithYear, timeLabel } from "./lib/dates.js";
 import { icon } from "./lib/icons.js";
 import { MADHAB_NAMES, METHOD_NAMES, clockIn, clockState, prayerInstant, timerText } from "./lib/prayer-clock.js";
-import { PRAYERS, PRAYER_NAMES, prayerPhrase } from "./lib/prayer.js";
+import { PRAYERS, PRAYER_NAMES, cityLevel, prayerPhrase } from "./lib/prayer.js";
 
 /** Days read at once: today and the month ahead, for the chips of the coming tasks. */
 const SPAN = 30;
@@ -194,10 +194,9 @@ export function createPrayers(ctx) {
       status.textContent = "يحدّد المتصفح موقعك…";
       navigator.geolocation.getCurrentPosition(
         async ({ coords }) => {
-          // The city is enough for prayer times: two decimals, about a kilometre.
-          const round = (n) => Math.round(n * 100) / 100;
+          // The city is enough for prayer times: one decimal, about 11 km (lib/prayer.js cityLevel).
           try {
-            await ctx.saveSettings({ location: { latitude: round(coords.latitude), longitude: round(coords.longitude) }, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+            await ctx.saveSettings({ location: cityLevel(coords), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
             ctx.announce("حُفظ موقعك لأوقات الصلاة.");
             await load({ force: true });
             redrawSheet();
