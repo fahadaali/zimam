@@ -156,6 +156,41 @@ nonisolated public enum ZimamType {
     public static let heroLineSpacing: CGFloat = 10
 }
 
+/// The type styles of `ZimamType` as values: for views that size their text to the space they
+/// are given (the widgets), the style's size, its line, and its font at a scale of that size.
+nonisolated public enum ZimamTextStyle: CaseIterable, Sendable {
+    case display, title, headline, body, callout, caption, hero
+
+    /// The size in points at the default Dynamic Type size.
+    public var size: CGFloat {
+        switch self {
+        case .display: return 34
+        case .title: return 22
+        case .headline: return 17
+        case .body: return 17
+        case .callout: return 15
+        case .caption: return 13
+        case .hero: return 48
+        }
+    }
+
+    /// The height of one line in points: the font's own line, 1.25em.
+    public var line: CGFloat { size * 1.25 }
+
+    /// The style's font at `scale` times its size, still following Dynamic Type.
+    public func font(scale: CGFloat = 1) -> Font {
+        switch self {
+        case .display: return Font.custom(ZimamFontName.sans(.bold), size: 34 * scale, relativeTo: .largeTitle)
+        case .title: return Font.custom(ZimamFontName.sans(.bold), size: 22 * scale, relativeTo: .title2)
+        case .headline: return Font.custom(ZimamFontName.sans(.semibold), size: 17 * scale, relativeTo: .headline)
+        case .body: return Font.custom(ZimamFontName.sans(.regular), size: 17 * scale, relativeTo: .body)
+        case .callout: return Font.custom(ZimamFontName.sans(.regular), size: 15 * scale, relativeTo: .callout)
+        case .caption: return Font.custom(ZimamFontName.sans(.medium), size: 13 * scale, relativeTo: .caption)
+        case .hero: return Font.custom(ZimamFontName.display(.bold), size: 48 * scale, relativeTo: .largeTitle)
+        }
+    }
+}
+
 nonisolated extension Color {
     /// A color that follows the system light/dark appearance.
     static func zimamDynamic(

@@ -39,50 +39,85 @@ struct TodayWidgetView: View {
     }
 }
 
-/// Small: how many tasks are open today, and the next one with its completion circle.
+/// Small: how many tasks are open today, and the next one with its completion circle, scaled to
+/// fill the widget's height.
 private struct SmallTodayView: View {
     let entry: TodayEntry
     let tone: WidgetTone
+    @ScaledMetric(relativeTo: .body) private var dynamicType: CGFloat = 1
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
-            Text("اليوم")
-                .font(ZimamType.caption)
-                .foregroundStyle(tone.muted)
-            Text(ArabicCount.tasks(entry.tasks.count, locale: ZimamLocale.current))
-                .font(ZimamType.title)
-                .foregroundStyle(tone.ink)
-                .lineLimit(1)
-                .widgetAccentable()
-            Spacer(minLength: 0)
-            if let next = entry.next {
-                // The small size opens only through `widgetURL`, so the title is not a link.
-                WidgetTaskRow(task: next, tone: tone, lineLimit: 2, opensTask: false)
-            } else {
-                Text("يومك لك.")
-                    .font(ZimamType.callout)
+        GeometryReader { geometry in
+            VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
+                Text("اليوم")
+                    .widgetFont(.caption)
                     .foregroundStyle(tone.muted)
+                    .lineLimit(1)
+                Text(ArabicCount.tasks(entry.tasks.count, locale: ZimamLocale.current))
+                    .widgetFont(.title)
+                    .foregroundStyle(tone.ink)
+                    .lineLimit(1)
+                    .widgetAccentable()
+                Spacer(minLength: 0)
+                if let next = entry.next {
+                    // The small size opens only through `widgetURL`, so the title is not a link.
+                    WidgetTaskRow(task: next, tone: tone, lineLimit: 2, opensTask: false)
+                } else {
+                    Text("يومك لك.")
+                        .widgetFont(.callout)
+                        .foregroundStyle(tone.muted)
+                }
             }
+            .widgetTextScale(scale(height: geometry.size.height))
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
+    }
+
+    /// The scale at which the header and the next task fill the height.
+    private func scale(height: CGFloat) -> CGFloat {
+        let spacing = ZimamSpacing.space1 * 3
+        let header = WidgetFit.textHeight([.caption, .title], dynamicType: dynamicType)
+        let task = entry.next == nil
+            ? WidgetFit.textHeight([.callout], dynamicType: dynamicType)
+            : max(WidgetMetrics.row, WidgetFit.textHeight([.callout, .callout], dynamicType: dynamicType))
+        return WidgetFit.scale(natural: header + task + spacing, fixed: spacing, available: height)
     }
 }
 
-/// Medium: the dual date and up to four tasks, two by two so each circle keeps a 44pt target.
+/// Medium: the dual date and today's tasks two by two, so each circle keeps a 44pt target: as many
+/// rows as fit, then all of it scaled to fill the height.
 private struct MediumTodayView: View {
     let entry: TodayEntry
     let tone: WidgetTone
+    @ScaledMetric(relativeTo: .body) private var dynamicType: CGFloat = 1
 
     var body: some View {
+        GeometryReader { geometry in
+            layout(height: geometry.size.height)
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+        }
+    }
+
+    private func layout(height: CGFloat) -> some View {
         let formatter = DualDateFormatter(primary: entry.calendar, locale: ZimamLocale.current)
-        let shown = Array(entry.tasks.prefix(4))
-        VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
+        let spacing = ZimamSpacing.space1 * 2
+        let header = WidgetFit.textHeight([.headline], dynamicType: dynamicType)
+        let rowHeight = max(WidgetMetrics.row, WidgetFit.textHeight([.callout, .callout], dynamicType: dynamicType))
+        let lines = entry.tasks.isEmpty ? 0 : max(1, Int((height - header - spacing) / rowHeight))
+        let shown = Array(entry.tasks.prefix(lines * 2))
+        let shownLines = (shown.count + 1) / 2
+        let natural = header + spacing + (shown.isEmpty ? WidgetFit.textHeight([.callout], dynamicType: dynamicType)
+                                                        : rowHeight * CGFloat(shownLines))
+        let scale = WidgetFit.scale(natural: natural, fixed: spacing, available: height)
+        return VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
             HStack(alignment: .firstTextBaseline, spacing: ZimamSpacing.space2) {
                 Text("اليوم")
-                    .font(ZimamType.headline)
+                    .widgetFont(.headline)
                     .foregroundStyle(tone.ink)
+                    .lineLimit(1)
                     .widgetAccentable()
                 Text(formatter.dual(entry.date))
-                    .font(ZimamType.caption)
+                    .widgetFont(.caption)
                     .foregroundStyle(tone.muted)
                     .lineLimit(1)
                 Spacer(minLength: 0)
@@ -90,17 +125,19 @@ private struct MediumTodayView: View {
             if shown.isEmpty {
                 WidgetMessage(text: "لا مهام اليوم. يومك لك.", tone: tone)
             } else {
-                HStack(alignment: .top, spacing: ZimamSpacing.space2) {
-                    cell(shown, 0)
-                    cell(shown, 1)
-                }
-                HStack(alignment: .top, spacing: ZimamSpacing.space2) {
-                    cell(shown, 2)
-                    cell(shown, 3)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(0..<shownLines, id: \.self) { line in
+                        HStack(alignment: .center, spacing: ZimamSpacing.space2) {
+                            cell(shown, line * 2)
+                            cell(shown, line * 2 + 1)
+                        }
+                        .frame(height: rowHeight * scale)
+                    }
                 }
             }
             Spacer(minLength: 0)
         }
+        .widgetTextScale(scale)
     }
 
     @ViewBuilder
@@ -110,31 +147,62 @@ private struct MediumTodayView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             Color.clear
-                .frame(maxWidth: .infinity, maxHeight: ZimamSpacing.space11)
+                .frame(maxWidth: .infinity)
         }
     }
 }
 
-/// Large: today with the dual date, the next prayer-anchored task with its prayer chip,
-/// then the other tasks.
+/// Large: today with the dual date, the next prayer-anchored task with its prayer chip, then as
+/// many of the other tasks as fit, all of it scaled to fill the height.
 private struct LargeTodayView: View {
     let entry: TodayEntry
     let tone: WidgetTone
+    @ScaledMetric(relativeTo: .body) private var dynamicType: CGFloat = 1
 
     var body: some View {
+        GeometryReader { geometry in
+            layout(height: geometry.size.height)
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+        }
+    }
+
+    private func layout(height: CGFloat) -> some View {
         let formatter = DualDateFormatter(primary: entry.calendar, locale: ZimamLocale.current)
         let next = entry.nextPrayerTask
         let rest = entry.tasks.filter { $0.id != next?.id }
-        let shown = Array(rest.prefix(next == nil ? 5 : 3))
+        let hasCard = next?.prayer != nil
+
+        // Heights at scale 1: the header, the prayer card (chip, row and its padding), a row, and
+        // the «n غيرها» line; the gaps between the sections (the last one before the spacer) do
+        // not scale.
+        let header = WidgetFit.textHeight([.title, .caption], dynamicType: dynamicType)
+        let card = hasCard
+            ? WidgetFit.textHeight([.caption], dynamicType: dynamicType) + WidgetMetrics.row + ZimamSpacing.space1 * 4
+            : 0
+        let more = WidgetFit.textHeight([.caption], dynamicType: dynamicType)
+        let row = WidgetMetrics.row
+        let gap = ZimamSpacing.space2
+        let gapsAbove = gap * (hasCard ? 3 : 2)
+        let room = height - header - card - gapsAbove
+        let fitting = max(0, Int(room / row))
+        let shownCount = rest.count > fitting ? max(0, Int((room - more - gap) / row)) : rest.count
+        let shown = Array(rest.prefix(shownCount))
         let hidden = rest.count - shown.count
-        VStack(alignment: .leading, spacing: ZimamSpacing.space2) {
+        let fixed = gapsAbove + (hidden > 0 ? gap : 0)
+        let list = entry.tasks.isEmpty
+            ? WidgetFit.textHeight([.callout], dynamicType: dynamicType)
+            : row * CGFloat(shown.count) + (hidden > 0 ? more : 0)
+        let scale = WidgetFit.scale(natural: header + card + list + fixed, fixed: fixed, available: height)
+
+        return VStack(alignment: .leading, spacing: gap) {
             VStack(alignment: .leading, spacing: 0) {
                 Text("اليوم")
-                    .font(ZimamType.title)
+                    .widgetFont(.title)
                     .foregroundStyle(tone.ink)
+                    .lineLimit(1)
                     .widgetAccentable()
                 Text(formatter.dual(entry.date, withYear: true))
-                    .font(ZimamType.caption)
+                    .widgetFont(.caption)
                     .foregroundStyle(tone.muted)
                     .lineLimit(1)
             }
@@ -164,30 +232,35 @@ private struct LargeTodayView: View {
                 }
                 if hidden > 0 {
                     Text("\(ArabicCount.tasks(hidden, locale: formatter.locale)) غيرها")
-                        .font(ZimamType.caption)
+                        .widgetFont(.caption)
                         .foregroundStyle(tone.muted)
+                        .lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
         }
+        .widgetTextScale(scale)
     }
 }
 
 /// A simplified task row: the completion circle (an App Intent button, so it works without
-/// opening the app) and the title, which opens the task where the size allows links.
+/// opening the app) and the title, which opens the task where the size allows links. The row and
+/// its circle grow with the text when the layout scales it (`widgetTextScale`).
 struct WidgetTaskRow: View {
     let task: WidgetTask
     let tone: WidgetTone
     var lineLimit = 1
     var opensTask = true
+    @Environment(\.widgetTextScale) private var scale
 
     var body: some View {
+        let side = ZimamSpacing.space11 * max(scale, 1)
         HStack(spacing: ZimamSpacing.space1) {
             Button(intent: CompleteTaskIntent(task: TaskEntity(id: task.id, title: task.title))) {
                 Image(systemName: "circle")
-                    .font(ZimamType.title)
+                    .widgetFont(.title)
                     .foregroundStyle(tone.strong)
-                    .frame(width: ZimamSpacing.space11, height: ZimamSpacing.space11)
+                    .frame(width: side, height: side)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -199,12 +272,12 @@ struct WidgetTaskRow: View {
                 title
             }
         }
-        .frame(minHeight: ZimamSpacing.space11)
+        .frame(minHeight: side)
     }
 
     private var title: some View {
         Text(task.title)
-            .font(ZimamType.callout)
+            .widgetFont(.callout)
             .foregroundStyle(tone.ink)
             .lineLimit(lineLimit)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -219,7 +292,7 @@ private struct WidgetMessage: View {
 
     var body: some View {
         Text(text)
-            .font(ZimamType.callout)
+            .widgetFont(.callout)
             .foregroundStyle(tone.muted)
     }
 }

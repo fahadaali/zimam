@@ -23,12 +23,12 @@ struct WidgetTaskChip: View {
             VStack(alignment: .leading, spacing: 0) {
                 if let time {
                     Text(time)
-                        .font(ZimamType.caption)
+                        .widgetFont(.caption)
                         .foregroundStyle(item.prayer != nil ? tone.prayer : tone.muted)
                         .lineLimit(1)
                 }
                 Text(item.title)
-                    .font(ZimamType.caption)
+                    .widgetFont(.caption)
                     .foregroundStyle(tone.ink)
                     .lineLimit(1)
             }

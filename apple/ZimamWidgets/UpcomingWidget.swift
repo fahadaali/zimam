@@ -59,9 +59,10 @@ struct UpcomingWidgetView: View {
                     Image(systemName: "clock")
                         .accessibilityHidden(true)
                     Text("القادم")
+                        .lineLimit(1)
                         .accessibilityAddTraits(.isHeader)
                 }
-                .font(ZimamType.headline)
+                .widgetFont(.headline)
                 .foregroundStyle(tone.ink)
                 .widgetAccentable()
                 .frame(height: header)
@@ -77,7 +78,9 @@ struct UpcomingWidgetView: View {
             .frame(maxWidth: .infinity)
 
             Link(destination: AppLink.calendar.url) {
-                MiniCalendar(snapshot: snapshot, date: entry.date, tone: tone)
+                GeometryReader { geometry in
+                    MiniCalendar(snapshot: snapshot, date: entry.date, size: geometry.size, tone: tone)
+                }
             }
             .frame(maxWidth: .infinity)
         }
@@ -85,24 +88,27 @@ struct UpcomingWidgetView: View {
         .widgetURL(AppLink.today.url)
     }
 
-    /// As many 44pt rows as fit, and «+n أخرى» when some are left out.
+    /// As many 44pt rows as fit, stretched to share the height (their text and circle grow with
+    /// them), and «+n أخرى» when some are left out.
     @ViewBuilder
     private func list(snapshot: WidgetSnapshot, tone: WidgetTone, height: CGFloat) -> some View {
         let upcoming = snapshot.calendarItems.sorted { a, b in
             (a.dueDay ?? "", a.minuteOfDay ?? -1, a.sortOrder) < (b.dueDay ?? "", b.minuteOfDay ?? -1, b.sortOrder)
         }
-        let fitting = max(0, Int(height / WidgetMetrics.row))
-        let shown = upcoming.count > fitting ? max(0, Int((height - moreLine) / WidgetMetrics.row)) : upcoming.count
+        let rows = WidgetRows(items: upcoming.count, available: height, minimum: WidgetMetrics.row, moreLine: moreLine)
+        let shown = rows.shown
         if upcoming.isEmpty {
             WidgetNote(text: "لا مهام قادمة.", tone: tone)
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(upcoming.prefix(shown)) { item in
                     UpcomingRow(item: item, snapshot: snapshot, now: entry.date, tone: tone)
+                        .frame(height: rows.height)
+                        .widgetTextScale(rows.scale)
                 }
                 if upcoming.count > shown {
                     Text("+\(snapshot.formatter.number(upcoming.count - shown)) أخرى")
-                        .font(ZimamType.caption)
+                        .widgetFont(.caption)
                         .foregroundStyle(tone.muted)
                         .frame(height: moreLine)
                         .padding(.leading, ZimamSpacing.space2)
@@ -129,12 +135,12 @@ private struct UpcomingRow: View {
             Link(destination: AppLink.task(item.id).url) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(item.title)
-                        .font(ZimamType.callout)
+                        .widgetFont(.callout)
                         .foregroundStyle(tone.ink)
                         .lineLimit(1)
                     if let when {
                         Text(when)
-                            .font(ZimamType.caption)
+                            .widgetFont(.caption)
                             .foregroundStyle(late ? tone.late : item.prayer != nil ? tone.prayer : tone.muted)
                             .lineLimit(1)
                     }
@@ -144,17 +150,20 @@ private struct UpcomingRow: View {
             }
             .accessibilityLabel([item.title, when, priorityLabel(item.priority)].compactMap { $0 }.joined(separator: "، "))
         }
-        .frame(height: WidgetMetrics.row)
+        .frame(maxHeight: .infinity)
     }
 }
 
 /// This week and the two after it, the grid calendar's day numbers only; today filled, days with
-/// tasks in full ink, days gone faint. Above it the current month in both calendars.
+/// tasks in full ink, days gone faint. Above it the current month in both calendars. Scaled to fill
+/// the height it is given.
 private struct MiniCalendar: View {
     let snapshot: WidgetSnapshot
     let date: Date
+    let size: CGSize
     let tone: WidgetTone
     @ScaledMetric(relativeTo: .caption) private var cell = ZimamSpacing.space6
+    @ScaledMetric(relativeTo: .body) private var dynamicType: CGFloat = 1
 
     var body: some View {
         let grid = snapshot.grid()
@@ -162,9 +171,15 @@ private struct MiniCalendar: View {
         let weeks = (0..<3).map { grid.weekDays(containing: grid.addingDays(7 * $0, to: date)) }
         let busy = Set(TaskBuckets.byDay(snapshot.calendarItems.compactMap(\.dated), days: weeks.flatMap { $0.map(\.day) }).keys)
         let kind = snapshot.calendar
+        // The month and the weekdays over three weeks of cells; the two gaps do not scale.
+        let gaps = ZimamSpacing.space1 * 2
+        let natural = WidgetFit.textHeight([.caption, .caption], dynamicType: dynamicType) + cell * 3 + gaps
+        let scale = WidgetFit.scale(natural: natural, fixed: gaps, available: size.height)
+        // A day is a circle no wider than its column.
+        let side = min(cell * scale, size.width / 7)
         VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
             Text("\(dates.monthName(date, in: kind))، \(dates.monthName(date, in: kind.other))")
-                .font(ZimamType.caption)
+                .widgetFont(.caption)
                 .foregroundStyle(tone.muted)
                 .lineLimit(1)
             WeekdayHeader(grid: grid, dates: dates, tone: tone)
@@ -172,25 +187,27 @@ private struct MiniCalendar: View {
                 ForEach(weeks, id: \.self) { week in
                     HStack(spacing: 0) {
                         ForEach(week) { day in
-                            dayNumber(day, isBusy: busy.contains(day.day), dates: dates)
+                            dayNumber(day, isBusy: busy.contains(day.day), dates: dates, side: side)
                                 .frame(maxWidth: .infinity)
                         }
                     }
                 }
             }
         }
+        .widgetTextScale(scale)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("التقويم، \(dates.dual(date))")
     }
 
-    private func dayNumber(_ day: CalendarDay, isBusy: Bool, dates: DualDateFormatter) -> some View {
+    private func dayNumber(_ day: CalendarDay, isBusy: Bool, dates: DualDateFormatter, side: CGFloat) -> some View {
         let isToday = day.day == snapshot.today
         let style: AnyShapeStyle = isToday ? tone.onSolid : day.day < snapshot.today ? tone.faint : isBusy ? tone.ink : tone.muted
         return Text(dates.number(day.primaryDay))
-            .font(ZimamType.caption)
+            .widgetFont(.caption)
             .foregroundStyle(style)
             .lineLimit(1)
-            .frame(width: cell, height: cell)
+            .frame(width: side, height: side)
             .background {
                 if isToday {
                     if tone.isFullColor {

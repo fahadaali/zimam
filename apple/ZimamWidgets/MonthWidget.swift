@@ -93,15 +93,16 @@ private struct MonthGridBody: View {
         let weeks = max(days.count / 7, 1)
         let rowHeight = size.height / CGFloat(weeks)
         let column = size.width / 7
-        let lanes = max(0, Int((rowHeight - numbersRow - WidgetMetrics.gap) / lane))
-        let rows = WeekLanes.layout(weeksOf: days.map(\.day), tasks: tasks, lanes: lanes)
+        let lanes = WidgetLanes(room: rowHeight - numbersRow - WidgetMetrics.gap, lane: lane)
+        let rows = WeekLanes.layout(weeksOf: days.map(\.day), tasks: tasks, lanes: lanes.count)
         VStack(spacing: 0) {
             // Each week is known by its days, so a new day or month redraws only what moved.
             ForEach(Array(rows.enumerated()), id: \.element.days) { index, layout in
                 MonthWeekRow(cells: Array(days[(index * 7)..<min(index * 7 + 7, days.count)]), layout: layout,
-                             column: column, numbersRow: numbersRow, lane: lane, snapshot: snapshot,
+                             column: column, numbersRow: numbersRow, lane: lanes.height, snapshot: snapshot,
                              dates: dates, tone: tone)
                     .frame(height: rowHeight)
+                    .widgetTextScale(lanes.scale)
             }
         }
     }

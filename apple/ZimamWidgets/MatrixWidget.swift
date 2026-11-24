@@ -107,7 +107,7 @@ struct MatrixWidgetView: View {
                     WidgetCountBadge(count: tasks.count, color: quadrant.color, tone: tone, locale: snapshot.formatter.locale)
                 }
             }
-            .font(ZimamType.headline)
+            .widgetFont(.headline)
             .foregroundStyle(tone.tinted(quadrant.color))
             .widgetAccentable()
             .padding(.horizontal, ZimamSpacing.space1)
@@ -141,15 +141,14 @@ struct MatrixWidgetView: View {
     }
 
     /// As many 44pt rows as fit: one column in the small widget, two in the medium one (read
-    /// row by row, from the leading side), then «+n أخرى».
+    /// row by row, from the leading side), stretched to share the height (their text and circle
+    /// grow with them), then «+n أخرى».
     @ViewBuilder
     private func rows(_ tasks: [WidgetItem], snapshot: WidgetSnapshot, tone: WidgetTone, size: CGSize) -> some View {
         let columns = family == .systemSmall ? 1 : 2
-        let fittingRows = max(0, Int(size.height / WidgetMetrics.row))
-        let rowsShown = tasks.count > fittingRows * columns
-            ? max(0, Int((size.height - moreLine) / WidgetMetrics.row))
-            : fittingRows
-        let shown = Array(tasks.prefix(rowsShown * columns))
+        let lines = WidgetRows(items: (tasks.count + columns - 1) / columns, available: size.height,
+                               minimum: WidgetMetrics.row, moreLine: moreLine)
+        let shown = Array(tasks.prefix(lines.shown * columns))
         let hidden = tasks.count - shown.count
         VStack(alignment: .leading, spacing: 0) {
             ForEach(0..<Int((Double(shown.count) / Double(columns)).rounded(.up)), id: \.self) { row in
@@ -161,14 +160,16 @@ struct MatrixWidgetView: View {
                                       opensTask: family != .systemSmall)
                         } else {
                             Color.clear
-                                .frame(maxWidth: .infinity, maxHeight: WidgetMetrics.row)
+                                .frame(maxWidth: .infinity)
                         }
                     }
                 }
+                .frame(height: lines.height)
+                .widgetTextScale(lines.scale)
             }
             if hidden > 0 {
                 Text("+\(snapshot.formatter.number(hidden)) أخرى")
-                    .font(ZimamType.caption)
+                    .widgetFont(.caption)
                     .foregroundStyle(tone.muted)
                     .frame(height: moreLine)
                     .padding(.leading, ZimamSpacing.space3)
@@ -196,8 +197,7 @@ private struct MatrixRow: View {
                 label
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: WidgetMetrics.row)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
     private var label: some View {
@@ -205,12 +205,12 @@ private struct MatrixRow: View {
         let late = widgetIsLate(item, snapshot: snapshot, now: now)
         return VStack(alignment: .leading, spacing: 0) {
             Text(item.title)
-                .font(ZimamType.callout)
+                .widgetFont(.callout)
                 .foregroundStyle(tone.ink)
                 .lineLimit(1)
             if let when {
                 Text(when)
-                    .font(ZimamType.caption)
+                    .widgetFont(.caption)
                     .foregroundStyle(late ? tone.late : item.prayer != nil ? tone.prayer : tone.muted)
                     .lineLimit(1)
             }

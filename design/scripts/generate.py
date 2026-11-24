@@ -183,6 +183,34 @@ def swift_motion():
     return s
 
 
+def swift_text_styles():
+    """The type styles as values, for views that size their text to the space they are given
+    (the widgets): each style's size and line, and its font at a scale of that size."""
+    styles = [(st, st.get("family", g["family"])) for g in TOKENS["type"]["groups"] for st in g["styles"]]
+    s = ["/// The type styles of `ZimamType` as values: for views that size their text to the space they",
+         "/// are given (the widgets), the style's size, its line, and its font at a scale of that size.",
+         "nonisolated public enum ZimamTextStyle: CaseIterable, Sendable {",
+         "    case " + ", ".join(st["name"] for st, _ in styles),
+         "",
+         "    /// The size in points at the default Dynamic Type size.",
+         "    public var size: CGFloat {",
+         "        switch self {"]
+    s += [f"        case .{st['name']}: return {float(st['fontSize'].replace('px', '')):g}" for st, _ in styles]
+    s += ["        }", "    }", "",
+          "    /// The height of one line in points: the font's own line, 1.25em.",
+          "    public var line: CGFloat { size * 1.25 }", "",
+          "    /// The style's font at `scale` times its size, still following Dynamic Type.",
+          "    public func font(scale: CGFloat = 1) -> Font {",
+          "        switch self {"]
+    for st, fam in styles:
+        fn = "sans" if fam == "sans" else "display"
+        size = float(st["fontSize"].replace("px", ""))
+        s.append(f"        case .{st['name']}: return Font.custom(ZimamFontName.{fn}({WEIGHT[st['fontWeight']]}), "
+                 f"size: {size:g} * scale, relativeTo: {TEXT_STYLE[st['name']]})")
+    s += ["        }", "    }", "}"]
+    return s
+
+
 def swift():
     # The tokens are constants, so they are `nonisolated`: usable from any thread and in
     # SwiftUI's Sendable closures, also in targets that default to the main actor.
@@ -212,6 +240,7 @@ def swift():
             s.append(f"    /// Extra line spacing so lines match the {line:g}px line height (the font's own line is 1.25em).")
             s.append(f"    public static let {st['name']}LineSpacing: CGFloat = {max(line - size * 1.25, 0):g}")
     s.append("}")
+    s += [""] + swift_text_styles()
     s.append(SWIFT_DYNAMIC)
     (OUT / "ZimamTokens.swift").write_text("\n".join(s), encoding="utf-8")
 
