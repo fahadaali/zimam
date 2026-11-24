@@ -51,7 +51,8 @@ struct WeekWidgetView: View {
                 GeometryReader { geometry in
                     let column = geometry.size.width / 7
                     let room = geometry.size.height - dayHeader - ZimamSpacing.space1
-                    let layout = WeekLanes.layout(days: week.map(\.day), tasks: tasks, lanes: max(0, Int(room / lane)))
+                    let lanes = WidgetLanes(room: room, lane: lane)
+                    let layout = WeekLanes.layout(days: week.map(\.day), tasks: tasks, lanes: lanes.count)
                     VStack(alignment: .leading, spacing: ZimamSpacing.space1) {
                         HStack(spacing: 0) {
                             ForEach(week) { day in
@@ -60,8 +61,9 @@ struct WeekWidgetView: View {
                                     .frame(width: column, height: dayHeader)
                             }
                         }
-                        WidgetLaneRows(layout: layout, snapshot: snapshot, columnWidth: column, laneHeight: lane,
+                        WidgetLaneRows(layout: layout, snapshot: snapshot, columnWidth: column, laneHeight: lanes.height,
                                        showsTime: true, tone: tone)
+                            .widgetTextScale(lanes.scale)
                         Spacer(minLength: 0)
                     }
                     .overlay {

@@ -57,32 +57,50 @@ private let noPlaceText = "حدّد موقعك في زمام"
 
 // MARK: Circular
 
-/// The prayer's name over its countdown.
+/// The prayer's name over its countdown, sized to the circle: a countdown with hours shrinks to the
+/// circle's width rather than being cut.
 private struct PrayerCircular: View {
     let entry: PrayerEntry
     @Environment(\.widgetRenderingMode) private var mode
+    @ScaledMetric(relativeTo: .body) private var dynamicType: CGFloat = 1
 
     var body: some View {
+        GeometryReader { geometry in
+            let side = min(geometry.size.width, geometry.size.height)
+            content(side: side)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+    }
+
+    @ViewBuilder
+    private func content(side: CGFloat) -> some View {
         let style = PrayerGlanceStyle(mode: mode)
         if let state = entry.state {
             VStack(spacing: 0) {
                 Text(state.prayer.arabicName)
-                    .font(ZimamType.caption)
+                    .lineLimit(1)
+                    .widgetFont(.caption)
                     .widgetAccentable()
                 Text(state.time, style: .timer)
-                    .font(ZimamType.caption)
                     .monospacedDigit()
                     .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                    .minimumScaleFactor(AccessoryRound.shrink)
+                    .widgetFont(.caption)
             }
+            .frame(width: side * AccessoryRound.width)
             .foregroundStyle(style.prayer)
+            .widgetTextScale(AccessoryRound.scale(side: side, lines: [.caption, .caption], share: AccessoryRound.twoLines,
+                                                  dynamicType: dynamicType))
             .accessibilityElement(children: .combine)
             .accessibilityLabel(state.title)
         } else {
             Image(systemName: "moon.stars")
-                .font(ZimamType.title)
+                .widgetFont(.title)
                 .foregroundStyle(style.secondary)
                 .widgetAccentable()
+                .widgetTextScale(AccessoryRound.scale(side: side, lines: [.title], share: AccessoryRound.symbol,
+                                                      dynamicType: dynamicType))
                 .accessibilityLabel(noPlaceText)
         }
     }
@@ -90,45 +108,71 @@ private struct PrayerCircular: View {
 
 // MARK: Rectangular
 
-/// The state, the countdown, and the adhan's time.
+/// The state, the countdown, and the adhan's time, filling the height they are given: on a small
+/// watch the adhan's time gives way before the text gets too small to read, and on the larger Lock
+/// Screen the text grows.
 private struct PrayerRectangular: View {
     let entry: PrayerEntry
     @Environment(\.widgetRenderingMode) private var mode
+    @ScaledMetric(relativeTo: .body) private var dynamicType: CGFloat = 1
 
     var body: some View {
+        GeometryReader { geometry in
+            content(height: geometry.size.height)
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func content(height: CGFloat) -> some View {
         let style = PrayerGlanceStyle(mode: mode)
         let formatter = DualDateFormatter(locale: ZimamLocale.current)
-        VStack(alignment: .leading, spacing: 0) {
-            if let state = entry.state {
-                HStack(spacing: ZimamSpacing.space1) {
-                    Image(systemName: "moon.stars")
-                        .accessibilityHidden(true)
-                    Text(state.title)
-                        .lineLimit(1)
-                }
-                .font(ZimamType.caption)
-                .foregroundStyle(style.secondary)
-                .widgetAccentable()
-                Text(state.time, style: .timer)
-                    .font(ZimamType.headline)
-                    .monospacedDigit()
-                    .foregroundStyle(style.prayer)
-                Text("\(state.prayer.arabicName)، \(formatter.time(state.time))")
-                    .font(ZimamType.caption)
-                    .foregroundStyle(style.secondary)
-                    .lineLimit(1)
-            } else {
-                Text("أوقات الصلاة")
-                    .font(ZimamType.caption)
+        if let state = entry.state {
+            let plan = AccessoryPlan.fitting(height: height, dynamicType: dynamicType, header: .caption, main: .headline,
+                                             detail: .caption, drops: .detail)
+            VStack(alignment: .leading, spacing: 0) {
+                if plan.showsHeader {
+                    HStack(spacing: ZimamSpacing.space1) {
+                        Image(systemName: "moon.stars")
+                            .accessibilityHidden(true)
+                        Text(state.title)
+                            .lineLimit(1)
+                    }
+                    .widgetFont(.caption)
                     .foregroundStyle(style.secondary)
                     .widgetAccentable()
-                Text(noPlaceText)
-                    .font(ZimamType.headline)
+                }
+                Text(state.time, style: .timer)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .widgetFont(.headline)
                     .foregroundStyle(style.prayer)
-                    .lineLimit(2)
+                if plan.showsDetail {
+                    Text("\(state.prayer.arabicName)، \(formatter.time(state.time))")
+                        .widgetFont(.caption)
+                        .foregroundStyle(style.secondary)
+                        .lineLimit(1)
+                }
             }
+            .widgetTextScale(plan.scale)
+        } else {
+            let plan = AccessoryPlan.fitting(height: height, dynamicType: dynamicType, header: .caption, main: .headline,
+                                             mainLines: 2, detail: nil, drops: .header)
+            VStack(alignment: .leading, spacing: 0) {
+                if plan.showsHeader {
+                    Text("أوقات الصلاة")
+                        .widgetFont(.caption)
+                        .foregroundStyle(style.secondary)
+                        .lineLimit(1)
+                        .widgetAccentable()
+                }
+                Text(noPlaceText)
+                    .widgetFont(.headline)
+                    .foregroundStyle(style.prayer)
+                    .lineLimit(plan.mainLines)
+            }
+            .widgetTextScale(plan.scale)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
@@ -139,39 +183,38 @@ private struct PrayerInline: View {
     let entry: PrayerEntry
 
     var body: some View {
-        if let state = entry.state {
-            switch state {
-            case .since(let prayer, let adhan):
-                Text("\(Image(systemName: "moon.stars")) \(prayer.arabicName) منذ \(Text(adhan, style: .timer))")
-            case .until(let prayer, let time):
-                Text("\(Image(systemName: "moon.stars")) \(prayer.arabicName) بعد \(Text(time, style: .timer))")
-            }
-        } else {
-            Text("\(Image(systemName: "moon.stars")) \(noPlaceText)")
-        }
+        prayerLine(entry.state)
+    }
+}
+
+/// «العصر بعد ١:١٢:٠٥» or «العصر منذ ١٢:٠٥», with the moon: the inline widget, and the watch
+/// corner's curve.
+private func prayerLine(_ state: PrayerClock.State?) -> Text {
+    guard let state else { return Text("\(Image(systemName: "moon.stars")) \(noPlaceText)") }
+    switch state {
+    case .since(let prayer, let adhan):
+        return Text("\(Image(systemName: "moon.stars")) \(prayer.arabicName) منذ \(Text(adhan, style: .timer))")
+    case .until(let prayer, let time):
+        return Text("\(Image(systemName: "moon.stars")) \(prayer.arabicName) بعد \(Text(time, style: .timer))")
     }
 }
 
 #if os(watchOS)
 // MARK: Corner
 
-/// The countdown in the corner, with the prayer's name along the edge.
+/// The moon in the corner, and the prayer with its countdown along the curve: the corner's centre
+/// is too small for a countdown with hours, which the curve has room for.
 private struct PrayerCorner: View {
     let entry: PrayerEntry
 
     var body: some View {
-        if let state = entry.state {
-            Text(state.time, style: .timer)
-                .font(ZimamType.caption)
-                .monospacedDigit()
-                .widgetAccentable()
-                .widgetLabel(state.title)
-        } else {
-            Image(systemName: "moon.stars")
-                .font(ZimamType.title)
-                .widgetAccentable()
-                .widgetLabel(noPlaceText)
-        }
+        Image(systemName: "moon.stars")
+            .widgetFont(.title)
+            .widgetAccentable()
+            .widgetLabel {
+                prayerLine(entry.state)
+            }
+            .accessibilityLabel(entry.state?.title ?? noPlaceText)
     }
 }
 #endif

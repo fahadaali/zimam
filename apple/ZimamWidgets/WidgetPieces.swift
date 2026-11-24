@@ -4,18 +4,20 @@ import WidgetKit
 import ZimamKit
 
 /// The completion circle: an App Intent button, so the task is done without opening the app.
-/// The circle takes the task's priority color; the target is 44pt.
+/// The circle takes the task's priority color; the target is 44pt, and grows with the row when
+/// the widget's layout scales its text (`widgetTextScale`).
 struct WidgetCompleteButton: View {
     let item: WidgetItem
     let tone: WidgetTone
+    @Environment(\.widgetTextScale) private var scale
 
     var body: some View {
         Button(intent: CompleteTaskIntent(task: TaskEntity(id: item.id, title: item.title))) {
             Image(systemName: "circle")
-                .font(ZimamType.headline)
+                .widgetFont(.headline)
                 .foregroundStyle(item.priority == .none ? tone.strong : tone.priority(item.priority))
                 .widgetAccentable(item.priority != .none)
-                .frame(width: WidgetMetrics.row, height: WidgetMetrics.row)
+                .frame(width: WidgetMetrics.row * max(scale, 1), height: WidgetMetrics.row * max(scale, 1))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -33,7 +35,7 @@ struct WidgetCountBadge: View {
 
     var body: some View {
         Text(count.formatted(.number.locale(locale)))
-            .font(ZimamType.caption)
+            .widgetFont(.caption)
             .foregroundStyle(color == nil ? tone.ink : tone.onSolid)
             .padding(.horizontal, ZimamSpacing.space2)
             .frame(minWidth: ZimamSpacing.space6)
@@ -49,31 +51,35 @@ struct WidgetCountBadge: View {
     }
 }
 
-/// A prayer-anchored time in a widget: the app's `PrayerChip` (sand on sand-soft) in full color.
-/// In the tinted and vibrant modes a solid fill would turn into a block of the tint, so the same
-/// moon and words sit in an outlined capsule in the system's levels.
+/// A prayer-anchored time in a widget: the look of the app's `PrayerChip` (the moon and the words
+/// in sand on sand-soft) in full color, with its text at the widget's scale (`widgetFont`). In the
+/// tinted and vibrant modes a solid fill would turn into a block of the tint, so the same moon and
+/// words sit in an outlined capsule in the system's levels.
 struct WidgetPrayerChip: View {
     let text: String
     let tone: WidgetTone
 
     var body: some View {
-        if tone.isFullColor {
-            PrayerChip(text: text)
-        } else {
-            HStack(spacing: ZimamSpacing.space1) {
-                Image(systemName: "moon.stars")
-                    .accessibilityHidden(true)
-                Text(text)
-            }
-            .font(ZimamType.caption)
-            .foregroundStyle(tone.prayer)
-            .padding(.horizontal, ZimamSpacing.space2)
-            .padding(.vertical, ZimamSpacing.space1 / 2)
-            .background {
+        HStack(spacing: ZimamSpacing.space1) {
+            Image(systemName: "moon.stars")
+                .accessibilityHidden(true)
+            Text(text)
+                .lineLimit(1)
+        }
+        .widgetFont(.caption)
+        .foregroundStyle(tone.prayer)
+        .padding(.horizontal, ZimamSpacing.space2)
+        .padding(.vertical, ZimamSpacing.space1 / 2)
+        .background {
+            if tone.isFullColor {
+                Capsule().fill(ZimamColor.sandSoft)
+            } else {
                 Capsule().strokeBorder(.secondary)
             }
-            .widgetAccentable()
         }
+        .widgetAccentable(!tone.isFullColor)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
     }
 }
 
@@ -85,7 +91,7 @@ struct WidgetMoreLabel: View {
 
     var body: some View {
         Text("+\(count.formatted(.number.locale(locale)))")
-            .font(ZimamType.caption)
+            .widgetFont(.caption)
             .foregroundStyle(tone.muted)
             .lineLimit(1)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -101,7 +107,7 @@ struct WidgetNote: View {
 
     var body: some View {
         Text(text)
-            .font(ZimamType.callout)
+            .widgetFont(.callout)
             .foregroundStyle(tone.muted)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
