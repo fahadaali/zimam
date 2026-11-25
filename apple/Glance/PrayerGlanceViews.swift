@@ -178,24 +178,31 @@ private struct PrayerRectangular: View {
 
 // MARK: Inline
 
-/// «العصر بعد ١:١٢:٠٥» above the clock.
+/// «العصر بعد ٤٢:٠٥» above the clock.
 private struct PrayerInline: View {
     let entry: PrayerEntry
 
     var body: some View {
-        prayerLine(entry.state)
+        prayerLine(entry)
     }
 }
 
-/// «العصر بعد ١:١٢:٠٥» or «العصر منذ ١٢:٠٥», with the moon: the inline widget, and the watch
-/// corner's curve.
-private func prayerLine(_ state: PrayerClock.State?) -> Text {
-    guard let state else { return Text("\(Image(systemName: "moon.stars")) \(noPlaceText)") }
+/// One line with the moon, for the inline widget and the watch corner's curve: «العصر بعد ٤٢:٠٥»
+/// in the last hour before the adhan and «العصر منذ ١٢:٠٥» half an hour after it. Further from the
+/// adhan the countdown has hours («الفجر بعد ٨:٣١:٢٢»), which is wider than the line some watch
+/// faces give and was cut short, so the line has the adhan's time instead: «الفجر ٤:٤٢ ص».
+private func prayerLine(_ entry: PrayerEntry) -> Text {
+    let moon = Image(systemName: "moon.stars")
+    guard let state = entry.state else { return Text("\(moon) \(noPlaceText)") }
+    if entry.countdownHasHours {
+        let time = DualDateFormatter(locale: ZimamLocale.current).time(state.time)
+        return Text("\(moon) \(state.prayer.arabicName) \(time)")
+    }
     switch state {
     case .since(let prayer, let adhan):
-        return Text("\(Image(systemName: "moon.stars")) \(prayer.arabicName) منذ \(Text(adhan, style: .timer))")
+        return Text("\(moon) \(prayer.arabicName) منذ \(Text(adhan, style: .timer))")
     case .until(let prayer, let time):
-        return Text("\(Image(systemName: "moon.stars")) \(prayer.arabicName) بعد \(Text(time, style: .timer))")
+        return Text("\(moon) \(prayer.arabicName) بعد \(Text(time, style: .timer))")
     }
 }
 
@@ -212,7 +219,7 @@ private struct PrayerCorner: View {
             .widgetFont(.title)
             .widgetAccentable()
             .widgetLabel {
-                prayerLine(entry.state)
+                prayerLine(entry)
             }
             .accessibilityLabel(entry.state?.title ?? noPlaceText)
     }
