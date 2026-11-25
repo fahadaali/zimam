@@ -1,4 +1,5 @@
 import SwiftUI
+import ZimamKit
 
 /// Project name, «٧ من ١٢», and a progress bar with no written percentage. See design/components/ProjectCard.
 struct ProjectCard: View {
