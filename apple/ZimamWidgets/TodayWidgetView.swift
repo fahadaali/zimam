@@ -280,7 +280,7 @@ struct WidgetTaskRow: View {
             .widgetFont(.callout)
             .foregroundStyle(tone.ink)
             .lineLimit(lineLimit)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .widgetTextDirection(of: task.title)
             .contentShape(Rectangle())
     }
 }

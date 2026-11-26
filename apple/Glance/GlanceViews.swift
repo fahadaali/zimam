@@ -238,6 +238,7 @@ private struct GlanceRectangular: View {
                 .foregroundStyle(style.primary)
                 .lineLimit(plan.mainLines)
                 .privacySensitive()
+                .widgetTextDirection(of: next.title)
             if plan.showsDetail, let when {
                 HStack(spacing: ZimamSpacing.space1) {
                     if next.prayerText != nil {
@@ -265,19 +266,21 @@ private struct GlanceRectangular: View {
 
 // MARK: Inline
 
-/// One line above the clock: the next task's title.
+/// One line above the clock: the next task's title. Words only, with a mark at the start that sets
+/// the title's direction (`WidgetTextDirection.marked`): the system draws this line in the watch's
+/// language, where a symbol beside an Arabic title swapped sides on a watch in English.
 private struct GlanceInline: View {
     let entry: GlanceEntry
 
     var body: some View {
         let snapshot = entry.snapshot
         if !snapshot.isSignedIn {
-            Text("زمام")
+            Text(WidgetTextDirection.marked("زمام"))
         } else if let next = snapshot.next(at: entry.date) {
-            Label(next.title, systemImage: "circle")
+            Text(WidgetTextDirection.marked(next.title))
                 .privacySensitive()
         } else {
-            Label("لا مهام اليوم", systemImage: "checkmark.circle")
+            Text(WidgetTextDirection.marked("لا مهام اليوم"))
         }
     }
 }
@@ -303,7 +306,7 @@ private struct GlanceCorner: View {
             // A plain Text, as the curved label takes: the title gives way to a generic line while
             // private content is hidden (`privacySensitive` elsewhere), and is not read out then.
             .widgetLabel {
-                Text(title.map { isHidden ? "المهمة التالية" : $0 } ?? label(snapshot))
+                Text(WidgetTextDirection.marked(title.map { isHidden ? "المهمة التالية" : $0 } ?? label(snapshot)))
             }
             .accessibilityLabel(title.map { isHidden ? openLabel(snapshot) : $0 } ?? label(snapshot))
     }

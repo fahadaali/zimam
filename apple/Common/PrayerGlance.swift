@@ -61,7 +61,23 @@ nonisolated struct PrayerEntry: TimelineEntry, Sendable {
         return time.timeIntervalSince(date) > Self.hour
     }
 
+    /// Whole minutes to the adhan (rounded up: «بعد ٤٢ د» until the 41st minute is reached) or since
+    /// it (rounded down), for the one-line widgets; a new entry each minute near the adhan keeps it
+    /// current. Nil without a place.
+    var minutes: Int? {
+        guard let state else { return nil }
+        switch state {
+        case .until(_, let time):
+            return max(0, Int((time.timeIntervalSince(date) / 60 - Self.slack).rounded(.up)))
+        case .since(_, let adhan):
+            return max(0, Int((date.timeIntervalSince(adhan) / 60 + Self.slack).rounded(.down)))
+        }
+    }
+
     private static let hour: TimeInterval = 3600
+    private static let minute: TimeInterval = 60
+    /// Leeway for an entry that falls a hair off its minute.
+    private static let slack = 0.001
 
     /// For the widget gallery: Mecca, with Umm al-Qura.
     static var placeholder: PrayerEntry {
@@ -70,9 +86,9 @@ nonisolated struct PrayerEntry: TimelineEntry, Sendable {
     }
 
     /// An entry now and at every change in the next day (each adhan, half an hour after it, and
-    /// midnight), and an hour before each adhan, when the countdown drops its hours
-    /// (`countdownHasHours`); then a new timeline. The countdown itself is the system's
-    /// (`Text(_:style: .timer)`).
+    /// midnight), and each minute in the hour before each adhan and the half hour after it, for the
+    /// one-line widgets' minutes (`minutes`, `countdownHasHours`); then a new timeline. The other
+    /// sizes' countdown is the system's (`Text(_:style: .timer)`).
     static func timeline(place: PrayerPlace?, now: Date = Date()) -> Timeline<PrayerEntry> {
         guard let place else {
             return Timeline(entries: [PrayerEntry(date: now, place: nil)], policy: .never)
@@ -80,12 +96,13 @@ nonisolated struct PrayerEntry: TimelineEntry, Sendable {
         let clock = PrayerClock(schedule: place.schedule)
         let changes = clock.changes(from: now, days: 1)
         let end = changes.last ?? now.addingTimeInterval(hour)
-        let lastHours = ([now] + changes).compactMap { moment -> Date? in
-            guard case .until(_, let time)? = clock.state(at: moment) else { return nil }
-            let start = time.addingTimeInterval(-hour)
-            return start > now && start < end ? start : nil
+        let adhans = Set(([now] + changes).compactMap { clock.state(at: $0)?.time })
+        let before = Int(hour / minute)
+        let after = Int(PrayerClock.elapsedWindow / minute)
+        let minutes = adhans.flatMap { adhan in
+            (-before...after).map { adhan.addingTimeInterval(Double($0) * minute) }
         }
-        let dates = Array(Set([now] + changes + lastHours)).sorted()
+        let dates = Array(Set([now] + changes + minutes.filter { $0 > now && $0 < end })).sorted()
         let entries = dates.map { PrayerEntry(date: $0, place: place) }
         return Timeline(entries: entries, policy: .after(end))
     }
