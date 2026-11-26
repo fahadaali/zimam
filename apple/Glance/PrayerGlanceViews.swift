@@ -178,39 +178,52 @@ private struct PrayerRectangular: View {
 
 // MARK: Inline
 
-/// «العصر بعد ٤٢:٠٥» above the clock.
+/// «الفجر بعد ٤٢ د» above the clock. The system draws this line in the face's own font and size
+/// and ignores the app's, so the text alone can make it fit: the fuller of two that fits the face's
+/// width (`ViewThatFits`), down to the prayer and its adhan in 24 hours («الفجر ٤:٤٢»).
 private struct PrayerInline: View {
     let entry: PrayerEntry
 
     var body: some View {
-        prayerLine(entry)
+        let lines = prayerLines(entry)
+        ViewThatFits(in: .horizontal) {
+            Text(lines.full)
+            Text(lines.short)
+        }
     }
 }
 
-/// One line with the moon, for the inline widget and the watch corner's curve: «العصر بعد ٤٢:٠٥»
-/// in the last hour before the adhan and «العصر منذ ١٢:٠٥» half an hour after it. Further from the
-/// adhan the countdown has hours («الفجر بعد ٨:٣١:٢٢»), which is wider than the line some watch
-/// faces give and was cut short, so the line has the adhan's time instead: «الفجر ٤:٤٢ ص».
-private func prayerLine(_ entry: PrayerEntry) -> Text {
-    let moon = Image(systemName: "moon.stars")
-    guard let state = entry.state else { return Text("\(moon) \(noPlaceText)") }
-    if entry.countdownHasHours {
-        let time = DualDateFormatter(locale: ZimamLocale.current).time(state.time)
-        return Text("\(moon) \(state.prayer.arabicName) \(time)")
+/// The prayer's line in two lengths, for the inline widget and the watch corner's curve, in words
+/// and digits only: a symbol beside Arabic text the system draws in the watch's language swapped
+/// sides on a watch in English, and the line is short.
+/// - full: «الفجر بعد ٤٢ د» in the last hour before the adhan, «الفجر الآن» at it, «الفجر من ١٢ د»
+///   in the half hour after it, and further from it «الفجر ٤:٤٢ ص», the adhan's time.
+/// - short: the prayer and its adhan in 24 hours, «الفجر ٤:٤٢».
+/// Each starts with a right-to-left mark, so it reads from the right whatever the watch's language.
+private func prayerLines(_ entry: PrayerEntry) -> (full: String, short: String) {
+    guard let state = entry.state else {
+        return (WidgetTextDirection.marked(noPlaceText), WidgetTextDirection.marked("حدّد موقعك"))
     }
-    switch state {
-    case .since(let prayer, let adhan):
-        return Text("\(moon) \(prayer.arabicName) منذ \(Text(adhan, style: .timer))")
-    case .until(let prayer, let time):
-        return Text("\(moon) \(prayer.arabicName) بعد \(Text(time, style: .timer))")
+    let formatter = DualDateFormatter(locale: ZimamLocale.current)
+    let name = state.prayer.arabicName
+    let short = "\(name) \(formatter.compactTime(state.time))"
+    var full = "\(name) \(formatter.time(state.time))"
+    if !entry.countdownHasHours, let minutes = entry.minutes {
+        switch state {
+        case .until:
+            full = "\(name) بعد \(formatter.number(max(minutes, 1))) د"
+        case .since:
+            full = minutes == 0 ? "\(name) الآن" : "\(name) من \(formatter.number(minutes)) د"
+        }
     }
+    return (WidgetTextDirection.marked(full), WidgetTextDirection.marked(short))
 }
 
 #if os(watchOS)
 // MARK: Corner
 
-/// The moon in the corner, and the prayer with its countdown along the curve: the corner's centre
-/// is too small for a countdown with hours, which the curve has room for.
+/// The moon in the corner, and the prayer with its countdown or adhan time along the curve
+/// (`prayerLines`): the corner's centre is too small for the countdown.
 private struct PrayerCorner: View {
     let entry: PrayerEntry
 
@@ -219,7 +232,7 @@ private struct PrayerCorner: View {
             .widgetFont(.title)
             .widgetAccentable()
             .widgetLabel {
-                prayerLine(entry)
+                Text(prayerLines(entry).full)
             }
             .accessibilityLabel(entry.state?.title ?? noPlaceText)
     }

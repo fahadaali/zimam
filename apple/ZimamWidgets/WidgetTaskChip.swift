@@ -31,6 +31,7 @@ struct WidgetTaskChip: View {
                     .widgetFont(.caption)
                     .foregroundStyle(tone.ink)
                     .lineLimit(1)
+                    .widgetTextDirection(of: item.title)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

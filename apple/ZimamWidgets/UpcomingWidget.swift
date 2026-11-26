@@ -138,6 +138,7 @@ private struct UpcomingRow: View {
                         .widgetFont(.callout)
                         .foregroundStyle(tone.ink)
                         .lineLimit(1)
+                        .widgetTextDirection(of: item.title)
                     if let when {
                         Text(when)
                             .widgetFont(.caption)
